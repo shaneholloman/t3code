@@ -13,9 +13,10 @@ import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import {
   type DesktopUpdateChannel,
   isBuiltInDriverId,
+  type ProviderInstanceConfig,
+  type ProviderInstanceId,
   type ScopedThreadRef,
   type ProviderKind,
-  type ServerProvider,
   type ServerProviderModel,
 } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime";
@@ -59,11 +60,20 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Collapsible, CollapsibleContent } from "../ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
+import { DraftInput } from "../ui/draft-input";
 import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
+import { ProviderInstanceCard } from "./ProviderInstanceCard";
+import { getDriverOption } from "./providerDriverMeta";
+import {
+  PROVIDER_STATUS_STYLES,
+  getProviderSummary,
+  getProviderVersionLabel,
+} from "./providerStatus";
 import {
   SettingResetButton,
   SettingsPageContainer,
@@ -151,78 +161,6 @@ const PROVIDER_SETTINGS: readonly InstallProviderSettings[] = [
       "If your OpenCode server requires authentication, enter the password here. NOTE: Stored in plain text on disk",
   },
 ] as const;
-
-const PROVIDER_STATUS_STYLES = {
-  disabled: {
-    dot: "bg-amber-400",
-  },
-  error: {
-    dot: "bg-destructive",
-  },
-  ready: {
-    dot: "bg-success",
-  },
-  warning: {
-    dot: "bg-warning",
-  },
-} as const;
-
-function getProviderSummary(provider: ServerProvider | undefined) {
-  if (!provider) {
-    return {
-      headline: "Checking provider status",
-      detail: "Waiting for the server to report installation and authentication details.",
-    };
-  }
-  if (!provider.enabled) {
-    return {
-      headline: "Disabled",
-      detail:
-        provider.message ?? "This provider is installed but disabled for new sessions in T3 Code.",
-    };
-  }
-  if (!provider.installed) {
-    return {
-      headline: "Not found",
-      detail: provider.message ?? "CLI not detected on PATH.",
-    };
-  }
-  if (provider.auth.status === "authenticated") {
-    const authLabel = provider.auth.label ?? provider.auth.type;
-    return {
-      headline: authLabel ? `Authenticated · ${authLabel}` : "Authenticated",
-      detail: provider.message ?? null,
-    };
-  }
-  if (provider.auth.status === "unauthenticated") {
-    return {
-      headline: "Not authenticated",
-      detail: provider.message ?? null,
-    };
-  }
-  if (provider.status === "warning") {
-    return {
-      headline: "Needs attention",
-      detail:
-        provider.message ?? "The provider is installed, but the server could not fully verify it.",
-    };
-  }
-  if (provider.status === "error") {
-    return {
-      headline: "Unavailable",
-      detail: provider.message ?? "The provider failed its startup checks.",
-    };
-  }
-  return {
-    headline: "Available",
-    detail: provider.message ?? "Installed and ready, but authentication could not be verified.",
-  };
-}
-
-function getProviderVersionLabel(version: string | null | undefined) {
-  if (!version) return null;
-  return version.startsWith("v") ? version : `v${version}`;
-}
 
 function ProviderLastChecked({ lastCheckedAt }: { lastCheckedAt: string | null }) {
   useRelativeTimeTick();
@@ -580,6 +518,11 @@ export function GeneralSettingsPanel() {
     Partial<Record<ProviderKind, string | null>>
   >({});
   const [isRefreshingProviders, setIsRefreshingProviders] = useState(false);
+  const [isAddInstanceDialogOpen, setIsAddInstanceDialogOpen] = useState(false);
+  // Collapsible state per provider-instance card, keyed by the instance id.
+  // `Record<string, boolean>` so we don't need to preseed an entry for every
+  // configured instance — an absent key reads as collapsed.
+  const [openInstanceDetails, setOpenInstanceDetails] = useState<Record<string, boolean>>({});
   const refreshingRef = useRef(false);
   const modelListRefs = useRef<Partial<Record<ProviderKind, HTMLDivElement | null>>>({});
   const refreshProviders = useCallback(() => {
@@ -828,6 +771,43 @@ export function GeneralSettingsPanel() {
         )
       : null;
 
+  // Configured provider instances, collected into a single list that
+  // renders after the default driver cards. Entries are ordered so that
+  // instances of a driver with a visible default card (e.g. Codex)
+  // appear in that driver's order first, and instances whose driver
+  // isn't shown in defaults (forks, or drivers filtered out by the
+  // default-card visibility rules) fall onto the tail as orphans.
+  const instancesByDriver = new Map<string, Array<[ProviderInstanceId, ProviderInstanceConfig]>>();
+  for (const [rawId, instance] of Object.entries(settings.providerInstances ?? {})) {
+    const driver = String(instance.driver);
+    const list = instancesByDriver.get(driver) ?? [];
+    list.push([rawId as ProviderInstanceId, instance]);
+    instancesByDriver.set(driver, list);
+  }
+  const defaultCardDrivers = new Set<string>(providerCards.map((card) => card.provider));
+  const allInstanceEntries: Array<[ProviderInstanceId, ProviderInstanceConfig]> = [];
+  for (const providerCard of providerCards) {
+    allInstanceEntries.push(...(instancesByDriver.get(providerCard.provider) ?? []));
+  }
+  for (const [driver, list] of instancesByDriver) {
+    if (!defaultCardDrivers.has(driver)) allInstanceEntries.push(...list);
+  }
+
+  const updateProviderInstance = (id: ProviderInstanceId, next: ProviderInstanceConfig) => {
+    updateSettings({
+      providerInstances: {
+        ...settings.providerInstances,
+        [id]: next,
+      },
+    });
+  };
+
+  const deleteProviderInstance = (id: ProviderInstanceId) => {
+    const current = settings.providerInstances ?? {};
+    const { [id]: _removed, ...rest } = current;
+    updateSettings({ providerInstances: rest });
+  };
+
   return (
     <SettingsPageContainer>
       <SettingsSection title="General">
@@ -1041,10 +1021,10 @@ export function GeneralSettingsPanel() {
             ) : null
           }
           control={
-            <Input
+            <DraftInput
               className="w-full sm:w-72"
               value={settings.addProjectBaseDirectory}
-              onChange={(event) => updateSettings({ addProjectBaseDirectory: event.target.value })}
+              onCommit={(next) => updateSettings({ addProjectBaseDirectory: next })}
               placeholder="~/"
               spellCheck={false}
               aria-label="Add project base directory"
@@ -1188,6 +1168,22 @@ export function GeneralSettingsPanel() {
                     size="icon-xs"
                     variant="ghost"
                     className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
+                    onClick={() => setIsAddInstanceDialogOpen(true)}
+                    aria-label="Add provider instance"
+                  >
+                    <PlusIcon className="size-3" />
+                  </Button>
+                }
+              />
+              <TooltipPopup side="top">Add provider instance</TooltipPopup>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    size="icon-xs"
+                    variant="ghost"
+                    className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
                     disabled={isRefreshingProviders}
                     onClick={() => void refreshProviders()}
                     aria-label="Refresh provider status"
@@ -1212,6 +1208,7 @@ export function GeneralSettingsPanel() {
             providerCard.liveProvider?.displayName?.trim() ||
             providerCard.title ||
             formatProviderKindLabel(providerCard.provider);
+          const DriverIcon = getDriverOption(providerCard.provider)?.icon;
 
           return (
             <div key={providerCard.provider} className="border-t border-border first:border-t-0">
@@ -1222,6 +1219,9 @@ export function GeneralSettingsPanel() {
                       <span
                         className={cn("size-2 shrink-0 rounded-full", providerCard.statusStyle.dot)}
                       />
+                      {DriverIcon ? (
+                        <DriverIcon className="size-4 shrink-0 text-foreground/80" aria-hidden />
+                      ) : null}
                       <h3 className="text-sm font-medium text-foreground">{providerDisplayName}</h3>
                       {providerCard.badgeLabel ? (
                         <Badge variant="warning" size="sm" className="shrink-0">
@@ -1326,17 +1326,17 @@ export function GeneralSettingsPanel() {
                         <span className="text-xs font-medium text-foreground">
                           {providerDisplayName} binary path
                         </span>
-                        <Input
+                        <DraftInput
                           id={`provider-install-${providerCard.provider}-binary-path`}
                           className="mt-1.5"
                           value={providerCard.binaryPathValue}
-                          onChange={(event) =>
+                          onCommit={(next) =>
                             updateSettings({
                               providers: {
                                 ...settings.providers,
                                 [providerCard.provider]: {
                                   ...settings.providers[providerCard.provider],
-                                  binaryPath: event.target.value,
+                                  binaryPath: next,
                                 },
                               },
                             })
@@ -1359,18 +1359,18 @@ export function GeneralSettingsPanel() {
                           <span className="text-xs font-medium text-foreground">
                             {providerDisplayName} server URL
                           </span>
-                          <Input
+                          <DraftInput
                             id={`provider-install-${providerCard.provider}-server-url`}
                             className="mt-1.5"
                             value={providerCard.serverUrlValue}
-                            onChange={(event) =>
+                            onCommit={(next) =>
                               updateSettings({
                                 providers: {
                                   ...settings.providers,
                                   [providerCard.provider]: {
                                     ...settings.providers[providerCard.provider],
                                     ...(providerCard.provider === "opencode"
-                                      ? { serverUrl: event.target.value }
+                                      ? { serverUrl: next }
                                       : {}),
                                   },
                                 },
@@ -1397,20 +1397,20 @@ export function GeneralSettingsPanel() {
                           <span className="text-xs font-medium text-foreground">
                             {providerDisplayName} server password
                           </span>
-                          <Input
+                          <DraftInput
                             id={`provider-install-${providerCard.provider}-server-password`}
                             className="mt-1.5"
                             type="password"
                             autoComplete="off"
                             value={providerCard.serverPasswordValue}
-                            onChange={(event) =>
+                            onCommit={(next) =>
                               updateSettings({
                                 providers: {
                                   ...settings.providers,
                                   [providerCard.provider]: {
                                     ...settings.providers[providerCard.provider],
                                     ...(providerCard.provider === "opencode"
-                                      ? { serverPassword: event.target.value }
+                                      ? { serverPassword: next }
                                       : {}),
                                   },
                                 },
@@ -1437,17 +1437,17 @@ export function GeneralSettingsPanel() {
                           <span className="text-xs font-medium text-foreground">
                             CODEX_HOME path
                           </span>
-                          <Input
+                          <DraftInput
                             id={`provider-install-${providerCard.homePathKey}`}
                             className="mt-1.5"
                             value={codexHomePath}
-                            onChange={(event) =>
+                            onCommit={(next) =>
                               updateSettings({
                                 providers: {
                                   ...settings.providers,
                                   codex: {
                                     ...settings.providers.codex,
-                                    homePath: event.target.value,
+                                    homePath: next,
                                   },
                                 },
                               })
@@ -1470,17 +1470,17 @@ export function GeneralSettingsPanel() {
                           <span className="text-xs font-medium text-foreground">
                             Launch arguments
                           </span>
-                          <Input
+                          <DraftInput
                             id="provider-install-claudeAgent-launch-args"
                             className="mt-1.5"
                             value={settings.providers.claudeAgent.launchArgs}
-                            onChange={(event) =>
+                            onCommit={(next) =>
                               updateSettings({
                                 providers: {
                                   ...settings.providers,
                                   claudeAgent: {
                                     ...settings.providers.claudeAgent,
-                                    launchArgs: event.target.value,
+                                    launchArgs: next,
                                   },
                                 },
                               })
@@ -1644,7 +1644,27 @@ export function GeneralSettingsPanel() {
             </div>
           );
         })}
+        {allInstanceEntries.map(([instanceId, instance]) => (
+          <ProviderInstanceCard
+            key={instanceId}
+            instanceId={instanceId}
+            instance={instance}
+            driverOption={getDriverOption(instance.driver)}
+            liveProvider={serverProviders.find((candidate) => candidate.instanceId === instanceId)}
+            isExpanded={openInstanceDetails[instanceId] ?? false}
+            onExpandedChange={(open) =>
+              setOpenInstanceDetails((existing) => ({ ...existing, [instanceId]: open }))
+            }
+            onUpdate={(next) => updateProviderInstance(instanceId, next)}
+            onDelete={() => deleteProviderInstance(instanceId)}
+          />
+        ))}
       </SettingsSection>
+
+      <AddProviderInstanceDialog
+        open={isAddInstanceDialogOpen}
+        onOpenChange={setIsAddInstanceDialogOpen}
+      />
 
       <SettingsSection title="Advanced">
         <SettingsRow
