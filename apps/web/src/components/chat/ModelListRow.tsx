@@ -1,9 +1,8 @@
-import { type ProviderKind } from "@t3tools/contracts";
+import { type ProviderInstanceId, type ProviderKind } from "@t3tools/contracts";
 import { memo } from "react";
 import { StarIcon } from "lucide-react";
 import {
   getDisplayModelName,
-  getProviderLabel,
   getTriggerDisplayModelLabel,
   type ModelEsque,
   PROVIDER_ICON_BY_PROVIDER,
@@ -16,7 +15,16 @@ import { cn } from "~/lib/utils";
 export const ModelListRow = memo(function ModelListRow(props: {
   index: number;
   model: ModelEsque;
-  provider: ProviderKind;
+  /** Instance the model belongs to — the routing key used in combobox values. */
+  instanceId: ProviderInstanceId;
+  /** Driver kind of the instance — used for the provider icon glyph. */
+  driverKind: ProviderKind;
+  /**
+   * Display name to show in the secondary line (provider footer). Usually
+   * the instance's configured `displayName` so custom instances like
+   * "Codex Personal" render with their user-authored label.
+   */
+  providerDisplayName: string;
   isFavorite: boolean;
   showProvider: boolean;
   preferShortName?: boolean;
@@ -25,13 +33,16 @@ export const ModelListRow = memo(function ModelListRow(props: {
   jumpLabel?: string | null;
   onToggleFavorite: () => void;
 }) {
-  const ProviderIcon = PROVIDER_ICON_BY_PROVIDER[props.provider];
+  const ProviderIcon = PROVIDER_ICON_BY_PROVIDER[props.driverKind];
+  const providerLabel = props.model.subProvider
+    ? `${props.providerDisplayName} · ${props.model.subProvider}`
+    : props.providerDisplayName;
 
   return (
     <ComboboxItem
       hideIndicator
       index={props.index}
-      value={`${props.provider}:${props.model.slug}`}
+      value={`${props.instanceId}:${props.model.slug}`}
       contentClassName="flex w-full items-start gap-2"
       className={cn(
         "w-full cursor-pointer rounded px-3 py-2 transition-colors group",
@@ -94,7 +105,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
           <div className="flex items-center gap-1 mt-0.5">
             <ProviderIcon className="size-3 shrink-0" />
             <span className="text-xs font-normal leading-snug text-muted-foreground/70 truncate">
-              {getProviderLabel(props.provider, props.model)}
+              {providerLabel}
             </span>
           </div>
         )}

@@ -7,6 +7,7 @@
  */
 import {
   IsoDateTime,
+  ProviderInstanceId,
   ProviderSessionRuntimeStatus,
   RuntimeMode,
   ThreadId,
@@ -19,6 +20,14 @@ import type { ProviderSessionRuntimeRepositoryError } from "../Errors.ts";
 export const ProviderSessionRuntime = Schema.Struct({
   threadId: ThreadId,
   providerName: Schema.String,
+  /**
+   * User-defined routing key for the configured provider instance that
+   * owns this session. Nullable for back-compat: rows persisted before the
+   * driver/instance split carry only `providerName` (the kind slug). Read
+   * paths fall back to `defaultInstanceIdForDriver(providerName)` when
+   * this is `null`.
+   */
+  providerInstanceId: Schema.NullOr(ProviderInstanceId),
   adapterKey: Schema.String,
   runtimeMode: RuntimeMode,
   status: ProviderSessionRuntimeStatus,

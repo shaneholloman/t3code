@@ -133,6 +133,7 @@ it.layer(makeDirectoryLayer(SqlitePersistenceMemory))("ProviderSessionDirectoryL
       yield* runtimeRepository.upsert({
         threadId: newerThreadId,
         providerName: "codex",
+        providerInstanceId: null,
         adapterKey: "codex",
         runtimeMode: "full-access",
         status: "running",
@@ -148,6 +149,7 @@ it.layer(makeDirectoryLayer(SqlitePersistenceMemory))("ProviderSessionDirectoryL
       yield* runtimeRepository.upsert({
         threadId: olderThreadId,
         providerName: "claudeAgent",
+        providerInstanceId: null,
         adapterKey: "claudeAgent",
         runtimeMode: "approval-required",
         status: "starting",
@@ -203,6 +205,7 @@ it.layer(makeDirectoryLayer(SqlitePersistenceMemory))("ProviderSessionDirectoryL
       yield* runtimeRepository.upsert({
         threadId,
         providerName: "claudeAgent",
+        providerInstanceId: null,
         adapterKey: "claudeAgent",
         runtimeMode: "full-access",
         status: "running",

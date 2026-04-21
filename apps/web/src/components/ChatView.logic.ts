@@ -228,14 +228,22 @@ export function threadHasStarted(thread: Thread | null | undefined): boolean {
 }
 
 // `threadProvider` is typed as the open driver string carried by
-// `ModelSelection.provider`; we narrow back to the closed `ProviderKind`
+// `ModelSelection.instanceId`; we narrow back to the closed `ProviderKind`
 // here since downstream lock-state consumers only deal with built-in
 // drivers. Unknown driver ids degrade to `null` (i.e. "unlocked"), which
 // is the safe rollback / fork behavior — the routing layer is the right
 // place to surface "driver not installed" errors, not the lock state.
+//
+// `selectedProvider` takes the same open-string shape because the composer
+// now tracks the picker selection as a `ProviderInstanceId` (e.g.
+// `codex_personal`). Custom instance ids that don't directly match a
+// built-in driver literal resolve to `null` here, which matches the
+// existing "unknown driver → unlocked" semantics. Callers that want the
+// lock to track the custom instance's underlying driver kind should
+// resolve the instance id → driver kind upstream and pass the kind.
 export function deriveLockedProvider(input: {
   thread: Thread | null | undefined;
-  selectedProvider: ProviderKind | null;
+  selectedProvider: string | null;
   threadProvider: string | null;
 }): ProviderKind | null {
   if (!threadHasStarted(input.thread)) {
@@ -247,7 +255,11 @@ export function deriveLockedProvider(input: {
   }
   const narrowedThreadProvider =
     input.threadProvider && isBuiltInDriverId(input.threadProvider) ? input.threadProvider : null;
-  return narrowedThreadProvider ?? input.selectedProvider ?? null;
+  const narrowedSelectedProvider =
+    input.selectedProvider && isBuiltInDriverId(input.selectedProvider)
+      ? input.selectedProvider
+      : null;
+  return narrowedThreadProvider ?? narrowedSelectedProvider ?? null;
 }
 
 export async function waitForStartedServerThread(

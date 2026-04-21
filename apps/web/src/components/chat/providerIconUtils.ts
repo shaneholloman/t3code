@@ -1,4 +1,4 @@
-import { type ProviderKind, PROVIDER_DISPLAY_NAMES } from "@t3tools/contracts";
+import { type ProviderKind } from "@t3tools/contracts";
 import { ClaudeAI, CursorIcon, Icon, OpenAI, OpenCodeIcon } from "../Icons";
 import { PROVIDER_OPTIONS } from "../../session-logic";
 
@@ -26,11 +26,6 @@ export type ModelEsque = {
   shortName?: string | undefined;
   subProvider?: string | undefined;
 };
-
-export function getProviderLabel(provider: ProviderKind, model: ModelEsque): string {
-  const providerLabel = PROVIDER_DISPLAY_NAMES[provider];
-  return model.subProvider ? `${providerLabel} · ${model.subProvider}` : providerLabel;
-}
 
 export function getDisplayModelName(
   model: ModelEsque,

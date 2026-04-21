@@ -1,20 +1,24 @@
-import { Effect, Exit, Fiber, Layer, Schema, Scope } from "effect";
+import { Effect, Exit, Fiber, Schema, Scope } from "effect";
 import * as Semaphore from "effect/Semaphore";
 
-import { TextGenerationError, type ChatAttachment, type ModelSelection } from "@t3tools/contracts";
+import {
+  TextGenerationError,
+  type ChatAttachment,
+  type ModelSelection,
+  type OpenCodeSettings,
+} from "@t3tools/contracts";
 import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@t3tools/shared/git";
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
 
 import { ServerConfig } from "../../config.ts";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
-import { ServerSettingsService } from "../../serverSettings.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
   buildThreadTitlePrompt,
 } from "../Prompts.ts";
-import { type TextGenerationShape, TextGeneration } from "../Services/TextGeneration.ts";
+import { type TextGenerationShape } from "../Services/TextGeneration.ts";
 import {
   extractJsonObject,
   sanitizeCommitSubject,
@@ -89,9 +93,10 @@ interface SharedOpenCodeTextGenerationServerState {
   idleCloseFiber: Fiber.Fiber<void, never> | null;
 }
 
-const makeOpenCodeTextGeneration = Effect.gen(function* () {
+export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration")(function* (
+  openCodeSettings: OpenCodeSettings,
+) {
   const serverConfig = yield* ServerConfig;
-  const serverSettingsService = yield* ServerSettingsService;
   const openCodeRuntime = yield* OpenCodeRuntime;
   const idleFiberScope = yield* Effect.acquireRelease(Scope.make(), (scope) =>
     Scope.close(scope, Exit.void),
@@ -274,26 +279,6 @@ const makeOpenCodeTextGeneration = Effect.gen(function* () {
       });
     }
 
-    const settings = yield* serverSettingsService.getSettings.pipe(
-      Effect.map(
-        (value) =>
-          value.providers?.opencode ?? {
-            enabled: true,
-            binaryPath: "opencode",
-            serverUrl: "",
-            serverPassword: "",
-            customModels: [],
-          },
-      ),
-      Effect.orElseSucceed(() => ({
-        enabled: true,
-        binaryPath: "opencode",
-        serverUrl: "",
-        serverPassword: "",
-        customModels: [],
-      })),
-    );
-
     const fileParts = toOpenCodeFileParts({
       attachments: input.attachments,
       resolveAttachmentPath: (attachment) =>
@@ -306,8 +291,8 @@ const makeOpenCodeTextGeneration = Effect.gen(function* () {
           const client = openCodeRuntime.createOpenCodeSdkClient({
             baseUrl: server.url,
             directory: input.cwd,
-            ...(settings.serverUrl.length > 0 && settings.serverPassword
-              ? { serverPassword: settings.serverPassword }
+            ...(openCodeSettings.serverUrl.length > 0 && openCodeSettings.serverPassword
+              ? { serverPassword: openCodeSettings.serverPassword }
               : {}),
           });
           const session = await client.session.create({
@@ -350,11 +335,11 @@ const makeOpenCodeTextGeneration = Effect.gen(function* () {
       });
 
     const rawOutput =
-      settings.serverUrl.length > 0
-        ? yield* runAgainstServer({ url: settings.serverUrl })
+      openCodeSettings.serverUrl.length > 0
+        ? yield* runAgainstServer({ url: openCodeSettings.serverUrl })
         : yield* Effect.acquireUseRelease(
             acquireSharedServer({
-              binaryPath: settings.binaryPath,
+              binaryPath: openCodeSettings.binaryPath,
               operation: input.operation,
             }),
             runAgainstServer,
@@ -379,13 +364,6 @@ const makeOpenCodeTextGeneration = Effect.gen(function* () {
   const generateCommitMessage: TextGenerationShape["generateCommitMessage"] = Effect.fn(
     "OpenCodeTextGeneration.generateCommitMessage",
   )(function* (input) {
-    if (input.modelSelection.instanceId !== "opencode") {
-      return yield* new TextGenerationError({
-        operation: "generateCommitMessage",
-        detail: "Invalid model selection.",
-      });
-    }
-
     const { prompt, outputSchema } = buildCommitMessagePrompt({
       branch: input.branch,
       stagedSummary: input.stagedSummary,
@@ -412,13 +390,6 @@ const makeOpenCodeTextGeneration = Effect.gen(function* () {
   const generatePrContent: TextGenerationShape["generatePrContent"] = Effect.fn(
     "OpenCodeTextGeneration.generatePrContent",
   )(function* (input) {
-    if (input.modelSelection.instanceId !== "opencode") {
-      return yield* new TextGenerationError({
-        operation: "generatePrContent",
-        detail: "Invalid model selection.",
-      });
-    }
-
     const { prompt, outputSchema } = buildPrContentPrompt({
       baseBranch: input.baseBranch,
       headBranch: input.headBranch,
@@ -443,13 +414,6 @@ const makeOpenCodeTextGeneration = Effect.gen(function* () {
   const generateBranchName: TextGenerationShape["generateBranchName"] = Effect.fn(
     "OpenCodeTextGeneration.generateBranchName",
   )(function* (input) {
-    if (input.modelSelection.instanceId !== "opencode") {
-      return yield* new TextGenerationError({
-        operation: "generateBranchName",
-        detail: "Invalid model selection.",
-      });
-    }
-
     const { prompt, outputSchema } = buildBranchNamePrompt({
       message: input.message,
       attachments: input.attachments,
@@ -471,13 +435,6 @@ const makeOpenCodeTextGeneration = Effect.gen(function* () {
   const generateThreadTitle: TextGenerationShape["generateThreadTitle"] = Effect.fn(
     "OpenCodeTextGeneration.generateThreadTitle",
   )(function* (input) {
-    if (input.modelSelection.instanceId !== "opencode") {
-      return yield* new TextGenerationError({
-        operation: "generateThreadTitle",
-        detail: "Invalid model selection.",
-      });
-    }
-
     const { prompt, outputSchema } = buildThreadTitlePrompt({
       message: input.message,
       attachments: input.attachments,
@@ -503,5 +460,3 @@ const makeOpenCodeTextGeneration = Effect.gen(function* () {
     generateThreadTitle,
   } satisfies TextGenerationShape;
 });
-
-export const OpenCodeTextGenerationLive = Layer.effect(TextGeneration, makeOpenCodeTextGeneration);

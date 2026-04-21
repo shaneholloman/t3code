@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   ApprovalRequestId,
+  CodexSettings,
   EventId,
   ProviderItemId,
   type ProviderApprovalDecision,
@@ -18,13 +19,13 @@ import { createModelSelection } from "@t3tools/shared/model";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it, vi } from "@effect/vitest";
 
-import { Effect, Exit, Fiber, Layer, Option, Queue, Scope, Stream } from "effect";
+import { Context, Effect, Exit, Fiber, Layer, Option, Queue, Schema, Scope, Stream } from "effect";
 import * as CodexErrors from "effect-codex-app-server/errors";
 
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderAdapterValidationError } from "../Errors.ts";
-import { CodexAdapter } from "../Services/CodexAdapter.ts";
+import type { CodexAdapterShape } from "../Services/CodexAdapter.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
 import {
   type CodexSessionRuntimeOptions,
@@ -32,7 +33,12 @@ import {
   type CodexSessionRuntimeShape,
   type CodexThreadSnapshot,
 } from "./CodexSessionRuntime.ts";
-import { makeCodexAdapterLive } from "./CodexAdapter.ts";
+import { makeCodexAdapter } from "./CodexAdapter.ts";
+
+// Test-local service tag so the rest of the file can keep using `yield* CodexAdapter`.
+class CodexAdapter extends Context.Service<CodexAdapter, CodexAdapterShape>()(
+  "test/CodexAdapter",
+) {}
 
 const asThreadId = (value: string): ThreadId => ThreadId.make(value);
 const asTurnId = (value: string): TurnId => TurnId.make(value);
@@ -203,7 +209,15 @@ const providerSessionDirectoryTestLayer = Layer.succeed(ProviderSessionDirectory
 
 const validationRuntimeFactory = makeRuntimeFactory();
 const validationLayer = it.layer(
-  makeCodexAdapterLive({ makeRuntime: validationRuntimeFactory.factory }).pipe(
+  Layer.effect(
+    CodexAdapter,
+    Effect.gen(function* () {
+      const codexConfig = Schema.decodeSync(CodexSettings)({});
+      return yield* makeCodexAdapter(codexConfig, {
+        makeRuntime: validationRuntimeFactory.factory,
+      });
+    }),
+  ).pipe(
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
     Layer.provideMerge(ServerSettingsService.layerTest()),
     Layer.provideMerge(providerSessionDirectoryTestLayer),
@@ -263,7 +277,15 @@ validationLayer("CodexAdapterLive validation", (it) => {
 
 const sessionRuntimeFactory = makeRuntimeFactory();
 const sessionErrorLayer = it.layer(
-  makeCodexAdapterLive({ makeRuntime: sessionRuntimeFactory.factory }).pipe(
+  Layer.effect(
+    CodexAdapter,
+    Effect.gen(function* () {
+      const codexConfig = Schema.decodeSync(CodexSettings)({});
+      return yield* makeCodexAdapter(codexConfig, {
+        makeRuntime: sessionRuntimeFactory.factory,
+      });
+    }),
+  ).pipe(
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
     Layer.provideMerge(ServerSettingsService.layerTest()),
     Layer.provideMerge(providerSessionDirectoryTestLayer),
@@ -326,7 +348,15 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
 
 const lifecycleRuntimeFactory = makeRuntimeFactory();
 const lifecycleLayer = it.layer(
-  makeCodexAdapterLive({ makeRuntime: lifecycleRuntimeFactory.factory }).pipe(
+  Layer.effect(
+    CodexAdapter,
+    Effect.gen(function* () {
+      const codexConfig = Schema.decodeSync(CodexSettings)({});
+      return yield* makeCodexAdapter(codexConfig, {
+        makeRuntime: lifecycleRuntimeFactory.factory,
+      });
+    }),
+  ).pipe(
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
     Layer.provideMerge(ServerSettingsService.layerTest()),
     Layer.provideMerge(providerSessionDirectoryTestLayer),
@@ -897,7 +927,15 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
 
 const scopedLifecycleRuntimeFactory = makeScopedRuntimeFactory();
 const scopedLifecycleLayer = it.layer(
-  makeCodexAdapterLive({ makeRuntime: scopedLifecycleRuntimeFactory.factory }).pipe(
+  Layer.effect(
+    CodexAdapter,
+    Effect.gen(function* () {
+      const codexConfig = Schema.decodeSync(CodexSettings)({});
+      return yield* makeCodexAdapter(codexConfig, {
+        makeRuntime: scopedLifecycleRuntimeFactory.factory,
+      });
+    }),
+  ).pipe(
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
     Layer.provideMerge(ServerSettingsService.layerTest()),
     Layer.provideMerge(providerSessionDirectoryTestLayer),
@@ -933,7 +971,15 @@ scopedLifecycleLayer("CodexAdapterLive scoped lifecycle", (it) => {
 
 const scopedFailureRuntimeFactory = makeScopedRuntimeFactory({ failConstruction: true });
 const scopedFailureLayer = it.layer(
-  makeCodexAdapterLive({ makeRuntime: scopedFailureRuntimeFactory.factory }).pipe(
+  Layer.effect(
+    CodexAdapter,
+    Effect.gen(function* () {
+      const codexConfig = Schema.decodeSync(CodexSettings)({});
+      return yield* makeCodexAdapter(codexConfig, {
+        makeRuntime: scopedFailureRuntimeFactory.factory,
+      });
+    }),
+  ).pipe(
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
     Layer.provideMerge(ServerSettingsService.layerTest()),
     Layer.provideMerge(providerSessionDirectoryTestLayer),
@@ -974,10 +1020,16 @@ it.effect("flushes managed native logs when the adapter layer shuts down", () =>
     let scopeClosed = false;
 
     try {
-      const layer = makeCodexAdapterLive({
-        makeRuntime: runtimeFactory.factory,
-        nativeEventLogPath: basePath,
-      }).pipe(
+      const layer = Layer.effect(
+        CodexAdapter,
+        Effect.gen(function* () {
+          const codexConfig = Schema.decodeSync(CodexSettings)({});
+          return yield* makeCodexAdapter(codexConfig, {
+            makeRuntime: runtimeFactory.factory,
+            nativeEventLogPath: basePath,
+          });
+        }),
+      ).pipe(
         Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
         Layer.provideMerge(ServerSettingsService.layerTest()),
         Layer.provideMerge(providerSessionDirectoryTestLayer),

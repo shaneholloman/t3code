@@ -1,25 +1,18 @@
-import { ProviderInstanceId } from "@t3tools/contracts";
+import { ClaudeSettings, ProviderInstanceId } from "@t3tools/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path } from "effect";
+import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { createModelSelection } from "@t3tools/shared/model";
 import { expect } from "vitest";
 
 import { ServerConfig } from "../../config.ts";
-import { TextGeneration } from "../Services/TextGeneration.ts";
+import { type TextGenerationShape } from "../Services/TextGeneration.ts";
 import { sanitizeThreadTitle } from "../Utils.ts";
-import { ClaudeTextGenerationLive } from "./ClaudeTextGeneration.ts";
-import { ServerSettingsService } from "../../serverSettings.ts";
+import { makeClaudeTextGeneration } from "./ClaudeTextGeneration.ts";
 
-const ClaudeTextGenerationTestLayer = ClaudeTextGenerationLive.pipe(
-  Layer.provideMerge(ServerSettingsService.layerTest()),
-  Layer.provideMerge(
-    ServerConfig.layerTest(process.cwd(), {
-      prefix: "t3code-claude-text-generation-test-",
-    }),
-  ),
-  Layer.provideMerge(NodeServices.layer),
-);
+const ClaudeTextGenerationTestLayer = ServerConfig.layerTest(process.cwd(), {
+  prefix: "t3code-claude-text-generation-test-",
+}).pipe(Layer.provideMerge(NodeServices.layer));
 
 function makeFakeClaudeBinary(dir: string) {
   return Effect.gen(function* () {
@@ -75,22 +68,22 @@ function withFakeClaudeEnv<A, E, R>(
     argsMustNotContain?: string;
     stdinMustContain?: string;
   },
-  effect: Effect.Effect<A, E, R>,
+  effectFn: (textGeneration: TextGenerationShape) => Effect.Effect<A, E, R>,
 ) {
-  return Effect.acquireUseRelease(
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3code-claude-text-" });
-      const binDir = yield* makeFakeClaudeBinary(tempDir);
-      const previousPath = process.env.PATH;
-      const previousOutput = process.env.T3_FAKE_CLAUDE_OUTPUT;
-      const previousExitCode = process.env.T3_FAKE_CLAUDE_EXIT_CODE;
-      const previousStderr = process.env.T3_FAKE_CLAUDE_STDERR;
-      const previousArgsMustContain = process.env.T3_FAKE_CLAUDE_ARGS_MUST_CONTAIN;
-      const previousArgsMustNotContain = process.env.T3_FAKE_CLAUDE_ARGS_MUST_NOT_CONTAIN;
-      const previousStdinMustContain = process.env.T3_FAKE_CLAUDE_STDIN_MUST_CONTAIN;
+  return Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3code-claude-text-" });
+    const binDir = yield* makeFakeClaudeBinary(tempDir);
+    const previousPath = process.env.PATH;
+    const previousOutput = process.env.T3_FAKE_CLAUDE_OUTPUT;
+    const previousExitCode = process.env.T3_FAKE_CLAUDE_EXIT_CODE;
+    const previousStderr = process.env.T3_FAKE_CLAUDE_STDERR;
+    const previousArgsMustContain = process.env.T3_FAKE_CLAUDE_ARGS_MUST_CONTAIN;
+    const previousArgsMustNotContain = process.env.T3_FAKE_CLAUDE_ARGS_MUST_NOT_CONTAIN;
+    const previousStdinMustContain = process.env.T3_FAKE_CLAUDE_STDIN_MUST_CONTAIN;
 
-      yield* Effect.sync(() => {
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
         process.env.PATH = `${binDir}:${previousPath ?? ""}`;
         process.env.T3_FAKE_CLAUDE_OUTPUT = input.output;
 
@@ -123,60 +116,53 @@ function withFakeClaudeEnv<A, E, R>(
         } else {
           delete process.env.T3_FAKE_CLAUDE_STDIN_MUST_CONTAIN;
         }
-      });
-
-      return {
-        previousPath,
-        previousOutput,
-        previousExitCode,
-        previousStderr,
-        previousArgsMustContain,
-        previousArgsMustNotContain,
-        previousStdinMustContain,
-      };
-    }),
-    () => effect,
-    (previous) =>
-      Effect.sync(() => {
-        process.env.PATH = previous.previousPath;
-
-        if (previous.previousOutput === undefined) {
-          delete process.env.T3_FAKE_CLAUDE_OUTPUT;
-        } else {
-          process.env.T3_FAKE_CLAUDE_OUTPUT = previous.previousOutput;
-        }
-
-        if (previous.previousExitCode === undefined) {
-          delete process.env.T3_FAKE_CLAUDE_EXIT_CODE;
-        } else {
-          process.env.T3_FAKE_CLAUDE_EXIT_CODE = previous.previousExitCode;
-        }
-
-        if (previous.previousStderr === undefined) {
-          delete process.env.T3_FAKE_CLAUDE_STDERR;
-        } else {
-          process.env.T3_FAKE_CLAUDE_STDERR = previous.previousStderr;
-        }
-
-        if (previous.previousArgsMustContain === undefined) {
-          delete process.env.T3_FAKE_CLAUDE_ARGS_MUST_CONTAIN;
-        } else {
-          process.env.T3_FAKE_CLAUDE_ARGS_MUST_CONTAIN = previous.previousArgsMustContain;
-        }
-
-        if (previous.previousArgsMustNotContain === undefined) {
-          delete process.env.T3_FAKE_CLAUDE_ARGS_MUST_NOT_CONTAIN;
-        } else {
-          process.env.T3_FAKE_CLAUDE_ARGS_MUST_NOT_CONTAIN = previous.previousArgsMustNotContain;
-        }
-
-        if (previous.previousStdinMustContain === undefined) {
-          delete process.env.T3_FAKE_CLAUDE_STDIN_MUST_CONTAIN;
-        } else {
-          process.env.T3_FAKE_CLAUDE_STDIN_MUST_CONTAIN = previous.previousStdinMustContain;
-        }
       }),
-  );
+      () =>
+        Effect.sync(() => {
+          process.env.PATH = previousPath;
+
+          if (previousOutput === undefined) {
+            delete process.env.T3_FAKE_CLAUDE_OUTPUT;
+          } else {
+            process.env.T3_FAKE_CLAUDE_OUTPUT = previousOutput;
+          }
+
+          if (previousExitCode === undefined) {
+            delete process.env.T3_FAKE_CLAUDE_EXIT_CODE;
+          } else {
+            process.env.T3_FAKE_CLAUDE_EXIT_CODE = previousExitCode;
+          }
+
+          if (previousStderr === undefined) {
+            delete process.env.T3_FAKE_CLAUDE_STDERR;
+          } else {
+            process.env.T3_FAKE_CLAUDE_STDERR = previousStderr;
+          }
+
+          if (previousArgsMustContain === undefined) {
+            delete process.env.T3_FAKE_CLAUDE_ARGS_MUST_CONTAIN;
+          } else {
+            process.env.T3_FAKE_CLAUDE_ARGS_MUST_CONTAIN = previousArgsMustContain;
+          }
+
+          if (previousArgsMustNotContain === undefined) {
+            delete process.env.T3_FAKE_CLAUDE_ARGS_MUST_NOT_CONTAIN;
+          } else {
+            process.env.T3_FAKE_CLAUDE_ARGS_MUST_NOT_CONTAIN = previousArgsMustNotContain;
+          }
+
+          if (previousStdinMustContain === undefined) {
+            delete process.env.T3_FAKE_CLAUDE_STDIN_MUST_CONTAIN;
+          } else {
+            process.env.T3_FAKE_CLAUDE_STDIN_MUST_CONTAIN = previousStdinMustContain;
+          }
+        }),
+    );
+
+    const config = Schema.decodeSync(ClaudeSettings)({});
+    const textGeneration = yield* makeClaudeTextGeneration(config);
+    return yield* effectFn(textGeneration);
+  }).pipe(Effect.scoped);
 }
 
 it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGenerationLive", (it) => {
@@ -192,24 +178,23 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGenerationLive", (it) => {
         argsMustContain: '--settings {"alwaysThinkingEnabled":false}',
         argsMustNotContain: "--effort",
       },
-      Effect.gen(function* () {
-        const textGeneration = yield* TextGeneration;
+      (textGeneration) =>
+        Effect.gen(function* () {
+          const generated = yield* textGeneration.generateCommitMessage({
+            cwd: process.cwd(),
+            branch: "feature/claude-effect",
+            stagedSummary: "M README.md",
+            stagedPatch: "diff --git a/README.md b/README.md",
+            modelSelection: {
+              ...createModelSelection("claudeAgent", "claude-haiku-4-5", [
+                { id: "thinking", value: false },
+                { id: "effort", value: "high" },
+              ]),
+            },
+          });
 
-        const generated = yield* textGeneration.generateCommitMessage({
-          cwd: process.cwd(),
-          branch: "feature/claude-effect",
-          stagedSummary: "M README.md",
-          stagedPatch: "diff --git a/README.md b/README.md",
-          modelSelection: {
-            ...createModelSelection("claudeAgent", "claude-haiku-4-5", [
-              { id: "thinking", value: false },
-              { id: "effort", value: "high" },
-            ]),
-          },
-        });
-
-        expect(generated.subject).toBe("Add important change");
-      }),
+          expect(generated.subject).toBe("Add important change");
+        }),
     ),
   );
 
@@ -224,26 +209,25 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGenerationLive", (it) => {
         }),
         argsMustContain: '--effort max --settings {"fastMode":true}',
       },
-      Effect.gen(function* () {
-        const textGeneration = yield* TextGeneration;
+      (textGeneration) =>
+        Effect.gen(function* () {
+          const generated = yield* textGeneration.generatePrContent({
+            cwd: process.cwd(),
+            baseBranch: "main",
+            headBranch: "feature/claude-effect",
+            commitSummary: "Improve orchestration",
+            diffSummary: "1 file changed",
+            diffPatch: "diff --git a/README.md b/README.md",
+            modelSelection: {
+              ...createModelSelection("claudeAgent", "claude-opus-4-6", [
+                { id: "effort", value: "max" },
+                { id: "fastMode", value: true },
+              ]),
+            },
+          });
 
-        const generated = yield* textGeneration.generatePrContent({
-          cwd: process.cwd(),
-          baseBranch: "main",
-          headBranch: "feature/claude-effect",
-          commitSummary: "Improve orchestration",
-          diffSummary: "1 file changed",
-          diffPatch: "diff --git a/README.md b/README.md",
-          modelSelection: {
-            ...createModelSelection("claudeAgent", "claude-opus-4-6", [
-              { id: "effort", value: "max" },
-              { id: "fastMode", value: true },
-            ]),
-          },
-        });
-
-        expect(generated.title).toBe("Improve orchestration flow");
-      }),
+          expect(generated.title).toBe("Improve orchestration flow");
+        }),
     ),
   );
 
@@ -258,24 +242,23 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGenerationLive", (it) => {
         }),
         stdinMustContain: "You write concise thread titles for coding conversations.",
       },
-      Effect.gen(function* () {
-        const textGeneration = yield* TextGeneration;
+      (textGeneration) =>
+        Effect.gen(function* () {
+          const generated = yield* textGeneration.generateThreadTitle({
+            cwd: process.cwd(),
+            message: "Please investigate reconnect failures after restarting the session.",
+            modelSelection: {
+              instanceId: ProviderInstanceId.make("claudeAgent"),
+              model: "claude-sonnet-4-6",
+            },
+          });
 
-        const generated = yield* textGeneration.generateThreadTitle({
-          cwd: process.cwd(),
-          message: "Please investigate reconnect failures after restarting the session.",
-          modelSelection: {
-            instanceId: ProviderInstanceId.make("claudeAgent"),
-            model: "claude-sonnet-4-6",
-          },
-        });
-
-        expect(generated.title).toBe(
-          sanitizeThreadTitle(
-            '"Reconnect failures after restart because the session state does not recover"',
-          ),
-        );
-      }),
+          expect(generated.title).toBe(
+            sanitizeThreadTitle(
+              '"Reconnect failures after restart because the session state does not recover"',
+            ),
+          );
+        }),
     ),
   );
 
@@ -288,20 +271,19 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGenerationLive", (it) => {
           },
         }),
       },
-      Effect.gen(function* () {
-        const textGeneration = yield* TextGeneration;
+      (textGeneration) =>
+        Effect.gen(function* () {
+          const generated = yield* textGeneration.generateThreadTitle({
+            cwd: process.cwd(),
+            message: "Name this thread.",
+            modelSelection: {
+              instanceId: ProviderInstanceId.make("claudeAgent"),
+              model: "claude-sonnet-4-6",
+            },
+          });
 
-        const generated = yield* textGeneration.generateThreadTitle({
-          cwd: process.cwd(),
-          message: "Name this thread.",
-          modelSelection: {
-            instanceId: ProviderInstanceId.make("claudeAgent"),
-            model: "claude-sonnet-4-6",
-          },
-        });
-
-        expect(generated.title).toBe("New thread");
-      }),
+          expect(generated.title).toBe("New thread");
+        }),
     ),
   );
 });

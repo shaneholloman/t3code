@@ -1,9 +1,9 @@
 import {
+  type ProviderInstanceId,
   type ProviderKind,
   type ResolvedKeybindingsConfig,
-  type ServerProvider,
 } from "@t3tools/contracts";
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import type { VariantProps } from "class-variance-authority";
 import { ChevronDownIcon } from "lucide-react";
 import { Button, buttonVariants } from "../ui/button";
@@ -18,14 +18,20 @@ import {
   getTriggerDisplayModelName,
 } from "./providerIconUtils";
 import { setModelPickerOpen } from "../../modelPickerOpenState";
+import type { ProviderInstanceEntry } from "../../providerInstances";
 
 export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
-  provider: ProviderKind;
+  /**
+   * The instance currently selected in the composer. Drives the trigger
+   * icon, label and the default-highlighted combobox row.
+   */
+  activeInstanceId: ProviderInstanceId;
   model: string;
   lockedProvider: ProviderKind | null;
-  providers?: ReadonlyArray<ServerProvider>;
+  /** Instance entries rendered in the sidebar + used to resolve display name. */
+  instanceEntries: ReadonlyArray<ProviderInstanceEntry>;
   keybindings?: ResolvedKeybindingsConfig;
-  modelOptionsByProvider: Record<ProviderKind, ReadonlyArray<ModelEsque>>;
+  modelOptionsByInstance: ReadonlyMap<ProviderInstanceId, ReadonlyArray<ModelEsque>>;
   activeProviderIconClassName?: string;
   compact?: boolean;
   disabled?: boolean;
@@ -34,19 +40,40 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   triggerVariant?: VariantProps<typeof buttonVariants>["variant"];
   triggerClassName?: string;
   onOpenChange?: (open: boolean) => void;
-  onProviderModelChange: (provider: ProviderKind, model: string) => void;
+  onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
 }) {
   const [uncontrolledIsMenuOpen, setUncontrolledIsMenuOpen] = useState(false);
-  const activeProvider = props.lockedProvider ?? props.provider;
   const isMenuOpen = props.open ?? uncontrolledIsMenuOpen;
-  const selectedProviderOptions = props.modelOptionsByProvider[activeProvider];
-  // If the current slug belongs to a different provider (for example after a provider
-  // switch or disable), prefer the active provider's first option so the trigger icon
-  // and label stay in sync instead of showing a stale foreign slug.
+
+  // Resolve the active instance entry. When `lockedProvider` is set, the
+  // composer already constrains selection to that driver kind, but the
+  // persisted selection may still reference an instance from a different
+  // kind after a configuration change — fall back to the first matching
+  // entry in that case so the trigger stays consistent.
+  const activeEntry = useMemo(() => {
+    const direct = props.instanceEntries.find(
+      (entry) => entry.instanceId === props.activeInstanceId,
+    );
+    if (direct) return direct;
+    if (props.lockedProvider) {
+      return (
+        props.instanceEntries.find((entry) => entry.driverKind === props.lockedProvider) ?? null
+      );
+    }
+    return props.instanceEntries[0] ?? null;
+  }, [props.activeInstanceId, props.instanceEntries, props.lockedProvider]);
+
+  const activeInstanceId = activeEntry?.instanceId ?? props.activeInstanceId;
+  const activeDriverKind = activeEntry?.driverKind ?? "codex";
+  const selectedInstanceOptions = props.modelOptionsByInstance.get(activeInstanceId) ?? [];
+  // If the current slug belongs to a different instance (for example after
+  // a provider switch or disable), prefer the active instance's first
+  // option so the trigger icon and label stay in sync instead of showing
+  // a stale foreign slug.
   const selectedModel =
-    selectedProviderOptions.find((option) => option.slug === props.model) ??
-    selectedProviderOptions[0];
-  const ProviderIcon = PROVIDER_ICON_BY_PROVIDER[activeProvider];
+    selectedInstanceOptions.find((option) => option.slug === props.model) ??
+    selectedInstanceOptions[0];
+  const ProviderIcon = PROVIDER_ICON_BY_PROVIDER[activeDriverKind];
   const triggerTitle = selectedModel ? getTriggerDisplayModelName(selectedModel) : props.model;
   const triggerSubtitle = selectedModel?.subProvider;
   const triggerLabel = selectedModel ? getTriggerDisplayModelLabel(selectedModel) : props.model;
@@ -65,9 +92,9 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
     };
   }, [isMenuOpen]);
 
-  const handleProviderModelChange = (provider: ProviderKind, model: string) => {
+  const handleInstanceModelChange = (instanceId: ProviderInstanceId, model: string) => {
     if (props.disabled) return;
-    props.onProviderModelChange(provider, model);
+    props.onInstanceModelChange(instanceId, model);
     setIsMenuOpen(false);
   };
 
@@ -142,15 +169,15 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
         className="border-0 bg-transparent p-0 shadow-none before:hidden [--viewport-inline-padding:0] *:data-[slot=popover-viewport]:p-0"
       >
         <ModelPickerContent
-          provider={props.provider}
+          activeInstanceId={activeInstanceId}
           model={props.model}
           lockedProvider={props.lockedProvider}
-          {...(props.providers && { providers: props.providers })}
+          instanceEntries={props.instanceEntries}
           {...(props.keybindings ? { keybindings: props.keybindings } : {})}
-          modelOptionsByProvider={props.modelOptionsByProvider}
+          modelOptionsByInstance={props.modelOptionsByInstance}
           terminalOpen={props.terminalOpen ?? false}
           onRequestClose={() => setIsMenuOpen(false)}
-          onProviderModelChange={handleProviderModelChange}
+          onInstanceModelChange={handleInstanceModelChange}
         />
       </PopoverPopup>
     </Popover>

@@ -3779,12 +3779,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
   it("snapshots sticky codex settings into a new draft thread", async () => {
     useComposerDraftStore.setState({
       stickyModelSelectionByProvider: {
-        codex: createModelSelection("codex", "gpt-5.3-codex", [
+        [ProviderInstanceId.make("codex")]: createModelSelection("codex", "gpt-5.3-codex", [
           { id: "reasoningEffort", value: "medium" },
           { id: "fastMode", value: true },
         ]),
       },
-      stickyActiveProvider: "codex",
+      stickyActiveProvider: ProviderInstanceId.make("codex"),
     });
 
     const mounted = await mountChatView({
@@ -3830,12 +3830,16 @@ describe("ChatView timeline estimator parity (full app)", () => {
   it("hydrates the provider alongside a sticky claude model", async () => {
     useComposerDraftStore.setState({
       stickyModelSelectionByProvider: {
-        claudeAgent: createModelSelection("claudeAgent", "claude-opus-4-6", [
-          { id: "effort", value: "max" },
-          { id: "fastMode", value: true },
-        ]),
+        [ProviderInstanceId.make("claudeAgent")]: createModelSelection(
+          "claudeAgent",
+          "claude-opus-4-6",
+          [
+            { id: "effort", value: "max" },
+            { id: "fastMode", value: true },
+          ],
+        ),
       },
-      stickyActiveProvider: "claudeAgent",
+      stickyActiveProvider: ProviderInstanceId.make("claudeAgent"),
     });
 
     const mounted = await mountChatView({
@@ -3904,12 +3908,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
   it("prefers draft state over sticky composer settings and defaults", async () => {
     useComposerDraftStore.setState({
       stickyModelSelectionByProvider: {
-        codex: createModelSelection("codex", "gpt-5.3-codex", [
+        [ProviderInstanceId.make("codex")]: createModelSelection("codex", "gpt-5.3-codex", [
           { id: "reasoningEffort", value: "medium" },
           { id: "fastMode", value: true },
         ]),
       },
-      stickyActiveProvider: "codex",
+      stickyActiveProvider: ProviderInstanceId.make("codex"),
     });
 
     const mounted = await mountChatView({

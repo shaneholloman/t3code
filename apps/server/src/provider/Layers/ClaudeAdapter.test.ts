@@ -12,6 +12,7 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import {
   ApprovalRequestId,
+  ClaudeSettings,
   ProviderItemId,
   ProviderRuntimeEvent,
   type RuntimeMode,
@@ -20,14 +21,19 @@ import {
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Fiber, Layer, Random, Stream } from "effect";
+import { Context, Effect, Fiber, Layer, Random, Schema, Stream } from "effect";
 
 import { attachmentRelativePath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderAdapterValidationError } from "../Errors.ts";
-import { ClaudeAdapter } from "../Services/ClaudeAdapter.ts";
-import { makeClaudeAdapterLive, type ClaudeAdapterLiveOptions } from "./ClaudeAdapter.ts";
+import type { ClaudeAdapterShape } from "../Services/ClaudeAdapter.ts";
+import { makeClaudeAdapter, type ClaudeAdapterLiveOptions } from "./ClaudeAdapter.ts";
+
+// Test-local service tag so the rest of the file can keep using `yield* ClaudeAdapter`.
+class ClaudeAdapter extends Context.Service<ClaudeAdapter, ClaudeAdapterShape>()(
+  "test/ClaudeAdapter",
+) {}
 
 class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   private readonly queue: Array<SDKMessage> = [];
@@ -165,7 +171,13 @@ function makeHarness(config?: {
   };
 
   return {
-    layer: makeClaudeAdapterLive(adapterOptions).pipe(
+    layer: Layer.effect(
+      ClaudeAdapter,
+      Effect.gen(function* () {
+        const claudeConfig = Schema.decodeSync(ClaudeSettings)({});
+        return yield* makeClaudeAdapter(claudeConfig, adapterOptions);
+      }),
+    ).pipe(
       Layer.provideMerge(
         ServerConfig.layerTest(
           config?.cwd ?? "/tmp/claude-adapter-test",
@@ -1271,13 +1283,19 @@ describe("ClaudeAdapterLive", () => {
 
   it.effect("closes the previous session before replacing an existing thread session", () => {
     const queries: FakeClaudeQuery[] = [];
-    const layer = makeClaudeAdapterLive({
-      createQuery: () => {
-        const query = new FakeClaudeQuery();
-        queries.push(query);
-        return query;
-      },
-    }).pipe(
+    const layer = Layer.effect(
+      ClaudeAdapter,
+      Effect.gen(function* () {
+        const claudeConfig = Schema.decodeSync(ClaudeSettings)({});
+        return yield* makeClaudeAdapter(claudeConfig, {
+          createQuery: () => {
+            const query = new FakeClaudeQuery();
+            queries.push(query);
+            return query;
+          },
+        });
+      }),
+    ).pipe(
       Layer.provideMerge(ServerConfig.layerTest("/tmp/claude-adapter-test", "/tmp")),
       Layer.provideMerge(ServerSettingsService.layerTest()),
       Layer.provideMerge(NodeServices.layer),
@@ -1348,21 +1366,27 @@ describe("ClaudeAdapterLive", () => {
 
     let promptConsumerError: unknown = undefined;
 
-    const layer = makeClaudeAdapterLive({
-      createQuery: (input) => {
-        // Simulate the SDK consuming the prompt iterable
-        (async () => {
-          try {
-            for await (const _message of input.prompt) {
-              /* SDK processes user messages */
-            }
-          } catch (error) {
-            promptConsumerError = error;
-          }
-        })();
-        return query;
-      },
-    }).pipe(
+    const layer = Layer.effect(
+      ClaudeAdapter,
+      Effect.gen(function* () {
+        const claudeConfig = Schema.decodeSync(ClaudeSettings)({});
+        return yield* makeClaudeAdapter(claudeConfig, {
+          createQuery: (input) => {
+            // Simulate the SDK consuming the prompt iterable
+            (async () => {
+              try {
+                for await (const _message of input.prompt) {
+                  /* SDK processes user messages */
+                }
+              } catch (error) {
+                promptConsumerError = error;
+              }
+            })();
+            return query;
+          },
+        });
+      }),
+    ).pipe(
       Layer.provideMerge(ServerConfig.layerTest("/tmp/claude-adapter-test", "/tmp")),
       Layer.provideMerge(ServerSettingsService.layerTest()),
       Layer.provideMerge(NodeServices.layer),

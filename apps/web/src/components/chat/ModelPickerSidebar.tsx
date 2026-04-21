@@ -1,28 +1,31 @@
-import { type ProviderKind, type ServerProvider } from "@t3tools/contracts";
+import { type ProviderInstanceId } from "@t3tools/contracts";
 import { memo } from "react";
 import { Clock3Icon, SparklesIcon, StarIcon } from "lucide-react";
 import { Gemini, GithubCopilotIcon } from "../Icons";
-import { AVAILABLE_PROVIDER_OPTIONS, PROVIDER_ICON_BY_PROVIDER } from "./providerIconUtils";
+import { PROVIDER_ICON_BY_PROVIDER } from "./providerIconUtils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
-import { getProviderSnapshot } from "../../providerModels";
+import type { ProviderInstanceEntry } from "../../providerInstances";
 
-function describeUnavailableProvider(label: string, live: ServerProvider | undefined): string {
-  if (!live) {
-    return `${label} — waiting for provider status…`;
-  }
-  if (live.status === "ready") {
+/**
+ * Build the hover tooltip for an instance button. Mirrors the old
+ * kind-based copy but uses the entry's configured `displayName` so custom
+ * instances get their user-authored name (e.g. "Codex Personal — Unavailable.").
+ */
+function describeUnavailableInstance(entry: ProviderInstanceEntry): string {
+  const label = entry.displayName;
+  if (entry.status === "ready") {
     return label;
   }
   const kind =
-    live.status === "error"
+    entry.status === "error"
       ? "Unavailable"
-      : live.status === "warning"
+      : entry.status === "warning"
         ? "Limited"
-        : live.status === "disabled"
+        : entry.status === "disabled"
           ? "Disabled in settings"
           : "Not ready";
-  const msg = live.message?.trim();
+  const msg = entry.snapshot.message?.trim();
   return msg ? `${label} — ${kind}. ${msg}` : `${label} — ${kind}.`;
 }
 
@@ -39,12 +42,24 @@ const PICKER_TOOLTIP_SIDE = "left" as const;
 const PICKER_TOOLTIP_CLASS = "max-w-64 text-balance font-normal leading-snug";
 
 export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
-  selectedProvider: ProviderKind | "favorites";
-  onSelectProvider: (provider: ProviderKind | "favorites") => void;
-  providers?: ReadonlyArray<ServerProvider>;
+  selectedInstanceId: ProviderInstanceId | "favorites";
+  onSelectInstance: (instanceId: ProviderInstanceId | "favorites") => void;
+  /**
+   * Instance entries to render as rail buttons. Each entry becomes one icon
+   * keyed by `instanceId`, so the default built-in Codex and a user-authored
+   * `codex_personal` appear as two distinct rail items, each routing to
+   * their own model list.
+   */
+  instanceEntries: ReadonlyArray<ProviderInstanceEntry>;
+  /**
+   * Instance id values that should render the "new" sparkle badge. Callers
+   * pass the subset of default built-in ids they want flagged (custom
+   * instances are never flagged — the user just made them).
+   */
+  newBadgeInstanceIds?: ReadonlySet<ProviderInstanceId>;
 }) {
-  const handleProviderClick = (provider: ProviderKind | "favorites") => {
-    props.onSelectProvider(provider);
+  const handleSelect = (instanceId: ProviderInstanceId | "favorites") => {
+    props.onSelectInstance(instanceId);
   };
 
   return (
@@ -52,16 +67,18 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
       {/* Favorites section */}
       <div className="pb-1 mb-1 border-b">
         <div className="relative w-full">
-          {props.selectedProvider === "favorites" && <div className={SELECTED_INDICATOR_CLASS} />}
+          {props.selectedInstanceId === "favorites" && (
+            <div className={SELECTED_INDICATOR_CLASS} />
+          )}
           <Tooltip>
             <TooltipTrigger
               render={
                 <button
                   className={cn(
                     "relative isolate flex w-full cursor-pointer aspect-square items-center justify-center rounded transition-colors hover:bg-muted",
-                    props.selectedProvider === "favorites" && SELECTED_BUTTON_CLASS,
+                    props.selectedInstanceId === "favorites" && SELECTED_BUTTON_CLASS,
                   )}
-                  onClick={() => handleProviderClick("favorites")}
+                  onClick={() => handleSelect("favorites")}
                   type="button"
                   data-model-picker-provider="favorites"
                   aria-label="Favorites"
@@ -81,50 +98,42 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
         </div>
       </div>
 
-      {/* Provider buttons */}
-      {AVAILABLE_PROVIDER_OPTIONS.map((option) => {
-        const OptionIcon = PROVIDER_ICON_BY_PROVIDER[option.value];
-        const liveProvider = props.providers
-          ? getProviderSnapshot(props.providers, option.value)
-          : undefined;
+      {/* Instance buttons (one per configured instance — built-in + custom) */}
+      {props.instanceEntries.map((entry) => {
+        const OptionIcon = PROVIDER_ICON_BY_PROVIDER[entry.driverKind];
+        const isDisabled = !entry.isAvailable || entry.status !== "ready";
+        const isSelected = props.selectedInstanceId === entry.instanceId;
+        const showNewBadge = props.newBadgeInstanceIds?.has(entry.instanceId) ?? false;
 
-        const isDisabled = !liveProvider || liveProvider.status !== "ready";
-        const isSelected = props.selectedProvider === option.value;
-        const badge = option.pickerSidebarBadge;
-
-        const providerTooltip = isDisabled
-          ? describeUnavailableProvider(option.label, liveProvider)
-          : badge === "new"
-            ? `${option.label} — New`
-            : option.label;
+        const tooltip = isDisabled
+          ? describeUnavailableInstance(entry)
+          : showNewBadge
+            ? `${entry.displayName} — New`
+            : entry.displayName;
 
         const button = (
           <button
-            data-model-picker-provider={option.value}
+            data-model-picker-provider={entry.instanceId}
             className={cn(
               "relative isolate flex w-full cursor-pointer aspect-square items-center justify-center rounded transition-colors hover:bg-muted",
               isSelected && SELECTED_BUTTON_CLASS,
               isDisabled && "opacity-50 cursor-not-allowed hover:bg-transparent",
             )}
-            onClick={() => !isDisabled && handleProviderClick(option.value)}
+            onClick={() => !isDisabled && handleSelect(entry.instanceId)}
             disabled={isDisabled}
             type="button"
             aria-label={
               isDisabled
-                ? (providerTooltip ?? option.label)
-                : badge === "new"
-                  ? `${option.label}, new`
-                  : option.label
+                ? tooltip
+                : showNewBadge
+                  ? `${entry.displayName}, new`
+                  : entry.displayName
             }
           >
             <OptionIcon className="size-5 shrink-0" aria-hidden />
-            {badge === "new" ? (
+            {showNewBadge ? (
               <span className={NEW_BADGE_CLASS} aria-hidden>
                 <SparklesIcon className="size-2" />
-              </span>
-            ) : badge === "soon" ? (
-              <span className={SOON_BADGE_CLASS} aria-hidden>
-                <Clock3Icon className="size-2" />
               </span>
             ) : null}
           </button>
@@ -137,7 +146,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
         );
 
         return (
-          <div key={option.value} className="relative w-full">
+          <div key={entry.instanceId} className="relative w-full">
             {isSelected && <div className={SELECTED_INDICATOR_CLASS} />}
             <Tooltip>
               <TooltipTrigger render={trigger} />
@@ -146,7 +155,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
                 align="center"
                 className={PICKER_TOOLTIP_CLASS}
               >
-                {providerTooltip}
+                {tooltip}
               </TooltipPopup>
             </Tooltip>
           </div>

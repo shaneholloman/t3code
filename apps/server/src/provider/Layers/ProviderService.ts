@@ -10,8 +10,10 @@
  * @module ProviderServiceLive
  */
 import {
+  defaultInstanceIdForDriver,
   ModelSelection,
   NonNegativeInt,
+  ProviderDriverId,
   ThreadId,
   ProviderInterruptTurnInput,
   ProviderRespondToRequestInput,
@@ -19,10 +21,12 @@ import {
   ProviderSendTurnInput,
   ProviderSessionStartInput,
   ProviderStopSessionInput,
+  type ProviderInstanceId,
+  type ProviderKind,
   type ProviderRuntimeEvent,
   type ProviderSession,
 } from "@t3tools/contracts";
-import { Effect, Layer, Option, PubSub, Schema, SchemaIssue, Stream } from "effect";
+import { Effect, Layer, Option, PubSub, Ref, Schema, SchemaIssue, Stream } from "effect";
 
 import {
   increment,
@@ -34,19 +38,25 @@ import {
   providerTurnMetricAttributes,
   withMetrics,
 } from "../../observability/Metrics.ts";
-import { ProviderValidationError } from "../Errors.ts";
+import { type ProviderAdapterError, ProviderValidationError } from "../Errors.ts";
+import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
 import { ProviderAdapterRegistry } from "../Services/ProviderAdapterRegistry.ts";
 import { ProviderService, type ProviderServiceShape } from "../Services/ProviderService.ts";
 import {
   ProviderSessionDirectory,
   type ProviderRuntimeBinding,
 } from "../Services/ProviderSessionDirectory.ts";
-import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
+import { type EventNdjsonLogger } from "./EventNdjsonLogger.ts";
+import { ProviderEventLoggers } from "./ProviderEventLoggers.ts";
 import { AnalyticsService } from "../../telemetry/Services/AnalyticsService.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 
+/**
+ * Hook for tests that want to override the canonical event logger pulled
+ * from `ProviderEventLoggers`. Production wiring leaves this undefined and
+ * reads the logger off the tag.
+ */
 export interface ProviderServiceLiveOptions {
-  readonly canonicalEventLogPath?: string;
   readonly canonicalEventLogger?: EventNdjsonLogger;
 }
 
@@ -146,13 +156,12 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 ) {
   const analytics = yield* Effect.service(AnalyticsService);
   const serverSettings = yield* ServerSettingsService;
-  const canonicalEventLogger =
-    options?.canonicalEventLogger ??
-    (options?.canonicalEventLogPath !== undefined
-      ? yield* makeEventNdjsonLogger(options.canonicalEventLogPath, {
-          stream: "canonical",
-        })
-      : undefined);
+  const eventLoggers = yield* ProviderEventLoggers;
+  // Options-provided logger wins (test overrides); otherwise we take whatever
+  // the `ProviderEventLoggers` tag exposes — `undefined` means "no canonical
+  // log writer is attached", which downstream code already handles as a
+  // no-op.
+  const canonicalEventLogger = options?.canonicalEventLogger ?? eventLoggers.canonical;
 
   const registry = yield* ProviderAdapterRegistry;
   const directory = yield* ProviderSessionDirectory;
@@ -169,6 +178,19 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       Effect.asVoid,
     );
 
+  /**
+   * Pick the instance routing key for a session/binding. Producers started
+   * after the Slice-D migration populate `providerInstanceId` directly;
+   * legacy rows and adapters that haven't yet adopted the field fall back
+   * to the default instance for the driver kind.
+   */
+  const resolveBindingInstanceId = (payload: {
+    readonly providerInstanceId?: ProviderInstanceId | undefined;
+    readonly provider: ProviderKind;
+  }): ProviderInstanceId =>
+    payload.providerInstanceId ??
+    defaultInstanceIdForDriver(ProviderDriverId.make(payload.provider));
+
   const upsertSessionBinding = (
     session: ProviderSession,
     threadId: ThreadId,
@@ -181,35 +203,81 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     directory.upsert({
       threadId,
       provider: session.provider,
+      providerInstanceId: resolveBindingInstanceId(session),
       runtimeMode: session.runtimeMode,
       status: toRuntimeStatus(session),
       ...(session.resumeCursor !== undefined ? { resumeCursor: session.resumeCursor } : {}),
       runtimePayload: toRuntimePayloadFromSession(session, extra),
     });
 
-  const providers = yield* registry.listProviders();
-  const adapters = yield* Effect.forEach(providers, (provider) => registry.getByProvider(provider));
   const processRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
     increment(providerRuntimeEventsTotal, {
       provider: event.provider,
       eventType: event.type,
     }).pipe(Effect.andThen(publishRuntimeEvent(event)));
 
-  yield* Effect.forEach(adapters, (adapter) =>
-    Stream.runForEach(adapter.streamEvents, processRuntimeEvent).pipe(Effect.forkScoped),
-  ).pipe(Effect.asVoid);
+  // `subscribedAdapters` is our source-of-truth for "which instance adapters
+  // are currently wired into the runtime event bus". It both tracks the set
+  // of live subscriptions (so `reconcileInstanceSubscriptions` can diff and
+  // fork only the *new* or *rebuilt* ones) and serves as the dynamic adapter
+  // list consumed by `stopStaleSessionsForThread`, `listSessions`, and
+  // `runStopAll` — replacing the pre-Slice-D startup snapshot so hot-added
+  // instances become visible to those call sites as soon as settings edits
+  // land.
+  const subscribedAdapters = yield* Ref.make(
+    new Map<ProviderInstanceId, ProviderAdapterShape<ProviderAdapterError>>(),
+  );
+
+  const getAdapters = Ref.get(subscribedAdapters).pipe(
+    Effect.map((map) => Array.from(map.values())),
+  );
+
+  // Rebuild the map of id → adapter from the registry and fork a new event
+  // subscription for every instance that is either brand new or whose adapter
+  // identity changed (indicating the underlying `ProviderInstance` was torn
+  // down and rebuilt by `ProviderInstanceRegistry.reconcile`). Orphaned
+  // fibers for removed/replaced instances exit on their own because their
+  // adapter's `streamEvents` source terminates when the old scope closes.
+  const reconcileInstanceSubscriptions = Effect.gen(function* () {
+    const previous = yield* Ref.get(subscribedAdapters);
+    const currentIds = yield* registry.listInstances();
+    const next = new Map<ProviderInstanceId, ProviderAdapterShape<ProviderAdapterError>>();
+    for (const id of currentIds) {
+      const adapterOption = yield* registry
+        .getByInstance(id)
+        .pipe(Effect.tapError(Effect.logWarning), Effect.option);
+      if (Option.isNone(adapterOption)) continue;
+      const adapter = adapterOption.value;
+      next.set(id, adapter);
+      if (previous.get(id) !== adapter) {
+        yield* Stream.runForEach(adapter.streamEvents, processRuntimeEvent).pipe(Effect.forkScoped);
+      }
+    }
+    yield* Ref.set(subscribedAdapters, next);
+  });
+
+  yield* reconcileInstanceSubscriptions;
+  yield* Stream.runForEach(registry.streamChanges, () => reconcileInstanceSubscriptions).pipe(
+    Effect.forkScoped,
+  );
 
   const recoverSessionForThread = Effect.fn("recoverSessionForThread")(function* (input: {
     readonly binding: ProviderRuntimeBinding;
     readonly operation: string;
   }) {
+    const bindingInstanceId = resolveBindingInstanceId(input.binding);
     yield* Effect.annotateCurrentSpan({
       "provider.operation": "recover-session",
       "provider.kind": input.binding.provider,
+      "provider.instance_id": bindingInstanceId,
       "provider.thread_id": input.binding.threadId,
     });
     return yield* Effect.gen(function* () {
-      const adapter = yield* registry.getByProvider(input.binding.provider);
+      // Prefer instance-keyed routing so multi-instance setups resolve to
+      // the correct configured instance; the registry shim maps unknown
+      // instances back to the default instance of the driver kind, which
+      // preserves the pre-Slice-D behaviour for legacy rows.
+      const adapter = yield* registry.getByInstance(bindingInstanceId);
       const hasResumeCursor =
         input.binding.resumeCursor !== null && input.binding.resumeCursor !== undefined;
       const hasActiveSession = yield* adapter.hasSession(input.binding.threadId);
@@ -284,7 +352,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         `Cannot route thread '${input.threadId}' because no persisted provider binding exists.`,
       );
     }
-    const adapter = yield* registry.getByProvider(binding.provider);
+    const adapter = yield* registry.getByInstance(resolveBindingInstanceId(binding));
 
     const hasRequestedSession = yield* adapter.hasSession(input.threadId);
     if (hasRequestedSession) {
@@ -303,8 +371,9 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     readonly threadId: ThreadId;
     readonly currentProvider: ProviderSession["provider"];
   }) {
+    const currentAdapters = yield* getAdapters;
     yield* Effect.forEach(
-      adapters,
+      currentAdapters,
       (adapter) =>
         adapter.provider === input.currentProvider
           ? Effect.void
@@ -346,9 +415,14 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         threadId,
         provider: parsed.provider ?? "codex",
       };
+      // Resolve the routing key: callers that pass `providerInstanceId`
+      // pin the session to a specific configured instance; callers that
+      // pass only `provider` land on that driver's default instance.
+      const resolvedInstanceId = resolveBindingInstanceId(input);
       yield* Effect.annotateCurrentSpan({
         "provider.operation": "start-session",
         "provider.kind": input.provider,
+        "provider.instance_id": resolvedInstanceId,
         "provider.thread_id": threadId,
         "provider.runtime_mode": input.runtimeMode,
       });
@@ -395,7 +469,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
                 : "none",
           "provider.cwd.effective": effectiveCwd ?? "",
         });
-        const adapter = yield* registry.getByProvider(input.provider);
+        const adapter = yield* registry.getByInstance(resolvedInstanceId);
         const session = yield* adapter.startSession({
           ...input,
           ...(effectiveCwd !== undefined ? { cwd: effectiveCwd } : {}),
@@ -669,7 +743,8 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
   const listSessions: ProviderServiceShape["listSessions"] = Effect.fn("listSessions")(
     function* () {
-      const sessionsByProvider = yield* Effect.forEach(adapters, (adapter) =>
+      const currentAdapters = yield* getAdapters;
+      const sessionsByProvider = yield* Effect.forEach(currentAdapters, (adapter) =>
         adapter.listSessions(),
       );
       const activeSessions = sessionsByProvider.flatMap((sessions) => sessions);
@@ -761,7 +836,8 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
   const runStopAll = Effect.fn("runStopAll")(function* () {
     const threadIds = yield* directory.listThreadIds();
-    const activeSessions = yield* Effect.forEach(adapters, (adapter) =>
+    const currentAdapters = yield* getAdapters;
+    const activeSessions = yield* Effect.forEach(currentAdapters, (adapter) =>
       adapter.listSessions(),
     ).pipe(Effect.map((sessionsByAdapter) => sessionsByAdapter.flatMap((sessions) => sessions)));
     yield* Effect.forEach(activeSessions, (session) =>
@@ -770,7 +846,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         lastRuntimeEventAt: new Date().toISOString(),
       }),
     ).pipe(Effect.asVoid);
-    yield* Effect.forEach(adapters, (adapter) => adapter.stopAll()).pipe(Effect.asVoid);
+    yield* Effect.forEach(currentAdapters, (adapter) => adapter.stopAll()).pipe(Effect.asVoid);
     yield* Effect.forEach(threadIds, (threadId) =>
       directory.getProvider(threadId).pipe(
         Effect.flatMap((provider) =>

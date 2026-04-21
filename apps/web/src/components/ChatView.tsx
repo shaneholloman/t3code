@@ -1428,9 +1428,23 @@ export default function ChatView(props: ChatViewProps) {
   const gitStatusQuery = useGitStatus({ environmentId, cwd: gitCwd });
   const keybindings = useServerKeybindings();
   const availableEditors = useServerAvailableEditors();
+  // Prefer an instance-id match so a custom Codex instance (e.g.
+  // `codex_personal`) surfaces its own status/message in the banner rather
+  // than the default Codex's. Falls back to first-match-by-kind when no
+  // saved instance id is available or the instance no longer exists.
+  const activeProviderInstanceId =
+    activeThread?.modelSelection.instanceId ??
+    activeProject?.defaultModelSelection?.instanceId ??
+    null;
   const activeProviderStatus = useMemo(
-    () => providerStatuses.find((status) => status.provider === selectedProvider) ?? null,
-    [selectedProvider, providerStatuses],
+    () =>
+      (activeProviderInstanceId
+        ? (providerStatuses.find((status) => status.instanceId === activeProviderInstanceId) ??
+          null)
+        : null) ??
+      providerStatuses.find((status) => status.provider === selectedProvider) ??
+      null,
+    [activeProviderInstanceId, providerStatuses, selectedProvider],
   );
   const activeProjectCwd = activeProject?.cwd ?? null;
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
@@ -3131,21 +3145,36 @@ export default function ChatView(props: ChatViewProps) {
   ]);
 
   const onProviderModelSelect = useCallback(
-    (provider: ProviderKind, model: string) => {
+    (instanceId: ProviderInstanceId, model: string) => {
       if (!activeThread) return;
-      if (lockedProvider !== null && provider !== lockedProvider) {
+      // Look up the configured instance to (a) honor `lockedProvider` by
+      // driver kind and (b) drive the slug normalization through the
+      // instance's own driver kind rather than assuming `"codex"`. Unknown
+      // instance ids (e.g. a stale thread selection after the user deleted
+      // the custom instance) fall through to the legacy kind-keyed path
+      // with a best-effort driver kind so we don't silently no-op.
+      const entry = providerStatuses.find(
+        (snapshot) => snapshot.instanceId === instanceId,
+      );
+      const resolvedDriverKind = entry?.provider ?? null;
+      if (
+        lockedProvider !== null &&
+        resolvedDriverKind !== null &&
+        resolvedDriverKind !== lockedProvider
+      ) {
         scheduleComposerFocus();
         return;
       }
-      const resolvedProvider = resolveSelectableProvider(providerStatuses, provider);
+      const driverKindForNormalization: ProviderKind =
+        resolvedDriverKind ?? resolveSelectableProvider(providerStatuses, null);
       const resolvedModel = resolveAppModelSelection(
-        resolvedProvider,
+        driverKindForNormalization,
         settings,
         providerStatuses,
         model,
       );
       const nextModelSelection: ModelSelection = {
-        instanceId: ProviderInstanceId.make(resolvedProvider),
+        instanceId,
         model: resolvedModel,
       };
       setComposerDraftModelSelection(

@@ -1,9 +1,20 @@
 import * as nodePath from "node:path";
-import { type ServerProvider, ServerProvider as ServerProviderSchema } from "@t3tools/contracts";
+import {
+  type ProviderInstanceId,
+  type ServerProvider,
+  ServerProvider as ServerProviderSchema,
+} from "@t3tools/contracts";
 import { Cause, Effect, FileSystem, Schema } from "effect";
 
 import { writeFileStringAtomically } from "../atomicWrite.ts";
 
+/**
+ * Legacy kind-keyed cache ids retained for back-compat: the on-disk file
+ * name for the default instance of each built-in kind is `<kind>.json`.
+ * Because `defaultInstanceIdForDriver(kind) === ProviderInstanceId.make(kind)`
+ * the instance-keyed write for the default instance lands at the exact same
+ * path as the legacy write, so no on-disk migration is required.
+ */
 export const PROVIDER_CACHE_IDS = [
   "codex",
   "claudeAgent",
@@ -64,7 +75,30 @@ export const hydrateCachedProvider = (input: {
     : hydratedProvider;
 };
 
+/**
+ * Resolve the on-disk cache path for a provider instance snapshot.
+ *
+ * File naming: `<cacheDir>/<instanceId>.json`. For the default instance of
+ * a built-in kind this equals the legacy `<kind>.json` path (because
+ * `defaultInstanceIdForDriver(kind).toString() === kind`), so existing
+ * cached snapshots remain readable without any rename step.
+ *
+ * Non-default instances (e.g. `codex_personal`) land in their own files and
+ * never collide with other instances.
+ */
 export const resolveProviderStatusCachePath = (input: {
+  readonly cacheDir: string;
+  readonly instanceId: ProviderInstanceId;
+}) => nodePath.join(input.cacheDir, `${input.instanceId}.json`);
+
+/**
+ * Legacy kind-keyed path resolver retained for callers that still think in
+ * terms of `ProviderKind`. Prefer `resolveProviderStatusCachePath` with an
+ * `instanceId`; new code should route through the instance registry.
+ *
+ * @deprecated use `resolveProviderStatusCachePath` with an instance id.
+ */
+export const resolveLegacyProviderStatusCachePath = (input: {
   readonly cacheDir: string;
   readonly provider: ServerProvider["provider"];
 }) => nodePath.join(input.cacheDir, `${input.provider}.json`);

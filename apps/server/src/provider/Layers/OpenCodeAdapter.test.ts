@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
-import { Effect, Layer, Option } from "effect";
+import { Context, Effect, Layer, Option, Schema } from "effect";
 import { beforeEach } from "vitest";
 
-import { ThreadId, ProviderInstanceId } from "@t3tools/contracts";
+import { OpenCodeSettings, ThreadId, ProviderInstanceId } from "@t3tools/contracts";
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
-import { OpenCodeAdapter } from "../Services/OpenCodeAdapter.ts";
+import type { OpenCodeAdapterShape } from "../Services/OpenCodeAdapter.ts";
 import {
   OpenCodeRuntime,
   OpenCodeRuntimeError,
@@ -17,9 +17,14 @@ import {
 } from "../opencodeRuntime.ts";
 import {
   appendOpenCodeAssistantTextDelta,
-  makeOpenCodeAdapterLive,
+  makeOpenCodeAdapter,
   mergeOpenCodeAssistantText,
 } from "./OpenCodeAdapter.ts";
+
+// Test-local service tag so the rest of the file can keep using `yield* OpenCodeAdapter`.
+class OpenCodeAdapter extends Context.Service<OpenCodeAdapter, OpenCodeAdapterShape>()(
+  "test/OpenCodeAdapter",
+) {}
 
 const asThreadId = (value: string): ThreadId => ThreadId.make(value);
 
@@ -165,7 +170,24 @@ const providerSessionDirectoryTestLayer = Layer.succeed(ProviderSessionDirectory
   listBindings: () => Effect.succeed([]),
 });
 
-const OpenCodeAdapterTestLayer = makeOpenCodeAdapterLive().pipe(
+// The adapter now receives its settings as a plain argument (the old design
+// read from `ServerSettingsService` internally). The test-only
+// `ServerSettingsService` below is still kept because other dependencies in
+// the layer graph reach for it — but the routing values the assertions
+// probe (serverUrl, serverPassword) must be threaded directly through the
+// decoded `OpenCodeSettings`.
+const openCodeAdapterTestSettings = Schema.decodeSync(OpenCodeSettings)({
+  binaryPath: "fake-opencode",
+  serverUrl: "http://127.0.0.1:9999",
+  serverPassword: "secret-password",
+});
+
+const OpenCodeAdapterTestLayer = Layer.effect(
+  OpenCodeAdapter,
+  Effect.gen(function* () {
+    return yield* makeOpenCodeAdapter(openCodeAdapterTestSettings);
+  }),
+).pipe(
   Layer.provideMerge(Layer.succeed(OpenCodeRuntime, OpenCodeRuntimeTestDouble)),
   Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
   Layer.provideMerge(
@@ -396,9 +418,14 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
         close: () => Effect.void,
       };
 
-      const adapterLayer = makeOpenCodeAdapterLive({
-        nativeEventLogger,
-      }).pipe(
+      const adapterLayer = Layer.effect(
+        OpenCodeAdapter,
+        Effect.gen(function* () {
+          return yield* makeOpenCodeAdapter(openCodeAdapterTestSettings, {
+            nativeEventLogger,
+          });
+        }),
+      ).pipe(
         Layer.provideMerge(Layer.succeed(OpenCodeRuntime, OpenCodeRuntimeTestDouble)),
         Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
         Layer.provideMerge(
@@ -475,9 +502,14 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
         close: () => Effect.void,
       };
 
-      const adapterLayer = makeOpenCodeAdapterLive({
-        nativeEventLogger,
-      }).pipe(
+      const adapterLayer = Layer.effect(
+        OpenCodeAdapter,
+        Effect.gen(function* () {
+          return yield* makeOpenCodeAdapter(openCodeAdapterTestSettings, {
+            nativeEventLogger,
+          });
+        }),
+      ).pipe(
         Layer.provideMerge(Layer.succeed(OpenCodeRuntime, OpenCodeRuntimeTestDouble)),
         Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
         Layer.provideMerge(

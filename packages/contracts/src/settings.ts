@@ -7,12 +7,7 @@ import {
   ProviderOptionSelections,
 } from "./model.ts";
 import { ModelSelection } from "./orchestration.ts";
-import {
-  ProviderDriverId,
-  ProviderInstanceConfig,
-  ProviderInstanceId,
-  ProviderKind,
-} from "./providerInstance.ts";
+import { ProviderInstanceConfig, ProviderInstanceId } from "./providerInstance.ts";
 
 // ── Client Settings (local-only) ───────────────────────────────
 
@@ -41,9 +36,20 @@ export const ClientSettingsSchema = Schema.Struct({
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   diffWordWrap: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  // Model favorites. Historically keyed by closed `ProviderKind`, now
+  // widened to `ProviderInstanceId` so users can favorite a specific model
+  // on a custom provider instance (e.g. "Codex Personal · gpt-5") without
+  // the UI collapsing it into the same bucket as the default Codex. The
+  // widening is backward-compatible by construction: every `ProviderKind`
+  // literal ("codex", "claudeAgent", …) satisfies the `ProviderInstanceId`
+  // slug schema, so previously-persisted favorites decode unchanged and
+  // continue to point at the default instance for their kind (because
+  // `defaultInstanceIdForDriver(kind).toString() === kind`). The field name
+  // is kept as `provider` for storage stability; new call sites should
+  // treat the value as an instance id.
   favorites: Schema.Array(
     Schema.Struct({
-      provider: ProviderKind,
+      provider: ProviderInstanceId,
       model: TrimmedNonEmptyString,
     }),
   ).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
@@ -258,7 +264,7 @@ export const ClientSettingsPatch = Schema.Struct({
   favorites: Schema.optionalKey(
     Schema.Array(
       Schema.Struct({
-        provider: ProviderKind,
+        provider: ProviderInstanceId,
         model: TrimmedNonEmptyString,
       }),
     ),

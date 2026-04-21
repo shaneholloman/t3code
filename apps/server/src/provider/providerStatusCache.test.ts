@@ -1,5 +1,9 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import type { ServerProvider } from "@t3tools/contracts";
+import {
+  defaultInstanceIdForDriver,
+  ProviderDriverId,
+  type ServerProvider,
+} from "@t3tools/contracts";
 import { createModelCapabilities } from "@t3tools/shared/model";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
@@ -46,15 +50,15 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
       });
       const codexPath = resolveProviderStatusCachePath({
         cacheDir: tempDir,
-        provider: "codex",
+        instanceId: defaultInstanceIdForDriver(ProviderDriverId.make("codex")),
       });
       const claudePath = resolveProviderStatusCachePath({
         cacheDir: tempDir,
-        provider: "claudeAgent",
+        instanceId: defaultInstanceIdForDriver(ProviderDriverId.make("claudeAgent")),
       });
       const openCodePath = resolveProviderStatusCachePath({
         cacheDir: tempDir,
-        provider: "opencode",
+        instanceId: defaultInstanceIdForDriver(ProviderDriverId.make("opencode")),
       });
 
       yield* writeProviderStatusCache({

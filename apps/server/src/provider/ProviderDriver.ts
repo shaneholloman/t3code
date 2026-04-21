@@ -99,8 +99,19 @@ export interface ProviderDriver<Config, R = never> {
    * registry runs this exactly once per (re)load of an instance; a decode
    * failure is surfaced as `ProviderDriverError` and downgraded to an
    * unavailable shadow snapshot.
+   *
+   * The `Encoded` parameter is intentionally left as `unknown` (not
+   * `Config`) so schemas with `withDecodingDefault` / transformations — where
+   * the encoded shape differs from the decoded shape — satisfy the SPI
+   * without casts. The registry only ever decodes `unknown` envelopes here,
+   * so the precise encoded type is irrelevant at this boundary.
+   *
+   * Using `Codec` rather than `Schema` pins `DecodingServices = never` — if
+   * we used `Schema<Config>`, the erased `any` in `AnyProviderDriver` would
+   * widen `DecodingServices` to `unknown` and poison the R channel of every
+   * caller of `decodeUnknownEffect`.
    */
-  readonly configSchema: Schema.Schema<Config>;
+  readonly configSchema: Schema.Codec<Config, unknown>;
   /**
    * Default config payload used when the legacy
    * `ServerSettings.providers.<kind>` entry is empty or when the driver

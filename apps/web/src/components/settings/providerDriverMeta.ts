@@ -26,6 +26,14 @@ export interface DriverOption {
   readonly label: string;
   readonly icon: Icon;
   readonly fields: readonly DriverFieldDef[];
+  /**
+   * Optional short label rendered as a `variant="warning"` badge next to
+   * the instance title. Used to flag drivers that still ship under an
+   * early-access or preview gate — the flag is a property of the driver
+   * kind (not a specific instance), so every instance of that driver —
+   * built-in default or custom — advertises the same marker.
+   */
+  readonly badgeLabel?: string;
 }
 
 export const DRIVER_OPTIONS: readonly DriverOption[] = [
@@ -71,6 +79,7 @@ export const DRIVER_OPTIONS: readonly DriverOption[] = [
     value: "cursor",
     label: "Cursor",
     icon: CursorIcon,
+    badgeLabel: "Early Access",
     fields: [
       {
         key: "binaryPath",

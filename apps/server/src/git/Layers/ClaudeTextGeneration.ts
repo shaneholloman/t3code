@@ -7,14 +7,14 @@
  *
  * @module ClaudeTextGeneration
  */
-import { Effect, Layer, Option, Schema, Stream } from "effect";
+import { Effect, Option, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-import { type ModelSelection } from "@t3tools/contracts";
+import { type ClaudeSettings, type ModelSelection } from "@t3tools/contracts";
 import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@t3tools/shared/git";
 
 import { TextGenerationError } from "@t3tools/contracts";
-import { type TextGenerationShape, TextGeneration } from "../Services/TextGeneration.ts";
+import { type TextGenerationShape } from "../Services/TextGeneration.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
@@ -38,7 +38,6 @@ import {
   resolveClaudeApiModelId,
   resolveClaudeEffort,
 } from "../../provider/Layers/ClaudeProvider.ts";
-import { ServerSettingsService } from "../../serverSettings.ts";
 
 const CLAUDE_TIMEOUT_MS = 180_000;
 
@@ -50,9 +49,10 @@ const ClaudeOutputEnvelope = Schema.Struct({
   structured_output: Schema.Unknown,
 });
 
-const makeClaudeTextGeneration = Effect.gen(function* () {
+export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(function* (
+  claudeSettings: ClaudeSettings,
+) {
   const commandSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const serverSettingsService = yield* Effect.service(ServerSettingsService);
 
   const readStreamAsString = <E>(
     operation: string,
@@ -111,14 +111,9 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       ...(fastMode ? { fastMode: true } : {}),
     };
 
-    const claudeSettings = yield* Effect.map(
-      serverSettingsService.getSettings,
-      (settings) => settings.providers.claudeAgent,
-    ).pipe(Effect.catch(() => Effect.undefined));
-
     const runClaudeCommand = Effect.fn("runClaudeJson.runClaudeCommand")(function* () {
       const command = ChildProcess.make(
-        claudeSettings?.binaryPath || "claude",
+        claudeSettings.binaryPath || "claude",
         [
           "-p",
           "--output-format",
@@ -232,13 +227,6 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       includeBranch: input.includeBranch === true,
     });
 
-    if (input.modelSelection.instanceId !== "claudeAgent") {
-      return yield* new TextGenerationError({
-        operation: "generateCommitMessage",
-        detail: "Invalid model selection.",
-      });
-    }
-
     const generated = yield* runClaudeJson({
       operation: "generateCommitMessage",
       cwd: input.cwd,
@@ -267,13 +255,6 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       diffPatch: input.diffPatch,
     });
 
-    if (input.modelSelection.instanceId !== "claudeAgent") {
-      return yield* new TextGenerationError({
-        operation: "generatePrContent",
-        detail: "Invalid model selection.",
-      });
-    }
-
     const generated = yield* runClaudeJson({
       operation: "generatePrContent",
       cwd: input.cwd,
@@ -296,13 +277,6 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       attachments: input.attachments,
     });
 
-    if (input.modelSelection.instanceId !== "claudeAgent") {
-      return yield* new TextGenerationError({
-        operation: "generateBranchName",
-        detail: "Invalid model selection.",
-      });
-    }
-
     const generated = yield* runClaudeJson({
       operation: "generateBranchName",
       cwd: input.cwd,
@@ -324,13 +298,6 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       attachments: input.attachments,
     });
 
-    if (input.modelSelection.instanceId !== "claudeAgent") {
-      return yield* new TextGenerationError({
-        operation: "generateThreadTitle",
-        detail: "Invalid model selection.",
-      });
-    }
-
     const generated = yield* runClaudeJson({
       operation: "generateThreadTitle",
       cwd: input.cwd,
@@ -351,5 +318,3 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
     generateThreadTitle,
   } satisfies TextGenerationShape;
 });
-
-export const ClaudeTextGenerationLive = Layer.effect(TextGeneration, makeClaudeTextGeneration);

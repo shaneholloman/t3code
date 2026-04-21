@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 
-import { Effect, FileSystem, Layer, Option, Path, Schema, Scope, Stream } from "effect";
+import { Effect, FileSystem, Option, Path, Schema, Scope, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-import { type ModelSelection } from "@t3tools/contracts";
+import { type CodexSettings, type ModelSelection } from "@t3tools/contracts";
 import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@t3tools/shared/git";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
@@ -14,7 +14,6 @@ import {
   type BranchNameGenerationInput,
   type ThreadTitleGenerationResult,
   type TextGenerationShape,
-  TextGeneration,
 } from "../Services/TextGeneration.ts";
 import {
   buildBranchNamePrompt,
@@ -29,7 +28,6 @@ import {
   sanitizeThreadTitle,
   toJsonSchemaObject,
 } from "../Utils.ts";
-import { ServerSettingsService } from "../../serverSettings.ts";
 import {
   getModelSelectionBooleanOptionValue,
   getModelSelectionStringOptionValue,
@@ -37,12 +35,17 @@ import {
 
 const CODEX_GIT_TEXT_GENERATION_REASONING_EFFORT = "low";
 const CODEX_TIMEOUT_MS = 180_000;
-const makeCodexTextGeneration = Effect.gen(function* () {
+/**
+ * Build a Codex text-generation closure bound to a specific `CodexSettings`
+ * payload. See `makeCodexAdapter` for the overall per-instance rationale.
+ */
+export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(function* (
+  codexConfig: CodexSettings,
+) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const commandSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const serverConfig = yield* Effect.service(ServerConfig);
-  const serverSettingsService = yield* Effect.service(ServerSettingsService);
 
   type MaterializedImageAttachments = {
     readonly imagePaths: ReadonlyArray<string>;
@@ -152,17 +155,12 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     );
     const outputPath = yield* writeTempFile(operation, "codex-output", "");
 
-    const codexSettings = yield* Effect.map(
-      serverSettingsService.getSettings,
-      (settings) => settings.providers.codex,
-    ).pipe(Effect.catch(() => Effect.undefined));
-
     const runCodexCommand = Effect.fn("runCodexJson.runCodexCommand")(function* () {
       const reasoningEffort =
         getModelSelectionStringOptionValue(modelSelection, "reasoningEffort") ??
         CODEX_GIT_TEXT_GENERATION_REASONING_EFFORT;
       const command = ChildProcess.make(
-        codexSettings?.binaryPath || "codex",
+        codexConfig.binaryPath || "codex",
         [
           "exec",
           "--ephemeral",
@@ -186,9 +184,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         {
           env: {
             ...process.env,
-            ...(codexSettings?.homePath
-              ? { CODEX_HOME: expandHomePath(codexSettings.homePath) }
-              : {}),
+            ...(codexConfig.homePath ? { CODEX_HOME: expandHomePath(codexConfig.homePath) } : {}),
           },
           cwd,
           shell: process.platform === "win32",
@@ -288,13 +284,6 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       includeBranch: input.includeBranch === true,
     });
 
-    if (input.modelSelection.instanceId !== "codex") {
-      return yield* new TextGenerationError({
-        operation: "generateCommitMessage",
-        detail: "Invalid model selection.",
-      });
-    }
-
     const generated = yield* runCodexJson({
       operation: "generateCommitMessage",
       cwd: input.cwd,
@@ -323,13 +312,6 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       diffPatch: input.diffPatch,
     });
 
-    if (input.modelSelection.instanceId !== "codex") {
-      return yield* new TextGenerationError({
-        operation: "generatePrContent",
-        detail: "Invalid model selection.",
-      });
-    }
-
     const generated = yield* runCodexJson({
       operation: "generatePrContent",
       cwd: input.cwd,
@@ -355,13 +337,6 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       message: input.message,
       attachments: input.attachments,
     });
-
-    if (input.modelSelection.instanceId !== "codex") {
-      return yield* new TextGenerationError({
-        operation: "generateBranchName",
-        detail: "Invalid model selection.",
-      });
-    }
 
     const generated = yield* runCodexJson({
       operation: "generateBranchName",
@@ -389,13 +364,6 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       attachments: input.attachments,
     });
 
-    if (input.modelSelection.instanceId !== "codex") {
-      return yield* new TextGenerationError({
-        operation: "generateThreadTitle",
-        detail: "Invalid model selection.",
-      });
-    }
-
     const generated = yield* runCodexJson({
       operation: "generateThreadTitle",
       cwd: input.cwd,
@@ -418,4 +386,6 @@ const makeCodexTextGeneration = Effect.gen(function* () {
   } satisfies TextGenerationShape;
 });
 
-export const CodexTextGenerationLive = Layer.effect(TextGeneration, makeCodexTextGeneration);
+// NOTE: `CodexTextGenerationLive` (the singleton Layer) has been removed.
+// `makeCodexTextGeneration(codexConfig)` is now invoked directly by
+// `CodexDriver.create()` for each configured instance.

@@ -159,3 +159,27 @@ export type ProviderInstanceConfigMap = typeof ProviderInstanceConfigMap.Type;
  */
 export const defaultInstanceIdForDriver = (driver: ProviderDriverId): ProviderInstanceId =>
   ProviderInstanceId.make(driver);
+
+/**
+ * Resolve the instance id for a payload that carries either the new
+ * `providerInstanceId` routing key or the legacy `provider` / `driver`
+ * kind. Producers are in the middle of a migration (see module docs); any
+ * reader that needs to route to a specific instance should funnel through
+ * this helper so the default-instance fallback lives in one place.
+ *
+ * The function accepts any payload shape where both fields are optional —
+ * callers pass the persisted record verbatim — and returns `undefined` only
+ * when *neither* field is populated, which indicates a malformed row that
+ * cannot be routed.
+ */
+export const resolveProviderInstanceId = (payload: {
+  readonly providerInstanceId?: ProviderInstanceId | undefined;
+  readonly provider?: ProviderDriverId | undefined;
+  readonly driver?: ProviderDriverId | undefined;
+}): ProviderInstanceId | undefined => {
+  if (payload.providerInstanceId !== undefined) {
+    return payload.providerInstanceId;
+  }
+  const driver = payload.driver ?? payload.provider;
+  return driver === undefined ? undefined : defaultInstanceIdForDriver(driver);
+};

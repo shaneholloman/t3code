@@ -3,6 +3,7 @@ import {
   type EnvironmentId,
   ModelSelection,
   ProjectId,
+  ProviderInstanceId,
   ProviderInteractionMode,
   ProviderKind,
   ProviderOptionSelection,
@@ -92,10 +93,21 @@ const PersistedComposerThreadDraftState = Schema.Struct({
   prompt: Schema.String,
   attachments: Schema.Array(PersistedComposerImageAttachment),
   terminalContexts: Schema.optionalKey(Schema.Array(PersistedTerminalContextDraft)),
+  // Keyed by `ProviderInstanceId` (open branded slug) so custom provider
+  // instances (e.g. `codex_personal`) round-trip alongside the built-in
+  // `codex` / `claudeAgent` / ... entries. Every prior `ProviderKind`
+  // literal satisfies the `ProviderInstanceId` slug pattern, so existing
+  // persisted drafts decode unchanged.
+  //
+  // The record's value schema is NOT wrapped in `Schema.optionalKey`:
+  // that helper is only meaningful on property signatures with a known
+  // key set, and `Schema.Record(<branded string>, …)` produces an index
+  // signature at runtime (Schema rejects the combination). Absence of
+  // an entry already encodes "no selection for this instance".
   modelSelectionByProvider: Schema.optionalKey(
-    Schema.Record(ProviderKind, Schema.optionalKey(ModelSelection)),
+    Schema.Record(ProviderInstanceId, ModelSelection),
   ),
-  activeProvider: Schema.optionalKey(Schema.NullOr(ProviderKind)),
+  activeProvider: Schema.optionalKey(Schema.NullOr(ProviderInstanceId)),
   runtimeMode: Schema.optionalKey(RuntimeMode),
   interactionMode: Schema.optionalKey(ProviderInteractionMode),
 });
@@ -182,9 +194,9 @@ const PersistedComposerDraftStoreState = Schema.Struct({
   draftThreadsByThreadKey: Schema.Record(Schema.String, PersistedDraftThreadState),
   logicalProjectDraftThreadKeyByLogicalProjectKey: Schema.Record(Schema.String, Schema.String),
   stickyModelSelectionByProvider: Schema.optionalKey(
-    Schema.Record(ProviderKind, Schema.optionalKey(ModelSelection)),
+    Schema.Record(ProviderInstanceId, ModelSelection),
   ),
-  stickyActiveProvider: Schema.optionalKey(Schema.NullOr(ProviderKind)),
+  stickyActiveProvider: Schema.optionalKey(Schema.NullOr(ProviderInstanceId)),
 });
 type PersistedComposerDraftStoreState = typeof PersistedComposerDraftStoreState.Type;
 
@@ -203,8 +215,17 @@ export interface ComposerThreadDraftState {
   nonPersistedImageIds: string[];
   persistedAttachments: PersistedComposerImageAttachment[];
   terminalContexts: TerminalContextDraft[];
-  modelSelectionByProvider: Partial<Record<ProviderKind, ModelSelection>>;
-  activeProvider: ProviderKind | null;
+  /**
+   * Per-instance model selection. Keyed by `ProviderInstanceId` (open
+   * branded slug) so a default `codex` instance and a user-authored
+   * `codex_personal` instance each persist their own selected model. Every
+   * historical `ProviderKind` literal (`codex` / `claudeAgent` / `cursor` /
+   * `opencode`) also satisfies the `ProviderInstanceId` slug pattern, so
+   * legacy kind-keyed drafts round-trip unchanged.
+   */
+  modelSelectionByProvider: Partial<Record<ProviderInstanceId, ModelSelection>>;
+  /** Routing key of the last picked instance (see `modelSelectionByProvider`). */
+  activeProvider: ProviderInstanceId | null;
   runtimeMode: RuntimeMode | null;
   interactionMode: ProviderInteractionMode | null;
 }
@@ -259,8 +280,8 @@ interface ComposerDraftStoreState {
   draftsByThreadKey: Record<string, ComposerThreadDraftState>;
   draftThreadsByThreadKey: Record<string, DraftThreadState>;
   logicalProjectDraftThreadKeyByLogicalProjectKey: Record<string, string>;
-  stickyModelSelectionByProvider: Partial<Record<ProviderKind, ModelSelection>>;
-  stickyActiveProvider: ProviderKind | null;
+  stickyModelSelectionByProvider: Partial<Record<ProviderInstanceId, ModelSelection>>;
+  stickyActiveProvider: ProviderInstanceId | null;
   /** Returns the editable composer content for a draft session or server thread. */
   getComposerDraft: (target: ComposerThreadTarget) => ComposerThreadDraftState | null;
   /** Looks up the active draft session for a logical project identity. */
@@ -388,8 +409,8 @@ export interface EffectiveComposerModelState {
 }
 
 interface ComposerDraftModelState {
-  activeProvider: ProviderKind | null;
-  modelSelectionByProvider: Partial<Record<ProviderKind, ModelSelection>>;
+  activeProvider: ProviderInstanceId | null;
+  modelSelectionByProvider: Partial<Record<ProviderInstanceId, ModelSelection>>;
 }
 
 function providerSelectionsFromModelSelection(
@@ -561,6 +582,27 @@ function normalizeProviderKind(value: unknown): ProviderKind | null {
 }
 
 /**
+ * Match the `ProviderInstanceId` slug pattern (letter followed by
+ * letters/digits/`-`/`_`, 1..64 chars). Permissive validator — the schema
+ * layer owns authoritative validation; this is used inline to gate typed
+ * writes to the draft's instance-keyed maps without pulling the full
+ * Effect Schema runtime into the hot path.
+ */
+const PROVIDER_INSTANCE_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/;
+
+/**
+ * Coerce an arbitrary persisted value into a valid `ProviderInstanceId`. Used
+ * wherever we need to accept both the closed `ProviderKind` literal set
+ * (legacy drafts) and custom instance slugs (e.g. `codex_personal`) as
+ * routing keys.
+ */
+function normalizeProviderInstanceId(value: unknown): ProviderInstanceId | null {
+  if (typeof value !== "string") return null;
+  if (!PROVIDER_INSTANCE_ID_PATTERN.test(value)) return null;
+  return value as ProviderInstanceId;
+}
+
+/**
  * Coerce an unknown value into a `ReadonlyArray<ProviderOptionSelection>`.
  * Accepts either:
  *   - the v3 representation: an array of `{ id, value }` entries
@@ -648,13 +690,15 @@ function normalizeProviderModelOptions(
   return Object.keys(result).length > 0 ? result : null;
 }
 
-// Returns a model selection guaranteed to name a built-in driver. Unknown
-// drivers (rollback / fork case) collapse to `null` here so the composer
-// draft store — whose internal maps are keyed by the closed `ProviderKind`
-// — never has to represent them. The resulting `instanceId` is narrowed
-// to `ProviderKind` because we default instance id to the driver id for
-// built-in drivers. Routing/error surfacing for unknown drivers happens
-// elsewhere (the runtime registry, see slice 3).
+// Returns a model selection whose `instanceId` is a valid
+// `ProviderInstanceId` slug (open set: built-in drivers + user-authored
+// custom instances). Legacy `provider` fields (which carried a closed
+// `ProviderKind`) are promoted verbatim because every built-in kind is
+// also a valid instance id.
+//
+// Selections whose instance id doesn't match the slug pattern collapse to
+// `null` — caller is responsible for deciding whether that's a dropped
+// write or a routed error.
 function normalizeModelSelection(
   value: unknown,
   legacy?: {
@@ -668,43 +712,56 @@ function normalizeModelSelection(
   // Post-migration ModelSelection carries `instanceId`; pre-migration (v2
   // storage, legacy wire shapes) carries `provider`. Accept either so both
   // normalized stores and legacy drafts round-trip through this helper.
-  const provider = normalizeProviderKind(
+  const instanceId = normalizeProviderInstanceId(
     candidate?.instanceId ?? candidate?.provider ?? legacy?.provider,
   );
-  if (provider === null) {
+  if (instanceId === null) {
     return null;
   }
   const rawModel = candidate?.model ?? legacy?.model;
   if (typeof rawModel !== "string") {
     return null;
   }
-  const model = normalizeModelSlug(rawModel, provider);
+  // Slug normalization uses provider-kind-specific rules (e.g. Codex strips
+  // certain prefixes). For a custom instance whose driver kind we can't
+  // infer locally, fall back to a kind hint derived from the instance id
+  // when it happens to match a built-in kind; otherwise normalize against
+  // the default kind so at least whitespace/case/trim rules apply.
+  const driverKindHint = normalizeProviderKind(instanceId) ?? "codex";
+  const model = normalizeModelSlug(rawModel, driverKindHint);
   if (!model) {
     return null;
   }
   if (Array.isArray(candidate?.options)) {
     const selections = coerceProviderOptionSelections(candidate.options);
-    return createModelSelection(provider, model, selections) as NormalizedModelSelection;
+    return createModelSelection(instanceId, model, selections) as NormalizedModelSelection;
   }
-  const modelOptions = normalizeProviderModelOptions(
-    candidate?.options ? { [provider]: candidate.options } : legacy?.modelOptions,
-    provider,
-    provider === "codex" ? legacy?.legacyCodex : undefined,
-  );
-  const options = modelOptions?.[provider];
-  return createModelSelection(provider, model, options) as NormalizedModelSelection;
+  // Per-kind options were a pre-migration concern; only recover them for a
+  // built-in-kind instance. Custom instances don't have a legacy options
+  // store to thread through here.
+  const kindForLegacyOptions = normalizeProviderKind(instanceId);
+  const modelOptions = kindForLegacyOptions
+    ? normalizeProviderModelOptions(
+        candidate?.options ? { [kindForLegacyOptions]: candidate.options } : legacy?.modelOptions,
+        kindForLegacyOptions,
+        kindForLegacyOptions === "codex" ? legacy?.legacyCodex : undefined,
+      )
+    : null;
+  const options = kindForLegacyOptions ? modelOptions?.[kindForLegacyOptions] : undefined;
+  return createModelSelection(instanceId, model, options) as NormalizedModelSelection;
 }
 
 type NormalizedModelSelection = Omit<ModelSelection, "instanceId"> & {
-  readonly instanceId: ProviderKind;
+  readonly instanceId: ProviderInstanceId;
 };
 
 // ── Legacy sync helpers (used only during migration from v2 storage) ──
 //
-// These accept the narrowed shape produced by `normalizeModelSelection`
-// (whose `instanceId` is a closed `ProviderKind`) so they can index the
-// per-provider options map directly. Unknown drivers are filtered out
-// upstream by the normalizer.
+// These operate against the legacy kind-keyed `modelOptions` map. The
+// normalized selection now carries an open `ProviderInstanceId`, so each
+// helper narrows that to a built-in `ProviderKind` before indexing —
+// legacy migration only needs to recover options for the built-in drivers
+// (custom instances didn't exist in v2).
 
 function legacySyncModelSelectionOptions(
   modelSelection: NormalizedModelSelection | null,
@@ -713,7 +770,8 @@ function legacySyncModelSelectionOptions(
   if (modelSelection === null) {
     return null;
   }
-  const options = modelOptions?.[modelSelection.instanceId];
+  const kind = normalizeProviderKind(modelSelection.instanceId);
+  const options = kind ? modelOptions?.[kind] : undefined;
   return createModelSelection(
     modelSelection.instanceId,
     modelSelection.model,
@@ -728,9 +786,13 @@ function legacyMergeModelSelectionIntoProviderModelOptions(
   if (!modelSelection?.options || modelSelection.options.length === 0) {
     return normalizeProviderModelOptions(currentModelOptions);
   }
+  const kind = normalizeProviderKind(modelSelection.instanceId);
+  if (!kind) {
+    return normalizeProviderModelOptions(currentModelOptions);
+  }
   return legacyReplaceProviderModelOptions(
     normalizeProviderModelOptions(currentModelOptions),
-    modelSelection.instanceId,
+    kind,
     modelSelection.options,
   );
 }
@@ -754,15 +816,19 @@ function legacyReplaceProviderModelOptions(
 function legacyToModelSelectionByProvider(
   modelSelection: NormalizedModelSelection | null,
   modelOptions: ProviderOptionSelectionsByProvider | null | undefined,
-): Partial<Record<ProviderKind, ModelSelection>> {
-  const result: Partial<Record<ProviderKind, ModelSelection>> = {};
+): Partial<Record<ProviderInstanceId, ModelSelection>> {
+  const result: Partial<Record<ProviderInstanceId, ModelSelection>> = {};
   if (modelOptions) {
     for (const provider of ["codex", "claudeAgent", "cursor", "opencode"] as const) {
       const options = modelOptions[provider];
       if (options && options.length > 0) {
-        result[provider] = createModelSelection(
+        // Built-in kind literals satisfy the `ProviderInstanceId` slug
+        // pattern; coerce to the branded type so the instance-keyed map
+        // accepts the key without unsafe-any fallout.
+        const instanceKey = ProviderInstanceId.make(provider);
+        result[instanceKey] = createModelSelection(
           provider,
-          modelSelection?.instanceId === provider
+          modelSelection?.instanceId === instanceKey
             ? modelSelection.model
             : DEFAULT_MODEL_BY_PROVIDER[provider],
           options,
@@ -783,6 +849,14 @@ export function deriveEffectiveComposerModelState(input: {
     | undefined;
   providers: ReadonlyArray<ServerProvider>;
   selectedProvider: ProviderKind;
+  /**
+   * Optional routing key of the instance whose selection should override
+   * the driver-level lookup. When present, the draft is queried by
+   * `modelSelectionByProvider[selectedInstanceId]` so a custom Codex
+   * instance (e.g. `codex_personal`) reads its own saved model instead of
+   * collapsing to the default Codex bucket.
+   */
+  selectedInstanceId?: ProviderInstanceId | null | undefined;
   threadModelSelection: ModelSelection | null | undefined;
   projectModelSelection: ModelSelection | null | undefined;
   settings: UnifiedSettings;
@@ -792,7 +866,16 @@ export function deriveEffectiveComposerModelState(input: {
       input.threadModelSelection?.model ?? input.projectModelSelection?.model,
       input.selectedProvider,
     ) ?? getDefaultServerModel(input.providers, input.selectedProvider);
-  const activeSelection = input.draft?.modelSelectionByProvider?.[input.selectedProvider];
+  // Look up the instance's saved selection first; fall back to the
+  // driver-kind bucket so legacy kind-keyed drafts still resolve. Every
+  // `ProviderKind` literal is a valid `ProviderInstanceId` slug, so the
+  // cast to the branded type is safe.
+  const instanceSelection = input.selectedInstanceId
+    ? input.draft?.modelSelectionByProvider?.[input.selectedInstanceId]
+    : undefined;
+  const activeSelection =
+    instanceSelection ??
+    input.draft?.modelSelectionByProvider?.[ProviderInstanceId.make(input.selectedProvider)];
   const selectedModel = activeSelection?.model
     ? resolveAppModelSelection(
         input.selectedProvider,
@@ -1390,8 +1473,8 @@ function normalizePersistedDraftsByThreadId(
     );
     // If the draft already has the v3 shape, use it directly
     const legacyDraftCandidate = draftValue as LegacyPersistedComposerThreadDraftState;
-    let modelSelectionByProvider: Partial<Record<ProviderKind, ModelSelection>> = {};
-    let activeProvider: ProviderKind | null = null;
+    let modelSelectionByProvider: Partial<Record<ProviderInstanceId, ModelSelection>> = {};
+    let activeProvider: ProviderInstanceId | null = null;
 
     if (
       draftCandidate.modelSelectionByProvider &&
@@ -1399,9 +1482,9 @@ function normalizePersistedDraftsByThreadId(
     ) {
       // v3 format
       modelSelectionByProvider = draftCandidate.modelSelectionByProvider as Partial<
-        Record<ProviderKind, ModelSelection>
+        Record<ProviderInstanceId, ModelSelection>
       >;
-      activeProvider = normalizeProviderKind(draftCandidate.activeProvider);
+      activeProvider = normalizeProviderInstanceId(draftCandidate.activeProvider);
     } else {
       // v2 or legacy format: migrate
       const normalizedModelOptions =
@@ -1511,7 +1594,7 @@ function migratePersistedComposerDraftStoreState(
     stickyModelSelection,
     nextStickyModelOptions,
   );
-  const stickyActiveProvider = normalizeProviderKind(candidate.stickyProvider) ?? null;
+  const stickyActiveProvider = normalizeProviderInstanceId(candidate.stickyProvider) ?? null;
 
   const { draftThreadsByThreadKey, logicalProjectDraftThreadKeyByLogicalProjectKey } =
     normalizePersistedDraftThreads(rawDraftThreadsByThreadId, rawProjectDraftThreadIdByProjectKey);
@@ -1605,17 +1688,19 @@ function normalizeCurrentPersistedComposerDraftStoreState(
     );
 
   // Handle both v3 (modelSelectionByProvider) and v2/legacy formats
-  let stickyModelSelectionByProvider: Partial<Record<ProviderKind, ModelSelection>> = {};
-  let stickyActiveProvider: ProviderKind | null = null;
+  let stickyModelSelectionByProvider: Partial<Record<ProviderInstanceId, ModelSelection>> = {};
+  let stickyActiveProvider: ProviderInstanceId | null = null;
   if (
     normalizedPersistedState.stickyModelSelectionByProvider &&
     typeof normalizedPersistedState.stickyModelSelectionByProvider === "object"
   ) {
     stickyModelSelectionByProvider =
       normalizedPersistedState.stickyModelSelectionByProvider as Partial<
-        Record<ProviderKind, ModelSelection>
+        Record<ProviderInstanceId, ModelSelection>
       >;
-    stickyActiveProvider = normalizeProviderKind(normalizedPersistedState.stickyActiveProvider);
+    stickyActiveProvider = normalizeProviderInstanceId(
+      normalizedPersistedState.stickyActiveProvider,
+    );
   } else {
     // Legacy migration path
     const stickyModelOptions =
@@ -1640,7 +1725,7 @@ function normalizeCurrentPersistedComposerDraftStoreState(
       stickyModelSelection,
       nextStickyModelOptions,
     );
-    stickyActiveProvider = normalizeProviderKind(normalizedPersistedState.stickyProvider);
+    stickyActiveProvider = normalizeProviderInstanceId(normalizedPersistedState.stickyProvider);
   }
 
   return {
@@ -1779,9 +1864,9 @@ function toHydratedThreadDraft(
   persistedDraft: PersistedComposerThreadDraftState,
 ): ComposerThreadDraftState {
   // The persisted draft is already in v3 shape (migration handles older formats)
-  const modelSelectionByProvider: Partial<Record<ProviderKind, ModelSelection>> =
+  const modelSelectionByProvider: Partial<Record<ProviderInstanceId, ModelSelection>> =
     persistedDraft.modelSelectionByProvider ?? {};
-  const activeProvider = normalizeProviderKind(persistedDraft.activeProvider) ?? null;
+  const activeProvider = normalizeProviderInstanceId(persistedDraft.activeProvider) ?? null;
 
   return {
     prompt: persistedDraft.prompt,
@@ -2142,7 +2227,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             if (!normalized) {
               return state;
             }
-            const nextMap: Partial<Record<ProviderKind, ModelSelection>> = {
+            const nextMap: Partial<Record<ProviderInstanceId, ModelSelection>> = {
               ...state.stickyModelSelectionByProvider,
               [normalized.instanceId]: normalized,
             };
@@ -2173,8 +2258,12 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             const nextMap = { ...base.modelSelectionByProvider };
             for (const [provider, selection] of Object.entries(stickyMap)) {
               if (selection) {
-                const current = nextMap[provider as ProviderKind];
-                nextMap[provider as ProviderKind] = {
+                // Iteration key comes from the instance-keyed sticky map,
+                // so coerce the string back to `ProviderInstanceId` for
+                // the typed lookup.
+                const instanceKey = provider as ProviderInstanceId;
+                const current = nextMap[instanceKey];
+                nextMap[instanceKey] = {
                   ...selection,
                   model: current?.model ?? selection.model,
                 };
@@ -2309,16 +2398,20 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             for (const provider of ["codex", "claudeAgent", "cursor", "opencode"] as const) {
               if (!modelOptions || !(provider in modelOptions)) continue;
               const opts = modelOptions[provider];
-              const current = nextMap[provider];
+              // Every built-in `ProviderKind` literal satisfies the
+              // `ProviderInstanceId` slug pattern, so branding the kind
+              // gives us the correct key for the instance-keyed map.
+              const instanceKey = ProviderInstanceId.make(provider);
+              const current = nextMap[instanceKey];
               if (opts && opts.length > 0) {
-                nextMap[provider] = createModelSelection(
+                nextMap[instanceKey] = createModelSelection(
                   provider,
                   current?.model ?? DEFAULT_MODEL_BY_PROVIDER[provider],
                   opts,
                 );
               } else if (current?.options) {
                 const { options: _, ...rest } = current;
-                nextMap[provider] = rest as ModelSelection;
+                nextMap[instanceKey] = rest as ModelSelection;
               }
             }
             if (Equal.equals(base.modelSelectionByProvider, nextMap)) {
@@ -2346,6 +2439,9 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
           if (normalizedProvider === null) {
             return;
           }
+          // Kind-level writes target the default instance of the driver; the
+          // instance id slug is identical to the kind literal by contract.
+          const instanceKey = ProviderInstanceId.make(normalizedProvider);
           const fallbackModel =
             normalizeModelSlug(options?.model, normalizedProvider) ??
             DEFAULT_MODEL_BY_PROVIDER[normalizedProvider];
@@ -2358,16 +2454,16 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
 
             // Update the map entry for this provider
             const nextMap = { ...base.modelSelectionByProvider };
-            const currentForProvider = nextMap[normalizedProvider];
+            const currentForProvider = nextMap[instanceKey];
             if (providerOpts) {
-              nextMap[normalizedProvider] = createModelSelection(
+              nextMap[instanceKey] = createModelSelection(
                 normalizedProvider,
                 currentForProvider?.model ?? fallbackModel,
                 providerOpts,
               );
             } else if (currentForProvider && (currentForProvider.options?.length ?? 0) > 0) {
               const { options: _, ...rest } = currentForProvider;
-              nextMap[normalizedProvider] = rest as ModelSelection;
+              nextMap[instanceKey] = rest as ModelSelection;
             }
 
             // Handle sticky persistence
@@ -2376,20 +2472,20 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             if (options?.persistSticky === true) {
               nextStickyMap = { ...state.stickyModelSelectionByProvider };
               const stickyBase =
-                nextStickyMap[normalizedProvider] ??
-                base.modelSelectionByProvider[normalizedProvider] ??
+                nextStickyMap[instanceKey] ??
+                base.modelSelectionByProvider[instanceKey] ??
                 createModelSelection(normalizedProvider, fallbackModel);
               if (providerOpts) {
-                nextStickyMap[normalizedProvider] = createModelSelection(
+                nextStickyMap[instanceKey] = createModelSelection(
                   normalizedProvider,
                   stickyBase.model,
                   providerOpts,
                 );
               } else if ((stickyBase.options?.length ?? 0) > 0) {
                 const { options: _, ...rest } = stickyBase;
-                nextStickyMap[normalizedProvider] = rest as ModelSelection;
+                nextStickyMap[instanceKey] = rest as ModelSelection;
               }
-              nextStickyActiveProvider = base.activeProvider ?? normalizedProvider;
+              nextStickyActiveProvider = base.activeProvider ?? instanceKey;
             }
 
             if (
@@ -2841,6 +2937,12 @@ export function useEffectiveComposerModelState(input: {
   draftId?: DraftId;
   providers: ReadonlyArray<ServerProvider>;
   selectedProvider: ProviderKind;
+  /**
+   * When supplied, the draft's saved selection for this instance takes
+   * precedence over the driver-kind bucket — so a custom `codex_personal`
+   * instance reads its own model, not the default Codex's.
+   */
+  selectedInstanceId?: ProviderInstanceId | null | undefined;
   threadModelSelection: ModelSelection | null | undefined;
   projectModelSelection: ModelSelection | null | undefined;
   settings: UnifiedSettings;
@@ -2853,6 +2955,7 @@ export function useEffectiveComposerModelState(input: {
         draft,
         providers: input.providers,
         selectedProvider: input.selectedProvider,
+        selectedInstanceId: input.selectedInstanceId,
         threadModelSelection: input.threadModelSelection,
         projectModelSelection: input.projectModelSelection,
         settings: input.settings,
@@ -2862,6 +2965,7 @@ export function useEffectiveComposerModelState(input: {
       input.providers,
       input.settings,
       input.projectModelSelection,
+      input.selectedInstanceId,
       input.selectedProvider,
       input.threadModelSelection,
     ],

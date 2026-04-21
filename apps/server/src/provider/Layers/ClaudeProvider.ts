@@ -8,7 +8,7 @@ import type {
   ServerProviderSlashCommand,
   ServerProviderState,
 } from "@t3tools/contracts";
-import { Cache, Duration, Effect, Equal, Layer, Option, Result, Schema, Stream } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { decodeJsonResult } from "@t3tools/shared/schemaJson";
 import {
@@ -38,10 +38,6 @@ import {
   type CommandResult,
 } from "../providerSnapshot.ts";
 import { compareCliVersions } from "../cliVersion.ts";
-import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
-import { ClaudeProvider } from "../Services/ClaudeProvider.ts";
-import { ServerSettingsService } from "../../serverSettings.ts";
-import { ServerSettingsError } from "@t3tools/contracts";
 
 const DEFAULT_CLAUDE_MODEL_CAPABILITIES: ModelCapabilities = createModelCapabilities({
   optionDescriptors: [],
@@ -619,11 +615,10 @@ const probeClaudeCapabilities = (binaryPath: string) => {
   );
 };
 
-const runClaudeCommand = Effect.fn("runClaudeCommand")(function* (args: ReadonlyArray<string>) {
-  const claudeSettings = yield* Effect.service(ServerSettingsService).pipe(
-    Effect.flatMap((service) => service.getSettings),
-    Effect.map((settings) => settings.providers.claudeAgent),
-  );
+const runClaudeCommand = Effect.fn("runClaudeCommand")(function* (
+  claudeSettings: ClaudeSettings,
+  args: ReadonlyArray<string>,
+) {
   const command = ChildProcess.make(claudeSettings.binaryPath, [...args], {
     shell: process.platform === "win32",
   });
@@ -631,19 +626,12 @@ const runClaudeCommand = Effect.fn("runClaudeCommand")(function* (args: Readonly
 });
 
 export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(function* (
+  claudeSettings: ClaudeSettings,
   resolveSubscriptionType?: (binaryPath: string) => Effect.Effect<string | undefined>,
   resolveSlashCommands?: (
     binaryPath: string,
   ) => Effect.Effect<ReadonlyArray<ServerProviderSlashCommand> | undefined>,
-): Effect.fn.Return<
-  ServerProvider,
-  ServerSettingsError,
-  ChildProcessSpawner.ChildProcessSpawner | ServerSettingsService
-> {
-  const claudeSettings = yield* Effect.service(ServerSettingsService).pipe(
-    Effect.flatMap((service) => service.getSettings),
-    Effect.map((settings) => settings.providers.claudeAgent),
-  );
+): Effect.fn.Return<ServerProvider, never, ChildProcessSpawner.ChildProcessSpawner> {
   const checkedAt = new Date().toISOString();
   const allModels = providerModelsFromSettings(
     BUILT_IN_MODELS,
@@ -669,7 +657,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     });
   }
 
-  const versionProbe = yield* runClaudeCommand(["--version"]).pipe(
+  const versionProbe = yield* runClaudeCommand(claudeSettings, ["--version"]).pipe(
     Effect.timeoutOption(DEFAULT_TIMEOUT_MS),
     Effect.result,
   );
@@ -754,7 +742,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
 
   // ── Auth check + subscription detection ────────────────────────────
 
-  const authProbe = yield* runClaudeCommand(["auth", "status"]).pipe(
+  const authProbe = yield* runClaudeCommand(claudeSettings, ["auth", "status"]).pipe(
     Effect.timeoutOption(AUTH_PROBE_TIMEOUT_MS),
     Effect.result,
   );
@@ -845,7 +833,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
   });
 });
 
-const makePendingClaudeProvider = (claudeSettings: ClaudeSettings): ServerProvider => {
+export const makePendingClaudeProvider = (claudeSettings: ClaudeSettings): ServerProvider => {
   const checkedAt = new Date().toISOString();
   const models = providerModelsFromSettings(
     BUILT_IN_MODELS,
@@ -887,43 +875,4 @@ const makePendingClaudeProvider = (claudeSettings: ClaudeSettings): ServerProvid
   });
 };
 
-export const ClaudeProviderLive = Layer.effect(
-  ClaudeProvider,
-  Effect.gen(function* () {
-    const serverSettings = yield* ServerSettingsService;
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-
-    const subscriptionProbeCache = yield* Cache.make({
-      capacity: 1,
-      timeToLive: Duration.minutes(5),
-      lookup: (binaryPath: string) => probeClaudeCapabilities(binaryPath),
-    });
-
-    const checkProvider = checkClaudeProviderStatus(
-      (binaryPath) =>
-        Cache.get(subscriptionProbeCache, binaryPath).pipe(
-          Effect.map((probe) => probe?.subscriptionType),
-        ),
-      (binaryPath) =>
-        Cache.get(subscriptionProbeCache, binaryPath).pipe(
-          Effect.map((probe) => probe?.slashCommands),
-        ),
-    ).pipe(
-      Effect.provideService(ServerSettingsService, serverSettings),
-      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-    );
-
-    return yield* makeManagedServerProvider<ClaudeSettings>({
-      getSettings: serverSettings.getSettings.pipe(
-        Effect.map((settings) => settings.providers.claudeAgent),
-        Effect.orDie,
-      ),
-      streamSettings: serverSettings.streamChanges.pipe(
-        Stream.map((settings) => settings.providers.claudeAgent),
-      ),
-      haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
-      initialSnapshot: makePendingClaudeProvider,
-      checkProvider,
-    });
-  }),
-);
+export { probeClaudeCapabilities };

@@ -63,6 +63,12 @@ function toRuntimeBinding(
         ({
           threadId: runtime.threadId,
           provider,
+          // `providerInstanceId` is nullable at the DB layer for legacy
+          // rows — readers downstream fall back to the default instance
+          // of `provider` when this field is omitted.
+          ...(runtime.providerInstanceId !== null
+            ? { providerInstanceId: runtime.providerInstanceId }
+            : {}),
           adapterKey: runtime.adapterKey,
           runtimeMode: runtime.runtimeMode,
           status: runtime.status,
@@ -112,6 +118,8 @@ const makeProviderSessionDirectory = Effect.gen(function* () {
       .upsert({
         threadId: resolvedThreadId,
         providerName: binding.provider,
+        providerInstanceId:
+          binding.providerInstanceId ?? existingRuntime?.providerInstanceId ?? null,
         adapterKey:
           binding.adapterKey ??
           (providerChanged ? binding.provider : (existingRuntime?.adapterKey ?? binding.provider)),

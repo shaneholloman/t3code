@@ -251,11 +251,15 @@ export const make = Effect.fn("effect-codex-app-server/CodexAppServerClient.make
 export const layerChildProcess = (
   handle: ChildProcessSpawner.ChildProcessHandle,
   options: CodexAppServerClientOptions = {},
-): Layer.Layer<CodexAppServerClient> => {
-  const stdio = makeChildStdio(handle);
-  const terminationError = makeTerminationError(handle);
-  return Layer.effect(CodexAppServerClient, make(stdio, options, terminationError));
-};
+): Layer.Layer<CodexAppServerClient> =>
+  Layer.effect(
+    CodexAppServerClient,
+    Effect.gen(function* () {
+      const { stdio, readStderrTail } = yield* makeChildStdio(handle);
+      const terminationError = makeTerminationError(handle, readStderrTail);
+      return yield* make(stdio, options, terminationError);
+    }),
+  );
 
 export interface CodexAppServerCommandLayerOptions extends CodexAppServerClientOptions {
   readonly command: string;
@@ -294,7 +298,10 @@ export const layerCommand = (
       (handle) => handle.kill().pipe(Effect.orDie),
     ).pipe(
       Effect.flatMap((handle) =>
-        make(makeChildStdio(handle), options, makeTerminationError(handle)),
+        Effect.gen(function* () {
+          const { stdio, readStderrTail } = yield* makeChildStdio(handle);
+          return yield* make(stdio, options, makeTerminationError(handle, readStderrTail));
+        }),
       ),
     ),
   );

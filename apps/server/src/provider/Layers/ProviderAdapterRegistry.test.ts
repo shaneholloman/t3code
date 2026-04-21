@@ -1,18 +1,22 @@
-import type { ProviderKind } from "@t3tools/contracts";
+import {
+  defaultInstanceIdForDriver,
+  ProviderDriverId,
+  type ProviderKind,
+  type ServerProvider,
+} from "@t3tools/contracts";
 import { it, assert, vi } from "@effect/vitest";
 import { assertFailure } from "@effect/vitest/utils";
 
-import { Effect, Layer, Stream } from "effect";
+import { Effect, Layer, PubSub, Stream } from "effect";
 
-import { ClaudeAdapter } from "../Services/ClaudeAdapter.ts";
 import type { ClaudeAdapterShape } from "../Services/ClaudeAdapter.ts";
-import { CodexAdapter } from "../Services/CodexAdapter.ts";
 import type { CodexAdapterShape } from "../Services/CodexAdapter.ts";
-import { CursorAdapter } from "../Services/CursorAdapter.ts";
 import type { CursorAdapterShape } from "../Services/CursorAdapter.ts";
-import { OpenCodeAdapter } from "../Services/OpenCodeAdapter.ts";
 import type { OpenCodeAdapterShape } from "../Services/OpenCodeAdapter.ts";
 import { ProviderAdapterRegistry } from "../Services/ProviderAdapterRegistry.ts";
+import { ProviderInstanceRegistry } from "../Services/ProviderInstanceRegistry.ts";
+import type { ProviderInstance } from "../ProviderDriver.ts";
+import type { TextGenerationShape } from "../../git/Services/TextGeneration.ts";
 import { ProviderAdapterRegistryLive } from "./ProviderAdapterRegistry.ts";
 import { ProviderUnsupportedError } from "../Errors.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -85,17 +89,52 @@ const fakeCursorAdapter: CursorAdapterShape = {
   streamEvents: Stream.empty,
 };
 
+// ProviderAdapterRegistryLive is now a facade over ProviderInstanceRegistry —
+// it walks `listInstances` once at boot and surfaces the default-instance
+// adapter keyed by its driver id. To test the facade we supply four fake
+// instances whose `instanceId === defaultInstanceIdForDriver(driverId)` so
+// they pass the default-instance filter.
+const makeFakeInstance = (
+  driverIdString: "codex" | "claudeAgent" | "cursor" | "opencode",
+  adapter: ProviderInstance["adapter"],
+): ProviderInstance => {
+  const driverId = ProviderDriverId.make(driverIdString);
+  return {
+    instanceId: defaultInstanceIdForDriver(driverId),
+    driverId,
+    displayName: undefined,
+    enabled: true,
+    snapshot: {
+      getSnapshot: Effect.succeed({} as unknown as ServerProvider),
+      refresh: Effect.succeed({} as unknown as ServerProvider),
+      streamChanges: Stream.empty,
+    },
+    adapter,
+    textGeneration: {} as unknown as TextGenerationShape,
+  };
+};
+
+const fakeInstances: ReadonlyArray<ProviderInstance> = [
+  makeFakeInstance("codex", fakeCodexAdapter),
+  makeFakeInstance("claudeAgent", fakeClaudeAdapter),
+  makeFakeInstance("opencode", fakeOpenCodeAdapter),
+  makeFakeInstance("cursor", fakeCursorAdapter),
+];
+
+const fakeInstanceRegistryLayer = Layer.succeed(ProviderInstanceRegistry, {
+  getInstance: (instanceId) =>
+    Effect.succeed(fakeInstances.find((instance) => instance.instanceId === instanceId)),
+  listInstances: Effect.succeed(fakeInstances),
+  listUnavailable: Effect.succeed([]),
+  streamChanges: Stream.empty,
+  // Tests never drive changes through this fake; acquire a throwaway
+  // subscription on an unused PubSub so the shape is satisfied.
+  subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), (pubsub) => PubSub.subscribe(pubsub)),
+});
+
 const layer = it.layer(
   Layer.mergeAll(
-    Layer.provide(
-      ProviderAdapterRegistryLive,
-      Layer.mergeAll(
-        Layer.succeed(CodexAdapter, fakeCodexAdapter),
-        Layer.succeed(ClaudeAdapter, fakeClaudeAdapter),
-        Layer.succeed(OpenCodeAdapter, fakeOpenCodeAdapter),
-        Layer.succeed(CursorAdapter, fakeCursorAdapter),
-      ),
-    ),
+    Layer.provide(ProviderAdapterRegistryLive, fakeInstanceRegistryLayer),
     NodeServices.layer,
   ),
 );

@@ -24,13 +24,23 @@ export class CodexAppServerProcessExitedError extends Schema.TaggedErrorClass<Co
   "CodexAppServerProcessExitedError",
   {
     code: Schema.optional(Schema.Number),
+    /**
+     * Last ~4KB of the subprocess's stderr. Set when
+     * {@link makeTerminationError} was passed a stderr-tail reader (which
+     * the default spawn helpers wire up). Useful for diagnosing why the
+     * `codex app-server` child exited — e.g. bad config, panic, missing
+     * auth — that would otherwise be discarded.
+     */
+    stderrTail: Schema.optional(Schema.String),
     cause: Schema.optional(Schema.Defect),
   },
 ) {
   override get message() {
-    return this.code === undefined
-      ? "Codex App Server process exited"
-      : `Codex App Server process exited with code ${this.code}`;
+    const base =
+      this.code === undefined
+        ? "Codex App Server process exited"
+        : `Codex App Server process exited with code ${this.code}`;
+    return this.stderrTail ? `${base}: ${this.stderrTail}` : base;
   }
 }
 

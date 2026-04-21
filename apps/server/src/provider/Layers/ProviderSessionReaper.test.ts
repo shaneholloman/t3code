@@ -197,6 +197,7 @@ describe("ProviderSessionReaper", () => {
       repository.upsert({
         threadId,
         providerName: "claudeAgent",
+        providerInstanceId: null,
         adapterKey: "claudeAgent",
         runtimeMode: "full-access",
         status: "running",
@@ -244,6 +245,7 @@ describe("ProviderSessionReaper", () => {
       repository.upsert({
         threadId,
         providerName: "claudeAgent",
+        providerInstanceId: null,
         adapterKey: "claudeAgent",
         runtimeMode: "full-access",
         status: "running",
@@ -290,6 +292,7 @@ describe("ProviderSessionReaper", () => {
       repository.upsert({
         threadId,
         providerName: "claudeAgent",
+        providerInstanceId: null,
         adapterKey: "claudeAgent",
         runtimeMode: "full-access",
         status: "running",
@@ -336,6 +339,7 @@ describe("ProviderSessionReaper", () => {
       repository.upsert({
         threadId,
         providerName: "claudeAgent",
+        providerInstanceId: null,
         adapterKey: "claudeAgent",
         runtimeMode: "full-access",
         status: "stopped",
@@ -404,6 +408,7 @@ describe("ProviderSessionReaper", () => {
       repository.upsert({
         threadId: failedThreadId,
         providerName: "claudeAgent",
+        providerInstanceId: null,
         adapterKey: "claudeAgent",
         runtimeMode: "full-access",
         status: "running",
@@ -418,6 +423,7 @@ describe("ProviderSessionReaper", () => {
       repository.upsert({
         threadId: reapedThreadId,
         providerName: "codex",
+        providerInstanceId: null,
         adapterKey: "codex",
         runtimeMode: "full-access",
         status: "running",
@@ -483,6 +489,7 @@ describe("ProviderSessionReaper", () => {
       repository.upsert({
         threadId: defectThreadId,
         providerName: "claudeAgent",
+        providerInstanceId: null,
         adapterKey: "claudeAgent",
         runtimeMode: "full-access",
         status: "running",
@@ -497,6 +504,7 @@ describe("ProviderSessionReaper", () => {
       repository.upsert({
         threadId: reapedThreadId,
         providerName: "codex",
+        providerInstanceId: null,
         adapterKey: "codex",
         runtimeMode: "full-access",
         status: "running",

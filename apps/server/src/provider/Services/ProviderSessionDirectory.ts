@@ -1,4 +1,5 @@
 import type {
+  ProviderInstanceId,
   ProviderKind,
   ProviderSessionRuntimeStatus,
   RuntimeMode,
@@ -15,6 +16,13 @@ import type {
 export interface ProviderRuntimeBinding {
   readonly threadId: ThreadId;
   readonly provider: ProviderKind;
+  /**
+   * Routing key for the configured provider instance that owns this
+   * session. Optional for back-compat with rows written before the
+   * driver/instance split; readers should fall back to the default
+   * instance of `provider` when this is absent.
+   */
+  readonly providerInstanceId?: ProviderInstanceId;
   readonly adapterKey?: string;
   readonly status?: ProviderSessionRuntimeStatus;
   readonly resumeCursor?: unknown | null;

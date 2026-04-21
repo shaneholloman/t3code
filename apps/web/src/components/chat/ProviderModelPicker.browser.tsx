@@ -1,4 +1,8 @@
-import { type ProviderKind, type ServerProvider } from "@t3tools/contracts";
+import {
+  type ProviderInstanceId,
+  type ProviderKind,
+  type ServerProvider,
+} from "@t3tools/contracts";
 import { EnvironmentId } from "@t3tools/contracts";
 import { createModelCapabilities } from "@t3tools/shared/model";
 import { page, userEvent } from "vitest/browser";
@@ -6,7 +10,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
 import { ProviderModelPicker } from "./ProviderModelPicker";
-import { getCustomModelOptionsByProvider } from "../../modelSelection";
+import { getCustomModelOptionsByInstance } from "../../modelSelection";
+import {
+  deriveProviderInstanceEntries,
+  sortProviderInstanceEntries,
+} from "../../providerInstances";
+import type { ModelEsque } from "./providerIconUtils";
 import { DEFAULT_CLIENT_SETTINGS, DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
 import { __resetLocalApiForTests } from "../../localApi";
 
@@ -239,29 +248,40 @@ async function mountPicker(props: {
 }) {
   const host = document.createElement("div");
   document.body.append(host);
-  const onProviderModelChange = vi.fn();
+  const onInstanceModelChange = vi.fn();
   const providers = props.providers ?? TEST_PROVIDERS;
-  const modelOptionsByProvider = getCustomModelOptionsByProvider(
+  const instanceEntries = sortProviderInstanceEntries(
+    deriveProviderInstanceEntries(providers),
+  );
+  // The legacy test shape passes a driver kind; translate to the default
+  // instance id for that kind (they're the same string by design).
+  const activeInstanceId = props.provider as unknown as ProviderInstanceId;
+  const modelOptionsByInstance = getCustomModelOptionsByInstance(
     DEFAULT_UNIFIED_SETTINGS,
     providers,
-    props.provider,
+    activeInstanceId,
     props.model,
   );
   const screen = await render(
     <ProviderModelPicker
-      provider={props.provider}
+      activeInstanceId={activeInstanceId}
       model={props.model}
       lockedProvider={props.lockedProvider}
-      providers={providers}
-      modelOptionsByProvider={modelOptionsByProvider}
+      instanceEntries={instanceEntries}
+      modelOptionsByInstance={modelOptionsByInstance}
       triggerVariant={props.triggerVariant}
-      onProviderModelChange={onProviderModelChange}
+      onInstanceModelChange={onInstanceModelChange}
     />,
     { container: host },
   );
 
   return {
-    onProviderModelChange,
+    onInstanceModelChange,
+    // Back-compat alias used by callers that still assert on the old callback
+    // name. Delegates to the instance-aware mock so existing expectations work.
+    get onProviderModelChange() {
+      return onInstanceModelChange;
+    },
     cleanup: async () => {
       await screen.unmount();
       host.remove();
@@ -446,24 +466,30 @@ describe("ProviderModelPicker", () => {
   it("falls back to the active provider's first model when props.model belongs to another provider (#1982)", async () => {
     const host = document.createElement("div");
     document.body.append(host);
-    const onProviderModelChange = vi.fn();
-    const modelOptionsByProvider = {
-      claudeAgent: [
-        { slug: "claude-opus-4-6", name: "Claude Opus 4.6" },
-        { slug: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
+    const onInstanceModelChange = vi.fn();
+    const modelOptionsByInstance = new Map<ProviderInstanceId, ReadonlyArray<ModelEsque>>([
+      [
+        "claudeAgent" as ProviderInstanceId,
+        [
+          { slug: "claude-opus-4-6", name: "Claude Opus 4.6" },
+          { slug: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
+        ],
       ],
-      codex: [{ slug: "gpt-5-codex", name: "GPT-5 Codex" }],
-      cursor: [],
-      opencode: [],
-    } as const;
+      ["codex" as ProviderInstanceId, [{ slug: "gpt-5-codex", name: "GPT-5 Codex" }]],
+      ["cursor" as ProviderInstanceId, []],
+      ["opencode" as ProviderInstanceId, []],
+    ]);
+    const instanceEntries = sortProviderInstanceEntries(
+      deriveProviderInstanceEntries(TEST_PROVIDERS),
+    );
     const screen = await render(
       <ProviderModelPicker
-        provider="claudeAgent"
+        activeInstanceId={"claudeAgent" as ProviderInstanceId}
         model="gpt-5-codex"
         lockedProvider={null}
-        providers={TEST_PROVIDERS}
-        modelOptionsByProvider={modelOptionsByProvider}
-        onProviderModelChange={onProviderModelChange}
+        instanceEntries={instanceEntries}
+        modelOptionsByInstance={modelOptionsByInstance}
+        onInstanceModelChange={onInstanceModelChange}
       />,
       { container: host },
     );

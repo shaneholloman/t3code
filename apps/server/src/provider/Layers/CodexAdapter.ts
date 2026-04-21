@@ -10,6 +10,7 @@
 import {
   type CanonicalItemType,
   type CanonicalRequestType,
+  type CodexSettings,
   type ProviderEvent,
   type ProviderRuntimeEvent,
   type ProviderRequestKind,
@@ -21,7 +22,7 @@ import {
   ThreadId,
   ProviderSendTurnInput,
 } from "@t3tools/contracts";
-import { Effect, Exit, Fiber, FileSystem, Layer, Queue, Schema, Scope, Stream } from "effect";
+import { Effect, Exit, Fiber, FileSystem, Queue, Schema, Scope, Stream } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import * as CodexErrors from "effect-codex-app-server/errors";
 import * as EffectCodexSchema from "effect-codex-app-server/schema";
@@ -39,10 +40,9 @@ import {
   ProviderAdapterValidationError,
   type ProviderAdapterError,
 } from "../Errors.ts";
-import { CodexAdapter, type CodexAdapterShape } from "../Services/CodexAdapter.ts";
+import { type CodexAdapterShape } from "../Services/CodexAdapter.ts";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
-import { ServerSettingsService } from "../../serverSettings.ts";
 import {
   CodexResumeCursorSchema,
   CodexSessionRuntimeThreadIdMissingError,
@@ -1318,7 +1318,17 @@ function mapToRuntimeEvents(
   return [];
 }
 
-const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
+/**
+ * Build a Codex provider adapter bound to a specific `CodexSettings` payload.
+ *
+ * The adapter is a captured closure over `codexConfig` — the `binaryPath` and
+ * `homePath` are read from that payload, not from `ServerSettingsService`.
+ * This is what makes multi-instance routing possible: each `ProviderInstance`
+ * in the registry owns its own closure with its own config, so two Codex
+ * instances with different `homePath`s cannot step on each other.
+ */
+export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
+  codexConfig: CodexSettings,
   options?: CodexAdapterLiveOptions,
 ) {
   const fileSystem = yield* FileSystem.FileSystem;
@@ -1333,7 +1343,6 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       : undefined);
   const managedNativeEventLogger =
     options?.nativeEventLogger === undefined ? nativeEventLogger : undefined;
-  const serverSettingsService = yield* ServerSettingsService;
   const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
   const sessions = new Map<ThreadId, CodexAdapterSessionContext>();
 
@@ -1353,23 +1362,11 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           yield* Effect.suspend(() => stopSessionInternal(existing));
         }
 
-        const codexSettings = yield* serverSettingsService.getSettings.pipe(
-          Effect.map((settings) => settings.providers.codex),
-          Effect.mapError(
-            (error) =>
-              new ProviderAdapterProcessError({
-                provider: PROVIDER,
-                threadId: input.threadId,
-                detail: error.message,
-                cause: error,
-              }),
-          ),
-        );
         const runtimeInput: CodexSessionRuntimeOptions = {
           threadId: input.threadId,
           cwd: input.cwd ?? process.cwd(),
-          binaryPath: codexSettings.binaryPath,
-          ...(codexSettings.homePath ? { homePath: codexSettings.homePath } : {}),
+          binaryPath: codexConfig.binaryPath,
+          ...(codexConfig.homePath ? { homePath: codexConfig.homePath } : {}),
           ...(Schema.is(CodexResumeCursorSchema)(input.resumeCursor)
             ? { resumeCursor: input.resumeCursor }
             : {}),
@@ -1676,8 +1673,9 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
   } satisfies CodexAdapterShape;
 });
 
-export const CodexAdapterLive = Layer.effect(CodexAdapter, makeCodexAdapter());
-
-export function makeCodexAdapterLive(options?: CodexAdapterLiveOptions) {
-  return Layer.effect(CodexAdapter, makeCodexAdapter(options));
-}
+// NOTE: the old `CodexAdapterLive` / `makeCodexAdapterLive` singleton Layer
+// exports have been removed as part of the per-instance-driver refactor.
+// `makeCodexAdapter(codexConfig, options?)` is now invoked directly by
+// `CodexDriver.create()` for each configured instance; downstream consumers
+// (server bootstrap, integration harness, this module's tests) will be
+// migrated to the registry in a follow-up pass.

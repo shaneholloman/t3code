@@ -3,6 +3,7 @@ import {
   EnvironmentId,
   isBuiltInDriverId,
   ModelSelection,
+  ProviderInstanceId,
   ProviderKind,
   ThreadId,
 } from "@t3tools/contracts";
@@ -54,11 +55,14 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
   const threadKey = scopedThreadKey(threadRef);
   // Test fixtures only ever pass built-in drivers; narrow back to
   // `ProviderKind` to keep the test wiring (which keys into per-driver
-  // records) typed.
+  // records) typed. The composer draft now keys by `ProviderInstanceId`;
+  // every built-in kind literal is a valid instance id slug, so we brand
+  // once and reuse for both the map key and `activeProvider`.
   const provider: ProviderKind =
     props?.modelSelection?.instanceId && isBuiltInDriverId(props.modelSelection.instanceId)
       ? props.modelSelection.instanceId
       : "claudeAgent";
+  const instanceId = ProviderInstanceId.make(provider);
   const model = props?.modelSelection?.model ?? DEFAULT_MODEL_BY_PROVIDER[provider];
 
   useComposerDraftStore.setState({
@@ -70,9 +74,9 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
         persistedAttachments: [],
         terminalContexts: [],
         modelSelectionByProvider: {
-          [provider]: createModelSelection(provider, model, props?.modelSelection?.options),
+          [instanceId]: createModelSelection(provider, model, props?.modelSelection?.options),
         },
-        activeProvider: provider,
+        activeProvider: instanceId,
         runtimeMode: null,
         interactionMode: null,
       },

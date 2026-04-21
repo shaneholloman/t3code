@@ -1,8 +1,10 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, it, assert } from "@effect/vitest";
+import { describe, it, assert, live } from "@effect/vitest";
 import { Effect, Exit, Layer, PubSub, Ref, Schema, Scope, Sink, Stream } from "effect";
 import * as CodexErrors from "effect-codex-app-server/errors";
 import {
+  ClaudeSettings,
+  CodexSettings,
   DEFAULT_SERVER_SETTINGS,
   ServerSettings,
   type ServerProvider,
@@ -15,6 +17,9 @@ import { createModelCapabilities } from "@t3tools/shared/model";
 
 import { checkCodexProviderStatus, type CodexAppServerProviderSnapshot } from "./CodexProvider.ts";
 import { checkClaudeProviderStatus, parseClaudeAuthStatusFromOutput } from "./ClaudeProvider.ts";
+import { OpenCodeRuntimeLive } from "../opencodeRuntime.ts";
+import { NoOpProviderEventLoggers, ProviderEventLoggers } from "./ProviderEventLoggers.ts";
+import { ProviderInstanceRegistryHydrationLive } from "./ProviderInstanceRegistryHydration.ts";
 import {
   haveProvidersChanged,
   mergeProviderSnapshot,
@@ -23,6 +28,15 @@ import {
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService, type ServerSettingsShape } from "../../serverSettings.ts";
 import { ProviderRegistry } from "../Services/ProviderRegistry.ts";
+
+const defaultClaudeSettings: ClaudeSettings = Schema.decodeSync(ClaudeSettings)({});
+const defaultCodexSettings: CodexSettings = Schema.decodeSync(CodexSettings)({});
+const disabledClaudeSettings: ClaudeSettings = Schema.decodeSync(ClaudeSettings)({
+  enabled: false,
+});
+const disabledCodexSettings: CodexSettings = Schema.decodeSync(CodexSettings)({
+  enabled: false,
+});
 
 process.env.T3CODE_CURSOR_ENABLED = "1";
 
@@ -181,7 +195,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
     describe("checkCodexProviderStatus", () => {
       it.effect("uses the app-server account and model list for provider status", () =>
         Effect.gen(function* () {
-          const status = yield* checkCodexProviderStatus(() =>
+          const status = yield* checkCodexProviderStatus(defaultCodexSettings, () =>
             Effect.succeed(
               makeCodexProbeSnapshot({
                 skills: [
@@ -226,7 +240,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("returns unauthenticated when app-server requires OpenAI auth", () =>
         Effect.gen(function* () {
-          const status = yield* checkCodexProviderStatus(() =>
+          const status = yield* checkCodexProviderStatus(defaultCodexSettings, () =>
             Effect.succeed(
               makeCodexProbeSnapshot({
                 account: {
@@ -250,7 +264,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
         "returns ready with unknown auth when app-server does not require OpenAI auth",
         () =>
           Effect.gen(function* () {
-            const status = yield* checkCodexProviderStatus(() =>
+            const status = yield* checkCodexProviderStatus(defaultCodexSettings, () =>
               Effect.succeed(
                 makeCodexProbeSnapshot({
                   account: {
@@ -268,7 +282,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("returns an api key label for codex api key auth", () =>
         Effect.gen(function* () {
-          const status = yield* checkCodexProviderStatus(() =>
+          const status = yield* checkCodexProviderStatus(defaultCodexSettings, () =>
             Effect.succeed(
               makeCodexProbeSnapshot({
                 account: {
@@ -288,7 +302,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("returns unavailable when codex is missing", () =>
         Effect.gen(function* () {
-          const status = yield* checkCodexProviderStatus(() =>
+          const status = yield* checkCodexProviderStatus(defaultCodexSettings, () =>
             Effect.fail(
               new CodexErrors.CodexAppServerSpawnError({
                 command: "codex app-server",
@@ -427,41 +441,73 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
         ]);
       });
 
-      it.effect("probes enabled providers in the background during registry startup", () =>
+      // This test intentionally avoids `mockCommandSpawnerLayer` so the real
+      // `probeCodexAppServerProvider` path runs — including the full
+      // `codex app-server` RPC handshake via `CodexClient.layerCommand`.
+      // We point `binaryPath` at a name that cannot exist on any machine so
+      // the real `ChildProcessSpawner` deterministically returns ENOENT; the
+      // probe wraps that as `CodexAppServerSpawnError` and
+      // `checkCodexProviderStatus` turns it into the user-visible "not
+      // installed" error snapshot. If the aggregator's `syncLiveSources`
+      // breaks — the `codex_personal`-never-probes bug we are guarding
+      // against — that snapshot never lands in `getProviders` and the
+      // assertions below fail.
+      it.effect("propagates real Codex probe failures to the aggregator at boot", () =>
         Effect.gen(function* () {
-          let spawnCount = 0;
+          const missingBinary = `t3code_codex_missing_${process.pid}_${Date.now()}`;
           const serverSettings = yield* makeMutableServerSettingsService(
             Schema.decodeSync(ServerSettings)(
               deepMerge(DEFAULT_SERVER_SETTINGS, {
                 providers: {
+                  // Disable every built-in probe that would otherwise spawn
+                  // on the CI host. `enabled: false` short-circuits each
+                  // driver's probe *before* it touches the spawner, so the
+                  // test environment stays isolated from the dev
+                  // machine's PATH.
                   codex: { enabled: false },
+                  claudeAgent: { enabled: false },
                   cursor: { enabled: false },
+                  opencode: { enabled: false },
                 },
+                // `providerInstances` keys are branded `ProviderInstanceId`;
+                // the branded index signature rejects plain string literals
+                // at the TS level even though the runtime schema happily
+                // accepts + decodes them. Cast the patch to `unknown` so
+                // the `Schema.decodeSync` below does the real validation.
+                providerInstances: {
+                  // Matches the shape the user had in `.t3/dev/settings.json`
+                  // when the bug was reported: a custom enabled Codex instance
+                  // pointing at a binary the server has to actually spawn.
+                  codex_personal: {
+                    driver: "codex",
+                    displayName: "Codex Personal",
+                    enabled: true,
+                    config: {
+                      binaryPath: missingBinary,
+                      homePath: `/tmp/${missingBinary}_home`,
+                    },
+                  },
+                } as unknown as ContractServerSettings["providerInstances"],
               }),
             ),
           );
           const scope = yield* Scope.make();
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
           const providerRegistryLayer = ProviderRegistryLive.pipe(
+            Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
             Layer.provideMerge(Layer.succeed(ServerSettingsService, serverSettings)),
             Layer.provideMerge(
               ServerConfig.layerTest(process.cwd(), {
                 prefix: "t3-provider-registry-",
               }),
             ),
-            Layer.provideMerge(
-              mockCommandSpawnerLayer((command, args) => {
-                spawnCount += 1;
-                const joined = args.join(" ");
-                if (joined === "--version") {
-                  return { stdout: "claude 1.0.0\n", stderr: "", code: 0 };
-                }
-                if (joined === "auth status") {
-                  return { stdout: '{"authenticated":true}\n', stderr: "", code: 0 };
-                }
-                throw new Error(`Unexpected args: ${command} ${joined}`);
-              }),
-            ),
+            Layer.provideMerge(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
+            Layer.provideMerge(OpenCodeRuntimeLive),
+            // NO spawner mock — `ChildProcessSpawner` is supplied by the
+            // outer `NodeServices.layer` on `it.layer(...)` and will
+            // genuinely spawn a subprocess. The missing-binary ENOENT is
+            // what exercises the same failure mode as a misconfigured
+            // production `binaryPath`.
           );
           const runtimeServices = yield* Layer.build(providerRegistryLayer).pipe(
             Scope.provide(scope),
@@ -469,24 +515,146 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
           yield* Effect.gen(function* () {
             const registry = yield* ProviderRegistry;
-            assert.strictEqual(spawnCount > 0, true);
+            const providers = yield* registry.getProviders;
+            const codexPersonal = providers.find(
+              (provider) => provider.instanceId === "codex_personal",
+            );
+            assert.notStrictEqual(
+              codexPersonal,
+              undefined,
+              `Expected the aggregator to know about codex_personal; instead saw: ${providers
+                .map((provider) => provider.instanceId ?? provider.provider)
+                .join(", ")}`,
+            );
+            assert.strictEqual(
+              codexPersonal?.status,
+              "error",
+              "Real Codex probe against a missing binary should surface as 'error' in the aggregator",
+            );
+            assert.strictEqual(codexPersonal?.installed, false);
+            assert.strictEqual(
+              codexPersonal?.message,
+              "Codex CLI (`codex`) is not installed or not on PATH.",
+            );
+          }).pipe(Effect.provide(runtimeServices));
+        }),
+      );
+
+      // Guards the second half of the reported bug: changing
+      // `providers.codex.binaryPath` in settings must tear down the live
+      // instance and rebuild it so a fresh probe runs with the new binary.
+      // This test drives the real settings stream → registry reconcile →
+      // aggregator sync pipeline and asserts that `getProviders` reflects
+      // the new probe's outcome. If `syncLiveSources` stops awaiting the
+      // rebuilt instance's refresh (previous bug mode), the aggregator
+      // keeps the old snapshot and this test fails.
+      //
+      // `live` (imported from `@effect/vitest`) is used instead of
+      // `it.effect` so real timers coordinate the fibres that drive the
+      // settings → reconcile → sync pipeline. Under `it.effect`'s
+      // TestClock, `Effect.sleep` blocks until `TestClock.adjust`, which
+      // would require this test to reach into the internals of the
+      // reconcile pipeline to advance it step by step.
+      //
+      // The nested `it` handed to `it.layer(…, (it) => …)` is the
+      // `MethodsNonLive` variant and therefore lacks `.live`; the
+      // top-level `live` export from `@effect/vitest` is the equivalent.
+      live("re-probes when settings change the codex binaryPath", () =>
+        Effect.gen(function* () {
+          const firstMissing = `t3code_codex_first_${process.pid}_${Date.now()}`;
+          const secondMissing = `t3code_codex_second_${process.pid}_${Date.now()}`;
+          const serverSettings = yield* makeMutableServerSettingsService(
+            Schema.decodeSync(ServerSettings)(
+              deepMerge(DEFAULT_SERVER_SETTINGS, {
+                providers: {
+                  codex: { enabled: true, binaryPath: firstMissing },
+                  claudeAgent: { enabled: false },
+                  cursor: { enabled: false },
+                  opencode: { enabled: false },
+                },
+              }),
+            ),
+          );
+          const scope = yield* Scope.make();
+          yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+          const providerRegistryLayer = ProviderRegistryLive.pipe(
+            Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
+            Layer.provideMerge(Layer.succeed(ServerSettingsService, serverSettings)),
+            Layer.provideMerge(
+              ServerConfig.layerTest(process.cwd(), {
+                prefix: "t3-provider-registry-",
+              }),
+            ),
+            Layer.provideMerge(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
+            Layer.provideMerge(OpenCodeRuntimeLive),
+            // `it.live` does not inherit layers from the outer `it.layer`
+            // wrapper, so provide `NodeServices.layer` inline. This is the
+            // same real `ChildProcessSpawner` + `FileSystem` + `Path`
+            // services that production uses.
+            Layer.provideMerge(NodeServices.layer),
+          );
+          const runtimeServices = yield* Layer.build(providerRegistryLayer).pipe(
+            Scope.provide(scope),
+          );
+
+          yield* Effect.gen(function* () {
+            const registry = yield* ProviderRegistry;
+            // Boot-time probe: the default codex instance is enabled with
+            // `firstMissing`, so the real spawner yields ENOENT and the
+            // snapshot should be `status: "error"`. What *distinguishes*
+            // the two probe runs is `checkedAt` — each probe stamps a
+            // fresh DateTime, so we capture it and assert it advances
+            // after the settings mutation.
+            const initialProviders = yield* registry.getProviders;
+            const initialCodex = initialProviders.find(
+              (provider) => provider.instanceId === "codex",
+            );
+            assert.strictEqual(initialCodex?.status, "error");
+            assert.strictEqual(initialCodex?.installed, false);
+            const initialCheckedAt = initialCodex?.checkedAt;
+            assert.notStrictEqual(initialCheckedAt, undefined);
+
+            // Drive a settings change. The Hydration layer's
+            // `SettingsWatcherLive` consumes this via `streamChanges`,
+            // calls `reconcile`, which rebuilds the codex instance (the
+            // envelope changed because `binaryPath` differs → `entryEqual`
+            // is false). The registry's `Stream.runForEach(
+            // instanceRegistry.streamChanges, () => syncLiveSources)`
+            // fires `syncLiveSources`, which subscribes + awaits a fresh
+            // refresh on the rebuilt instance.
+            yield* serverSettings.updateSettings({
+              providers: {
+                codex: { enabled: true, binaryPath: secondMissing },
+              },
+            });
+
+            // Poll with real timers (via `it.live`) until `checkedAt`
+            // advances or we hit a generous 3-second ceiling. Anything
+            // slower than that is a regression — the real probe fails
+            // fast on ENOENT, and the reconcile + sync pipeline is
+            // purely in-process.
             const refreshed = yield* Effect.gen(function* () {
-              for (let remainingAttempts = 50; remainingAttempts > 0; remainingAttempts -= 1) {
+              for (let attempts = 0; attempts < 60; attempts += 1) {
                 const providers = yield* registry.getProviders;
-                const claudeProvider = providers.find(
-                  (provider) => provider.provider === "claudeAgent",
-                );
-                if (claudeProvider?.status === "ready") {
+                const codex = providers.find((provider) => provider.instanceId === "codex");
+                if (codex !== undefined && codex.checkedAt !== initialCheckedAt) {
                   return providers;
                 }
-                yield* Effect.sleep("10 millis");
+                yield* Effect.sleep("50 millis");
               }
               return yield* registry.getProviders;
             });
-            assert.strictEqual(
-              refreshed.find((provider) => provider.provider === "claudeAgent")?.status,
-              "ready",
+
+            const reprobedCodex = refreshed.find(
+              (provider) => provider.instanceId === "codex",
             );
+            assert.notStrictEqual(
+              reprobedCodex?.checkedAt,
+              initialCheckedAt,
+              "Expected a fresh probe after settings change, got the stale snapshot",
+            );
+            assert.strictEqual(reprobedCodex?.status, "error");
+            assert.strictEqual(reprobedCodex?.installed, false);
           }).pipe(Effect.provide(runtimeServices));
         }),
       );
@@ -513,12 +681,15 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             const scope = yield* Scope.make();
             yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
             const providerRegistryLayer = ProviderRegistryLive.pipe(
+              Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
               Layer.provideMerge(Layer.succeed(ServerSettingsService, serverSettings)),
               Layer.provideMerge(
                 ServerConfig.layerTest(process.cwd(), {
                   prefix: "t3-provider-registry-",
                 }),
               ),
+              Layer.provideMerge(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
+              Layer.provideMerge(OpenCodeRuntimeLive),
               Layer.provideMerge(
                 mockCommandSpawnerLayer((command, args) => {
                   if (command === "agent") {
@@ -564,18 +735,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("skips codex probes entirely when the provider is disabled", () =>
         Effect.gen(function* () {
-          const serverSettingsLayer = ServerSettingsService.layerTest({
-            providers: {
-              codex: {
-                enabled: false,
-              },
-            },
-          });
-
-          const status = yield* checkCodexProviderStatus().pipe(
-            Effect.provide(
-              Layer.mergeAll(serverSettingsLayer, failingSpawnerLayer("spawn codex ENOENT")),
-            ),
+          const status = yield* checkCodexProviderStatus(disabledCodexSettings).pipe(
+            Effect.provide(failingSpawnerLayer("spawn codex ENOENT")),
           );
           assert.strictEqual(status.provider, "codex");
           assert.strictEqual(status.enabled, false);
@@ -591,7 +752,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
     describe("checkClaudeProviderStatus", () => {
       it.effect("returns ready when claude is installed and authenticated", () =>
         Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus();
+          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
           assert.strictEqual(status.provider, "claudeAgent");
           assert.strictEqual(status.status, "ready");
           assert.strictEqual(status.installed, true);
@@ -617,7 +778,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
         "includes Claude Opus 4.7 with xhigh as the default effort on supported versions",
         () =>
           Effect.gen(function* () {
-            const status = yield* checkClaudeProviderStatus();
+            const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
             const opus47 = status.models.find((model) => model.slug === "claude-opus-4-7");
             if (!opus47) {
               assert.fail("Expected Claude Opus 4.7 to be present for Claude Code v2.1.111.");
@@ -655,7 +816,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("hides Claude Opus 4.7 on older Claude Code versions", () =>
         Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus();
+          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
           assert.strictEqual(
             status.models.some((model) => model.slug === "claude-opus-4-7"),
             false,
@@ -683,7 +844,9 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("returns a display label for claude subscription types", () =>
         Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus(() => Effect.succeed("maxplan"));
+          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings, () =>
+            Effect.succeed("maxplan"),
+          );
           assert.strictEqual(status.provider, "claudeAgent");
           assert.strictEqual(status.status, "ready");
           assert.strictEqual(status.auth.status, "authenticated");
@@ -709,6 +872,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
       it.effect("includes probed claude slash commands in the provider snapshot", () =>
         Effect.gen(function* () {
           const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
             () => Effect.succeed("maxplan"),
             () =>
               Effect.succeed([
@@ -747,6 +911,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
       it.effect("deduplicates probed claude slash commands by name", () =>
         Effect.gen(function* () {
           const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
             () => Effect.succeed("maxplan"),
             () =>
               Effect.succeed([
@@ -787,7 +952,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("returns an api key label for claude api key auth", () =>
         Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus();
+          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
           assert.strictEqual(status.provider, "claudeAgent");
           assert.strictEqual(status.status, "ready");
           assert.strictEqual(status.auth.status, "authenticated");
@@ -812,7 +977,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("returns unavailable when claude is missing", () =>
         Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus();
+          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
           assert.strictEqual(status.provider, "claudeAgent");
           assert.strictEqual(status.status, "error");
           assert.strictEqual(status.installed, false);
@@ -826,7 +991,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("returns error when version check fails with non-zero exit code", () =>
         Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus();
+          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
           assert.strictEqual(status.provider, "claudeAgent");
           assert.strictEqual(status.status, "error");
           assert.strictEqual(status.installed, true);
@@ -844,7 +1009,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("returns unauthenticated when auth status reports not logged in", () =>
         Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus();
+          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
           assert.strictEqual(status.provider, "claudeAgent");
           assert.strictEqual(status.status, "error");
           assert.strictEqual(status.installed, true);
@@ -872,7 +1037,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("returns unauthenticated when output includes 'not logged in'", () =>
         Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus();
+          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
           assert.strictEqual(status.provider, "claudeAgent");
           assert.strictEqual(status.status, "error");
           assert.strictEqual(status.installed, true);
@@ -892,7 +1057,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("returns warning when auth status command is unsupported", () =>
         Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus();
+          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
           assert.strictEqual(status.provider, "claudeAgent");
           assert.strictEqual(status.status, "warning");
           assert.strictEqual(status.installed, true);
