@@ -440,7 +440,7 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
 
           const cwd = nodePath.resolve(input.cwd.trim());
           const cursorModelSelection =
-            input.modelSelection?.provider === "cursor" ? input.modelSelection : undefined;
+            input.modelSelection?.instanceId === "cursor" ? input.modelSelection : undefined;
           const existing = sessions.get(input.threadId);
           if (existing && !existing.stopped) {
             yield* stopSessionInternal(existing);
@@ -815,7 +815,7 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
         const ctx = yield* requireSession(input.threadId);
         const turnId = TurnId.make(crypto.randomUUID());
         const turnModelSelection =
-          input.modelSelection?.provider === "cursor" ? input.modelSelection : undefined;
+          input.modelSelection?.instanceId === "cursor" ? input.modelSelection : undefined;
         const model = turnModelSelection?.model ?? ctx.session.model;
         const resolvedModel = resolveCursorAcpBaseModelId(model);
         yield* applyRequestedSessionConfiguration({

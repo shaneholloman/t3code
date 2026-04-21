@@ -6,7 +6,13 @@ import {
   DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
   ProviderOptionSelections,
 } from "./model.ts";
-import { ModelSelection, ProviderKind } from "./orchestration.ts";
+import { ModelSelection } from "./orchestration.ts";
+import {
+  ProviderDriverId,
+  ProviderInstanceConfig,
+  ProviderInstanceId,
+  ProviderKind,
+} from "./providerInstance.ts";
 
 // ── Client Settings (local-only) ───────────────────────────────
 
@@ -126,19 +132,32 @@ export const ServerSettings = Schema.Struct({
   textGenerationModelSelection: ModelSelection.pipe(
     Schema.withDecodingDefault(
       Effect.succeed({
-        provider: "codex" as const,
+        instanceId: ProviderInstanceId.make("codex"),
         model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.codex,
       }),
     ),
   ),
 
-  // Provider specific settings
+  // Legacy single-instance-per-driver settings. Continues to be the source
+  // of truth until `providerInstances` (below) lands per-driver migration
+  // shims and the server starts hydrating instances from it. Driver-specific
+  // schemas live here for the duration of the migration; once each driver
+  // owns its config in its own package, this struct shrinks to nothing and
+  // is removed entirely.
   providers: Schema.Struct({
     codex: CodexSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
     claudeAgent: ClaudeSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
     cursor: CursorSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
     opencode: OpenCodeSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   }).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  // New driver-agnostic instance map. Keyed by `ProviderInstanceId`; values
+  // are `ProviderInstanceConfig` envelopes. The driver-specific config blob
+  // is `Schema.Unknown` at this layer so envelopes with unknown drivers
+  // (forks, downgrades, in-flight PR branches) round-trip without loss.
+  // See providerInstance.ts for the forward/backward compatibility invariant.
+  providerInstances: Schema.Record(ProviderInstanceId, ProviderInstanceConfig).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 });
 export type ServerSettings = typeof ServerSettings.Type;
@@ -168,28 +187,11 @@ export const DEFAULT_UNIFIED_SETTINGS: UnifiedSettings = {
 
 // ── Server Settings Patch (replace with a Schema.deepPartial if available) ──────────────────────────────────────────
 
-const ModelSelectionPatch = Schema.Union([
-  Schema.Struct({
-    provider: Schema.optionalKey(Schema.Literal("codex")),
-    model: Schema.optionalKey(TrimmedNonEmptyString),
-    options: Schema.optionalKey(ProviderOptionSelections),
-  }),
-  Schema.Struct({
-    provider: Schema.optionalKey(Schema.Literal("claudeAgent")),
-    model: Schema.optionalKey(TrimmedNonEmptyString),
-    options: Schema.optionalKey(ProviderOptionSelections),
-  }),
-  Schema.Struct({
-    provider: Schema.optionalKey(Schema.Literal("cursor")),
-    model: Schema.optionalKey(TrimmedNonEmptyString),
-    options: Schema.optionalKey(ProviderOptionSelections),
-  }),
-  Schema.Struct({
-    provider: Schema.optionalKey(Schema.Literal("opencode")),
-    model: Schema.optionalKey(TrimmedNonEmptyString),
-    options: Schema.optionalKey(ProviderOptionSelections),
-  }),
-]);
+const ModelSelectionPatch = Schema.Struct({
+  instanceId: Schema.optionalKey(ProviderInstanceId),
+  model: Schema.optionalKey(TrimmedNonEmptyString),
+  options: Schema.optionalKey(ProviderOptionSelections),
+});
 
 const CodexSettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
@@ -240,6 +242,11 @@ export const ServerSettingsPatch = Schema.Struct({
       opencode: Schema.optionalKey(OpenCodeSettingsPatch),
     }),
   ),
+  // Whole-map replacement for the new instance config. Patching individual
+  // entries is intentionally out of scope: the map is small, and partial
+  // patches risk leaving driver-specific config in a half-merged state.
+  // The web UI sends a fully-formed map every time it edits this field.
+  providerInstances: Schema.optionalKey(Schema.Record(ProviderInstanceId, ProviderInstanceConfig)),
 });
 export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
 

@@ -2,7 +2,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import type { ModelSelection, ProviderRuntimeEvent, ProviderSession } from "@t3tools/contracts";
+import {
+  ModelSelection,
+  ProviderRuntimeEvent,
+  ProviderSession,
+  ProviderDriverId,
+  ProviderInstanceId,
+} from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import {
   ApprovalRequestId,
@@ -112,7 +118,7 @@ describe("ProviderCommandReactor", () => {
     let nextSessionIndex = 1;
     const runtimeSessions: Array<ProviderSession> = [];
     const modelSelection = input?.threadModelSelection ?? {
-      provider: "codex",
+      instanceId: ProviderInstanceId.make("codex"),
       model: "gpt-5-codex",
     };
     const startSession = vi.fn((_: unknown, input: unknown) => {
@@ -129,7 +135,11 @@ describe("ProviderCommandReactor", () => {
           ? ThreadId.make(input.threadId)
           : ThreadId.make(`thread-${sessionIndex}`);
       const session: ProviderSession = {
-        provider: modelSelection.provider,
+        // Test fixture only ever sets built-in providers; cast back to
+        // the closed `ProviderKind` to satisfy the wire schema (which
+        // still uses the closed union for `ProviderSession.provider`
+        // pending slice 2c).
+        provider: modelSelection.instanceId as ProviderSession["provider"],
         status: "ready" as const,
         runtimeMode:
           typeof input === "object" &&
@@ -352,7 +362,7 @@ describe("ProviderCommandReactor", () => {
     expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
       cwd: "/tmp/provider-project",
       modelSelection: {
-        provider: "codex",
+        instanceId: ProviderInstanceId.make("codex"),
         model: "gpt-5-codex",
       },
       runtimeMode: "approval-required",
@@ -603,7 +613,10 @@ describe("ProviderCommandReactor", () => {
 
   it("forwards claude effort options through session start and turn send", async () => {
     const harness = await createHarness({
-      threadModelSelection: { provider: "claudeAgent", model: "claude-sonnet-4-6" },
+      threadModelSelection: {
+        instanceId: ProviderInstanceId.make("claudeAgent"),
+        model: "claude-sonnet-4-6",
+      },
     });
     const now = new Date().toISOString();
 
@@ -644,7 +657,10 @@ describe("ProviderCommandReactor", () => {
 
   it("forwards claude fast mode options through session start and turn send", async () => {
     const harness = await createHarness({
-      threadModelSelection: { provider: "claudeAgent", model: "claude-opus-4-6" },
+      threadModelSelection: {
+        instanceId: ProviderInstanceId.make("claudeAgent"),
+        model: "claude-opus-4-6",
+      },
     });
     const now = new Date().toISOString();
 
@@ -766,7 +782,7 @@ describe("ProviderCommandReactor", () => {
     expect(harness.sendTurn.mock.calls[1]?.[0]).toMatchObject({
       threadId: ThreadId.make("thread-1"),
       modelSelection: {
-        provider: "codex",
+        instanceId: ProviderInstanceId.make("codex"),
         model: "gpt-5-codex",
       },
     });
@@ -774,7 +790,7 @@ describe("ProviderCommandReactor", () => {
 
   it("rejects a first turn when requested provider conflicts with the thread model", async () => {
     const harness = await createHarness({
-      threadModelSelection: { provider: "codex", model: "gpt-5-codex" },
+      threadModelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5-codex" },
     });
     const now = new Date().toISOString();
 
@@ -790,7 +806,7 @@ describe("ProviderCommandReactor", () => {
           attachments: [],
         },
         modelSelection: {
-          provider: "claudeAgent",
+          instanceId: ProviderInstanceId.make("claudeAgent"),
           model: "claude-opus-4-6",
         },
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -942,7 +958,10 @@ describe("ProviderCommandReactor", () => {
 
   it("restarts claude sessions when claude effort changes", async () => {
     const harness = await createHarness({
-      threadModelSelection: { provider: "claudeAgent", model: "claude-sonnet-4-6" },
+      threadModelSelection: {
+        instanceId: ProviderInstanceId.make("claudeAgent"),
+        model: "claude-sonnet-4-6",
+      },
     });
     const now = new Date().toISOString();
 
@@ -1086,7 +1105,10 @@ describe("ProviderCommandReactor", () => {
 
   it("does not inject derived model options when restarting claude on runtime mode changes", async () => {
     const harness = await createHarness({
-      threadModelSelection: { provider: "claudeAgent", model: "claude-opus-4-6" },
+      threadModelSelection: {
+        instanceId: ProviderInstanceId.make("claudeAgent"),
+        model: "claude-opus-4-6",
+      },
     });
     const now = new Date().toISOString();
 
@@ -1122,7 +1144,7 @@ describe("ProviderCommandReactor", () => {
 
     expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
       modelSelection: {
-        provider: "claudeAgent",
+        instanceId: ProviderInstanceId.make("claudeAgent"),
         model: "claude-opus-4-6",
       },
       runtimeMode: "approval-required",
@@ -1230,7 +1252,7 @@ describe("ProviderCommandReactor", () => {
           attachments: [],
         },
         modelSelection: {
-          provider: "claudeAgent",
+          instanceId: ProviderInstanceId.make("claudeAgent"),
           model: "claude-opus-4-6",
         },
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -1349,7 +1371,7 @@ describe("ProviderCommandReactor", () => {
     expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
       threadId: ThreadId.make("thread-1"),
       modelSelection: {
-        provider: "codex",
+        instanceId: ProviderInstanceId.make("codex"),
         model: "gpt-5-codex",
       },
       runtimeMode: "approval-required",
@@ -1451,7 +1473,7 @@ describe("ProviderCommandReactor", () => {
     harness.respondToRequest.mockImplementation(() =>
       Effect.fail(
         new ProviderAdapterRequestError({
-          provider: "codex",
+          provider: ProviderDriverId.make("codex"),
           method: "session/request_permission",
           detail: "Unknown pending permission request: approval-request-1",
         }),
@@ -1546,7 +1568,7 @@ describe("ProviderCommandReactor", () => {
     harness.respondToUserInput.mockImplementation(() =>
       Effect.fail(
         new ProviderAdapterRequestError({
-          provider: "claudeAgent",
+          provider: ProviderDriverId.make("claudeAgent"),
           method: "item/tool/respondToUserInput",
           detail: "Unknown pending user-input request: user-input-request-1",
         }),

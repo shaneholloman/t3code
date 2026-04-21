@@ -9,7 +9,7 @@ import { Effect, Layer } from "effect";
 import { createModelSelection } from "@t3tools/shared/model";
 import { expect } from "vitest";
 
-import { ServerSettingsError } from "@t3tools/contracts";
+import { ServerSettingsError, ProviderInstanceId } from "@t3tools/contracts";
 
 import { ServerConfig } from "../../config.ts";
 import { TextGeneration } from "../Services/TextGeneration.ts";
@@ -223,7 +223,7 @@ it.layer(CursorTextGenerationTestLayer)("CursorTextGenerationLive", (it) => {
           stagedSummary: "M README.md",
           stagedPatch: "diff --git a/README.md b/README.md",
           modelSelection: {
-            provider: "cursor",
+            instanceId: ProviderInstanceId.make("cursor"),
             model: "composer-2",
           },
         });
@@ -248,7 +248,7 @@ it.layer(CursorTextGenerationTestLayer)("CursorTextGenerationLive", (it) => {
           cwd: process.cwd(),
           message: "Fix the reconnect spinner after a resumed session.",
           modelSelection: {
-            provider: "cursor",
+            instanceId: ProviderInstanceId.make("cursor"),
             model: "composer-2",
           },
         });
@@ -280,7 +280,7 @@ it.layer(CursorTextGenerationTestLayer)("CursorTextGenerationLive", (it) => {
           stagedPatch:
             "diff --git a/apps/server/src/git/Layers/CursorTextGeneration.ts b/apps/server/src/git/Layers/CursorTextGeneration.ts",
           modelSelection: {
-            provider: "cursor",
+            instanceId: ProviderInstanceId.make("cursor"),
             model: "composer-2",
           },
         });

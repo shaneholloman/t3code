@@ -1146,11 +1146,11 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
         }
 
         const agent =
-          input.modelSelection?.provider === PROVIDER
+          input.modelSelection?.instanceId === PROVIDER
             ? getModelSelectionStringOptionValue(input.modelSelection, "agent")
             : undefined;
         const variant =
-          input.modelSelection?.provider === PROVIDER
+          input.modelSelection?.instanceId === PROVIDER
             ? getModelSelectionStringOptionValue(input.modelSelection, "variant")
             : undefined;
 

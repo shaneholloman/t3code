@@ -1374,10 +1374,10 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             ? { resumeCursor: input.resumeCursor }
             : {}),
           runtimeMode: input.runtimeMode,
-          ...(input.modelSelection?.provider === "codex"
+          ...(input.modelSelection?.instanceId === "codex"
             ? { model: input.modelSelection.model }
             : {}),
-          ...(input.modelSelection?.provider === "codex" &&
+          ...(input.modelSelection?.instanceId === "codex" &&
           getModelSelectionBooleanOptionValue(input.modelSelection, "fastMode") === true
             ? { serviceTier: "fast" }
             : {}),
@@ -1492,17 +1492,17 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
 
     const session = yield* requireSession(input.threadId);
     const reasoningEffort =
-      input.modelSelection?.provider === "codex"
+      input.modelSelection?.instanceId === "codex"
         ? getModelSelectionStringOptionValue(input.modelSelection, "reasoningEffort")
         : undefined;
     const fastMode =
-      input.modelSelection?.provider === "codex"
+      input.modelSelection?.instanceId === "codex"
         ? getModelSelectionBooleanOptionValue(input.modelSelection, "fastMode")
         : undefined;
     return yield* session.runtime
       .sendTurn({
         ...(input.input !== undefined ? { input: input.input } : {}),
-        ...(input.modelSelection?.provider === "codex"
+        ...(input.modelSelection?.instanceId === "codex"
           ? { model: input.modelSelection.model }
           : {}),
         ...(reasoningEffort

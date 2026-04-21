@@ -3,13 +3,15 @@
  * Codex CLI or Claude CLI implementation based on the provider in each
  * request input.
  *
- * When `modelSelection.provider` is `"claudeAgent"` the request is forwarded to
+ * When `modelSelection.instanceId` resolves to a `"claudeAgent"` driver the request is forwarded to
  * the Claude layer; for any other value (including the default `undefined`) it
  * falls through to the Codex layer.
  *
  * @module RoutingTextGeneration
  */
 import { Effect, Layer, Context } from "effect";
+
+import { isBuiltInDriverId, TextGenerationError } from "@t3tools/contracts";
 
 import { TextGeneration, type TextGenerationShape } from "../Services/TextGeneration.ts";
 import { CodexTextGenerationLive } from "./CodexTextGeneration.ts";
@@ -47,17 +49,45 @@ const makeRoutingTextGeneration = Effect.gen(function* () {
     claudeAgent: yield* ClaudeTextGen,
     cursor: yield* CursorTextGen,
     opencode: yield* OpenCodeTextGen,
+  } as const;
+
+  // `ModelSelection.provider` is an open driver-id slug — it may name a
+  // driver this build doesn't ship (fork / rollback case). Surface that
+  // as a structured `TextGenerationError` instead of an `undefined`-key
+  // crash; callers can decide whether to retry under a different driver
+  // or surface "driver not installed" to the user.
+  const route = <Op extends keyof TextGenerationShape>(
+    operation: Op,
+    provider: string,
+  ): Effect.Effect<TextGenerationShape[Op], TextGenerationError, never> => {
+    if (!isBuiltInDriverId(provider)) {
+      return Effect.fail(
+        new TextGenerationError({
+          operation,
+          detail: `No text-generation driver registered for provider "${provider}".`,
+        }),
+      );
+    }
+    return Effect.succeed(byProvider[provider][operation]);
   };
 
   return {
     generateCommitMessage: (input) =>
-      byProvider[input.modelSelection.provider].generateCommitMessage(input),
+      route("generateCommitMessage", input.modelSelection.instanceId).pipe(
+        Effect.flatMap((fn) => fn(input)),
+      ),
     generatePrContent: (input) =>
-      byProvider[input.modelSelection.provider].generatePrContent(input),
+      route("generatePrContent", input.modelSelection.instanceId).pipe(
+        Effect.flatMap((fn) => fn(input)),
+      ),
     generateBranchName: (input) =>
-      byProvider[input.modelSelection.provider].generateBranchName(input),
+      route("generateBranchName", input.modelSelection.instanceId).pipe(
+        Effect.flatMap((fn) => fn(input)),
+      ),
     generateThreadTitle: (input) =>
-      byProvider[input.modelSelection.provider].generateThreadTitle(input),
+      route("generateThreadTitle", input.modelSelection.instanceId).pipe(
+        Effect.flatMap((fn) => fn(input)),
+      ),
   } satisfies TextGenerationShape;
 });
 

@@ -9,6 +9,7 @@ import {
   type MessageId,
   type OrchestrationReadModel,
   type ProjectId,
+  ProviderInstanceId,
   type ServerConfig,
   type ServerLifecycleWelcomePayload,
   type ThreadId,
@@ -323,7 +324,7 @@ function createSnapshotForTargetUser(options: {
         title: "Project",
         workspaceRoot: "/repo/project",
         defaultModelSelection: {
-          provider: "codex",
+          instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5",
         },
         scripts: [],
@@ -338,7 +339,7 @@ function createSnapshotForTargetUser(options: {
         projectId: PROJECT_ID,
         title: THREAD_TITLE,
         modelSelection: {
-          provider: "codex",
+          instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5",
         },
         interactionMode: "default",
@@ -403,7 +404,7 @@ function addThreadToSnapshot(
         projectId: PROJECT_ID,
         title: "New thread",
         modelSelection: {
-          provider: "codex",
+          instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5",
         },
         interactionMode: "default",
@@ -740,7 +741,7 @@ function createSnapshotWithSecondaryProject(options?: {
           id: "thread-secondary-project" as ThreadId,
           projectId: SECOND_PROJECT_ID,
           title: "Release checklist",
-          modelSelection: { provider: "codex", model: "gpt-5" },
+          modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
           interactionMode: "default",
           runtimeMode: "full-access",
           branch: "release/docs-portal",
@@ -772,7 +773,7 @@ function createSnapshotWithSecondaryProject(options?: {
           id: ARCHIVED_SECONDARY_THREAD_ID,
           projectId: SECOND_PROJECT_ID,
           title: "Archived Docs Notes",
-          modelSelection: { provider: "codex", model: "gpt-5" },
+          modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
           interactionMode: "default",
           runtimeMode: "full-access",
           branch: "release/docs-archive",
@@ -807,7 +808,7 @@ function createSnapshotWithSecondaryProject(options?: {
         id: SECOND_PROJECT_ID,
         title: "Docs Portal",
         workspaceRoot: "/repo/clients/docs-portal",
-        defaultModelSelection: { provider: "codex", model: "gpt-5" },
+        defaultModelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
         scripts: [],
         createdAt: NOW_ISO,
         updatedAt: NOW_ISO,
@@ -884,7 +885,7 @@ function createSnapshotWithPendingUserInput(): OrchestrationReadModel {
 }
 
 function createSnapshotWithPlanFollowUpPrompt(options?: {
-  modelSelection?: { provider: "codex"; model: string };
+  modelSelection?: { instanceId: ProviderInstanceId; model: string };
   planMarkdown?: string;
 }): OrchestrationReadModel {
   const snapshot = createSnapshotForTargetUser({
@@ -892,7 +893,7 @@ function createSnapshotWithPlanFollowUpPrompt(options?: {
     targetText: "plan follow-up thread",
   });
   const modelSelection = options?.modelSelection ?? {
-    provider: "codex" as const,
+    instanceId: ProviderInstanceId.make("codex"),
     model: "gpt-5",
   };
   const planMarkdown =
@@ -5435,7 +5436,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
     const mounted = await mountChatView({
       viewport: WIDE_FOOTER_VIEWPORT,
       snapshot: createSnapshotWithPlanFollowUpPrompt({
-        modelSelection: { provider: "codex", model: "gpt-5.3-codex-spark" },
+        modelSelection: {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5.3-codex-spark",
+        },
         planMarkdown:
           "# Imaginary Long-Range Plan: T3 Code Adaptive Orchestration and Safe-Delay Execution Initiative",
       }),
@@ -5465,7 +5469,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
     const mounted = await mountChatView({
       viewport: WIDE_FOOTER_VIEWPORT,
       snapshot: createSnapshotWithPlanFollowUpPrompt({
-        modelSelection: { provider: "codex", model: "gpt-5.3-codex-spark" },
+        modelSelection: {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5.3-codex-spark",
+        },
         planMarkdown:
           "# Imaginary Long-Range Plan: T3 Code Adaptive Orchestration and Safe-Delay Execution Initiative",
       }),
@@ -5589,14 +5596,17 @@ describe("ChatView timeline estimator parity (full app)", () => {
         projects: snapshot.projects.map((project) =>
           project.id === PROJECT_ID
             ? Object.assign({}, project, {
-                defaultModelSelection: { provider: "codex", model: "gpt-5.4" },
+                defaultModelSelection: {
+                  instanceId: ProviderInstanceId.make("codex"),
+                  model: "gpt-5.4",
+                },
               })
             : project,
         ),
         threads: snapshot.threads.map((thread) =>
           thread.id === THREAD_ID
             ? Object.assign({}, thread, {
-                modelSelection: { provider: "codex", model: "gpt-5.4" },
+                modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
               })
             : thread,
         ),

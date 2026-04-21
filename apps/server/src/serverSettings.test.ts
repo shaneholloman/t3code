@@ -1,5 +1,10 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { DEFAULT_SERVER_SETTINGS, ServerSettings, ServerSettingsPatch } from "@t3tools/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  ProviderInstanceId,
+  ServerSettings,
+  ServerSettingsPatch,
+} from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Schema } from "effect";
@@ -56,7 +61,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         });
 
         assert.deepEqual(decoded.textGenerationModelSelection, {
-          provider: "codex",
+          instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5.4-mini",
           options: [{ id: "reasoningEffort", value: "low" }],
         });
@@ -79,7 +84,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           },
         },
         textGenerationModelSelection: {
-          provider: "codex",
+          instanceId: ProviderInstanceId.make("codex"),
           model: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection.model,
           options: createModelSelection(
             "codex",
@@ -132,7 +137,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       // Start with Claude text generation selection
       yield* serverSettings.updateSettings({
         textGenerationModelSelection: {
-          provider: "claudeAgent",
+          instanceId: ProviderInstanceId.make("claudeAgent"),
           model: "claude-sonnet-4-6",
           options: createModelSelection("claudeAgent", "claude-sonnet-4-6", [
             { id: "effort", value: "high" },
@@ -144,7 +149,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       // cause the update to lose the selected model.
       const next = yield* serverSettings.updateSettings({
         textGenerationModelSelection: {
-          provider: "codex",
+          instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5.4",
           options: createModelSelection("codex", "gpt-5.4", [
             { id: "reasoningEffort", value: "high" },
@@ -165,7 +170,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
 
       yield* serverSettings.updateSettings({
         textGenerationModelSelection: {
-          provider: "codex",
+          instanceId: ProviderInstanceId.make("codex"),
           model: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection.model,
           options: createModelSelection(
             "codex",
@@ -180,13 +185,13 @@ it.layer(NodeServices.layer)("server settings", (it) => {
 
       const next = yield* serverSettings.updateSettings({
         textGenerationModelSelection: {
-          provider: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection.provider,
+          instanceId: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection.instanceId,
           model: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection.model,
         },
       });
 
       assert.deepEqual(next.textGenerationModelSelection, {
-        provider: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection.provider,
+        instanceId: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection.instanceId,
         model: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection.model,
       });
     }).pipe(Effect.provide(makeServerSettingsLayer())),

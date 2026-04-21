@@ -10,10 +10,7 @@ import { TextGenerationError } from "@t3tools/contracts";
 import { TextGeneration } from "../Services/TextGeneration.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 
-const DEFAULT_TEST_MODEL_SELECTION = {
-  provider: "codex" as const,
-  model: "gpt-5.4-mini",
-};
+const DEFAULT_TEST_MODEL_SELECTION = createModelSelection("codex", "gpt-5.4-mini");
 
 const CodexTextGenerationTestLayer = CodexTextGenerationLive.pipe(
   Layer.provideMerge(ServerSettingsService.layerTest()),

@@ -1,3 +1,4 @@
+import { ProviderInstanceId } from "@t3tools/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path } from "effect";
@@ -264,7 +265,7 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGenerationLive", (it) => {
           cwd: process.cwd(),
           message: "Please investigate reconnect failures after restarting the session.",
           modelSelection: {
-            provider: "claudeAgent",
+            instanceId: ProviderInstanceId.make("claudeAgent"),
             model: "claude-sonnet-4-6",
           },
         });
@@ -294,7 +295,7 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGenerationLive", (it) => {
           cwd: process.cwd(),
           message: "Name this thread.",
           modelSelection: {
-            provider: "claudeAgent",
+            instanceId: ProviderInstanceId.make("claudeAgent"),
             model: "claude-sonnet-4-6",
           },
         });

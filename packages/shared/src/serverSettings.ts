@@ -44,7 +44,7 @@ export function parsePersistedServerObservabilitySettings(
 function shouldReplaceTextGenerationModelSelection(
   patch: ServerSettingsPatch["textGenerationModelSelection"] | undefined,
 ): boolean {
-  return Boolean(patch && (patch.provider !== undefined || patch.model !== undefined));
+  return Boolean(patch && (patch.instanceId !== undefined || patch.model !== undefined));
 }
 
 function mergeModelSelectionOptionsById(input: {
@@ -80,7 +80,7 @@ export function applyServerSettingsPatch(
     return next;
   }
 
-  const provider = selectionPatch.provider ?? current.textGenerationModelSelection.provider;
+  const instanceId = selectionPatch.instanceId ?? current.textGenerationModelSelection.instanceId;
   const model = selectionPatch.model ?? current.textGenerationModelSelection.model;
   const options = shouldReplaceTextGenerationModelSelection(selectionPatch)
     ? selectionPatch.options
@@ -91,6 +91,6 @@ export function applyServerSettingsPatch(
 
   return {
     ...next,
-    textGenerationModelSelection: createModelSelection(provider, model, options),
+    textGenerationModelSelection: createModelSelection(instanceId, model, options),
   };
 }

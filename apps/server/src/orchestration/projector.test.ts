@@ -77,7 +77,7 @@ describe("orchestration projector", () => {
         projectId: "project-1",
         title: "demo",
         modelSelection: {
-          provider: "codex",
+          instanceId: "codex",
           model: "gpt-5-codex",
         },
         runtimeMode: "full-access",

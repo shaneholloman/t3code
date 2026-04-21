@@ -12,6 +12,7 @@ import {
   ProviderKind,
   ThreadId,
   ModelSelection,
+  ProviderInstanceId,
 } from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
@@ -116,7 +117,7 @@ const seedProjectAndThread = (harness: OrchestrationIntegrationHarness) =>
       title: "Integration Project",
       workspaceRoot: harness.workspaceDir,
       defaultModelSelection: {
-        provider,
+        instanceId: ProviderInstanceId.make(provider),
         model: defaultModel,
       },
       createdAt,
@@ -129,7 +130,7 @@ const seedProjectAndThread = (harness: OrchestrationIntegrationHarness) =>
       projectId: PROJECT_ID,
       title: "Integration Thread",
       modelSelection: {
-        provider,
+        instanceId: ProviderInstanceId.make(provider),
         model: defaultModel,
       },
       interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -265,7 +266,7 @@ it.live.skipIf(!process.env.CODEX_BINARY_PATH)(
           title: "Integration Project",
           workspaceRoot: harness.workspaceDir,
           defaultModelSelection: {
-            provider: "codex",
+            instanceId: ProviderInstanceId.make("codex"),
             model: "gpt-5.3-codex",
           },
           createdAt,
@@ -278,7 +279,7 @@ it.live.skipIf(!process.env.CODEX_BINARY_PATH)(
           projectId: PROJECT_ID,
           title: "Integration Thread",
           modelSelection: {
-            provider: "codex",
+            instanceId: ProviderInstanceId.make("codex"),
             model: "gpt-5.3-codex",
           },
           interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -939,7 +940,7 @@ it.live("starts a claudeAgent session on first turn when provider is requested",
           messageId: "msg-user-claude-initial",
           text: "Use Claude",
           modelSelection: {
-            provider: "claudeAgent",
+            instanceId: ProviderInstanceId.make("claudeAgent"),
             model: "claude-sonnet-4-6",
           },
         });
@@ -996,7 +997,7 @@ it.live("recovers claudeAgent sessions after provider stopAll using persisted re
           messageId: "msg-user-claude-recover-1",
           text: "Before restart",
           modelSelection: {
-            provider: "claudeAgent",
+            instanceId: ProviderInstanceId.make("claudeAgent"),
             model: "claude-sonnet-4-6",
           },
         });
@@ -1106,7 +1107,7 @@ it.live("forwards claudeAgent approval responses to the provider session", () =>
           messageId: "msg-user-claude-approval",
           text: "Need approval",
           modelSelection: {
-            provider: "claudeAgent",
+            instanceId: ProviderInstanceId.make("claudeAgent"),
             model: "claude-sonnet-4-6",
           },
         });
@@ -1178,7 +1179,7 @@ it.live("forwards thread.turn.interrupt to claudeAgent provider sessions", () =>
           messageId: "msg-user-claude-interrupt",
           text: "Start long turn",
           modelSelection: {
-            provider: "claudeAgent",
+            instanceId: ProviderInstanceId.make("claudeAgent"),
             model: "claude-sonnet-4-6",
           },
         });
@@ -1251,7 +1252,7 @@ it.live("reverts claudeAgent turns and rolls back provider conversation state", 
           messageId: "msg-user-claude-revert-1",
           text: "First Claude edit",
           modelSelection: {
-            provider: "claudeAgent",
+            instanceId: ProviderInstanceId.make("claudeAgent"),
             model: "claude-sonnet-4-6",
           },
         });

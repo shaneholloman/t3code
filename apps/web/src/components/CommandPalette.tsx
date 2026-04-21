@@ -6,6 +6,7 @@ import {
   type EnvironmentId,
   type FilesystemBrowseResult,
   type ProjectId,
+  ProviderInstanceId,
 } from "@t3tools/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
@@ -786,7 +787,7 @@ function OpenCommandPaletteDialog() {
           workspaceRoot: cwd,
           createWorkspaceRootIfMissing: true,
           defaultModelSelection: {
-            provider: "codex",
+            instanceId: ProviderInstanceId.make("codex"),
             model: DEFAULT_MODEL_BY_PROVIDER.codex,
           },
           createdAt: new Date().toISOString(),

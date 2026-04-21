@@ -18,7 +18,7 @@ import type {
   ScopedProjectRef,
   ScopedThreadRef,
 } from "@t3tools/contracts";
-import { ProviderKind } from "@t3tools/contracts";
+import { isBuiltInDriverId, ProviderKind } from "@t3tools/contracts";
 import type { ThreadId, TurnId } from "@t3tools/contracts";
 import { Schema } from "effect";
 import { resolveModelSlugForProvider } from "@t3tools/shared/model";
@@ -129,12 +129,17 @@ function arraysEqual<T>(left: readonly T[], right: readonly T[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-function normalizeModelSelection<T extends { provider: ProviderKind; model: string }>(
-  selection: T,
-): T {
+// Accepts the open `instanceId` string carried on `ModelSelection` so threads
+// or projects whose persisted selection references a fork/unknown driver
+// pass through unchanged (model slug normalization just no-ops since we
+// only know aliases for built-in drivers).
+function normalizeModelSelection<T extends { instanceId: string; model: string }>(selection: T): T {
+  if (!isBuiltInDriverId(selection.instanceId)) {
+    return selection;
+  }
   return {
     ...selection,
-    model: resolveModelSlugForProvider(selection.provider, selection.model),
+    model: resolveModelSlugForProvider(selection.instanceId, selection.model),
   };
 }
 

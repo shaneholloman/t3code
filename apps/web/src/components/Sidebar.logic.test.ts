@@ -20,7 +20,13 @@ import {
   sortProjectsForSidebar,
   THREAD_JUMP_HINT_SHOW_DELAY_MS,
 } from "./Sidebar.logic";
-import { EnvironmentId, OrchestrationLatestTurn, ProjectId, ThreadId } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  OrchestrationLatestTurn,
+  ProjectId,
+  ProviderInstanceId,
+  ThreadId,
+} from "@t3tools/contracts";
 import {
   DEFAULT_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
@@ -698,7 +704,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     name: "Project",
     cwd: "/tmp/project",
     defaultModelSelection: {
-      provider: "codex",
+      instanceId: ProviderInstanceId.make("codex"),
       model: "gpt-5.4",
       ...defaultModelSelection,
     },
@@ -717,7 +723,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     projectId: ProjectId.make("project-1"),
     title: "Thread",
     modelSelection: {
-      provider: "codex",
+      instanceId: ProviderInstanceId.make("codex"),
       model: "gpt-5.4",
       ...overrides?.modelSelection,
     },

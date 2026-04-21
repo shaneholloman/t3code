@@ -1,3 +1,4 @@
+import { ProviderInstanceId } from "@t3tools/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
 import { Duration, Effect, Layer } from "effect";
@@ -97,7 +98,7 @@ const OpenCodeRuntimeTestDouble: OpenCodeRuntimeShape = {
 };
 
 const DEFAULT_TEST_MODEL_SELECTION = {
-  provider: "opencode" as const,
+  instanceId: ProviderInstanceId.make("opencode"),
   model: "openai/gpt-5",
 };
 

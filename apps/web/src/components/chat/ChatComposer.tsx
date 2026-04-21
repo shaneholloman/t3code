@@ -568,7 +568,9 @@ export const ChatComposer = memo(
     // ------------------------------------------------------------------
     const selectedProviderByThreadId = composerDraft.activeProvider ?? null;
     const threadProvider =
-      activeThreadModelSelection?.provider ?? activeProjectDefaultModelSelection?.provider ?? null;
+      activeThreadModelSelection?.instanceId ??
+      activeProjectDefaultModelSelection?.instanceId ??
+      null;
 
     const unlockedSelectedProvider = resolveSelectableProvider(
       providerStatuses,

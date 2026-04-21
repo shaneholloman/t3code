@@ -2,10 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import type {
+import {
   OrchestrationReadModel,
   ProviderRuntimeEvent,
   ProviderSession,
+  ProviderInstanceId,
 } from "@t3tools/contracts";
 import {
   ApprovalRequestId,
@@ -232,7 +233,7 @@ describe("ProviderRuntimeIngestion", () => {
         title: "Provider Project",
         workspaceRoot,
         defaultModelSelection: {
-          provider: "codex",
+          instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5-codex",
         },
         createdAt,
@@ -246,7 +247,7 @@ describe("ProviderRuntimeIngestion", () => {
         projectId: asProjectId("project-1"),
         title: "Thread",
         modelSelection: {
-          provider: "codex",
+          instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5-codex",
         },
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -909,7 +910,7 @@ describe("ProviderRuntimeIngestion", () => {
         projectId: asProjectId("project-1"),
         title: "Plan Source",
         modelSelection: {
-          provider: "codex",
+          instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5-codex",
         },
         interactionMode: "plan",
@@ -944,7 +945,7 @@ describe("ProviderRuntimeIngestion", () => {
         projectId: asProjectId("project-1"),
         title: "Plan Target",
         modelSelection: {
-          provider: "codex",
+          instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5-codex",
         },
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -1096,7 +1097,7 @@ describe("ProviderRuntimeIngestion", () => {
         projectId: asProjectId("project-1"),
         title: "Plan Source",
         modelSelection: {
-          provider: "codex",
+          instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5-codex",
         },
         interactionMode: "plan",
@@ -1249,7 +1250,7 @@ describe("ProviderRuntimeIngestion", () => {
         projectId: asProjectId("project-1"),
         title: "Plan Source",
         modelSelection: {
-          provider: "codex",
+          instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5-codex",
         },
         interactionMode: "plan",
@@ -1284,7 +1285,7 @@ describe("ProviderRuntimeIngestion", () => {
         projectId: asProjectId("project-1"),
         title: "Plan Target",
         modelSelection: {
-          provider: "codex",
+          instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5-codex",
         },
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,

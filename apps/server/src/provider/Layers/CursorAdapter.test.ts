@@ -8,7 +8,12 @@ import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 import { createModelSelection } from "@t3tools/shared/model";
 
-import { ApprovalRequestId, type ProviderRuntimeEvent, ThreadId } from "@t3tools/contracts";
+import {
+  ApprovalRequestId,
+  type ProviderRuntimeEvent,
+  ThreadId,
+  ProviderInstanceId,
+} from "@t3tools/contracts";
 
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
@@ -123,7 +128,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         provider: "cursor",
         cwd: process.cwd(),
         runtimeMode: "full-access",
-        modelSelection: { provider: "cursor", model: "default" },
+        modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
       });
 
       assert.equal(session.provider, "cursor");
@@ -208,7 +213,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         provider: "cursor",
         cwd: process.cwd(),
         runtimeMode: "full-access",
-        modelSelection: { provider: "cursor", model: "default" },
+        modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
       });
 
       yield* adapter.stopSession(threadId);
@@ -247,14 +252,14 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
               provider: "cursor",
               cwd: process.cwd(),
               runtimeMode: "full-access",
-              modelSelection: { provider: "cursor", model: "default" },
+              modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
             }),
             adapter.startSession({
               threadId,
               provider: "cursor",
               cwd: process.cwd(),
               runtimeMode: "full-access",
-              modelSelection: { provider: "cursor", model: "default" },
+              modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
             }),
           ],
           { concurrency: "unbounded" },
@@ -305,7 +310,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         provider: "cursor",
         cwd: process.cwd(),
         runtimeMode: "full-access",
-        modelSelection: { provider: "cursor", model: "composer-2" },
+        modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "composer-2" },
       });
 
       yield* adapter.sendTurn({
@@ -463,7 +468,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
             provider: "cursor",
             cwd: process.cwd(),
             runtimeMode: "approval-required",
-            modelSelection: { provider: "cursor", model: "default" },
+            modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
           });
 
           const turn = yield* adapter.sendTurn({
@@ -618,7 +623,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
           provider: "cursor",
           cwd: process.cwd(),
           runtimeMode: "full-access",
-          modelSelection: { provider: "cursor", model: "default" },
+          modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
         });
 
         const turn = yield* adapter.sendTurn({
@@ -717,7 +722,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         provider: "cursor",
         cwd: process.cwd(),
         runtimeMode: "full-access",
-        modelSelection: { provider: "cursor", model: "default" },
+        modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
       });
 
       const turn = yield* adapter.sendTurn({
@@ -839,7 +844,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         provider: "cursor",
         cwd: process.cwd(),
         runtimeMode: "approval-required",
-        modelSelection: { provider: "cursor", model: "default" },
+        modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
       });
 
       const sendTurnFiber = yield* adapter
@@ -909,7 +914,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         provider: "cursor",
         cwd: process.cwd(),
         runtimeMode: "approval-required",
-        modelSelection: { provider: "cursor", model: "default" },
+        modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
       });
 
       const sendTurnFiber = yield* adapter
@@ -952,7 +957,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         provider: "cursor",
         cwd: process.cwd(),
         runtimeMode: "full-access",
-        modelSelection: { provider: "cursor", model: "default" },
+        modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
       });
 
       const sendTurnFiber = yield* adapter
@@ -995,7 +1000,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         provider: "cursor",
         cwd: process.cwd(),
         runtimeMode: "full-access",
-        modelSelection: { provider: "cursor", model: "default" },
+        modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
       });
 
       const sendTurnFiber = yield* adapter
@@ -1038,7 +1043,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         provider: "cursor",
         cwd: process.cwd(),
         runtimeMode: "full-access",
-        modelSelection: { provider: "cursor", model: "default" },
+        modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
       });
 
       const firstEvents = Array.from(yield* Fiber.join(firstConsumer));
@@ -1076,7 +1081,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         provider: "cursor",
         cwd: process.cwd(),
         runtimeMode: "full-access",
-        modelSelection: { provider: "cursor", model: "composer-2" },
+        modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "composer-2" },
       });
 
       yield* adapter.sendTurn({
@@ -1139,7 +1144,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         provider: "cursor",
         cwd: process.cwd(),
         runtimeMode: "full-access",
-        modelSelection: { provider: "cursor", model: "composer-2" },
+        modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "composer-2" },
       });
 
       yield* adapter.sendTurn({

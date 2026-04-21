@@ -402,7 +402,7 @@ function providerSelectionsFromModelSelection(
   if (!options || options.length === 0) {
     return null;
   }
-  return { [modelSelection.provider]: options } as ProviderOptionSelectionsByProvider;
+  return { [modelSelection.instanceId]: options } as ProviderOptionSelectionsByProvider;
 }
 
 function modelSelectionByProviderToOptions(
@@ -648,6 +648,13 @@ function normalizeProviderModelOptions(
   return Object.keys(result).length > 0 ? result : null;
 }
 
+// Returns a model selection guaranteed to name a built-in driver. Unknown
+// drivers (rollback / fork case) collapse to `null` here so the composer
+// draft store — whose internal maps are keyed by the closed `ProviderKind`
+// — never has to represent them. The resulting `instanceId` is narrowed
+// to `ProviderKind` because we default instance id to the driver id for
+// built-in drivers. Routing/error surfacing for unknown drivers happens
+// elsewhere (the runtime registry, see slice 3).
 function normalizeModelSelection(
   value: unknown,
   legacy?: {
@@ -656,9 +663,14 @@ function normalizeModelSelection(
     modelOptions?: unknown;
     legacyCodex?: LegacyCodexFields;
   },
-): ModelSelection | null {
+): NormalizedModelSelection | null {
   const candidate = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
-  const provider = normalizeProviderKind(candidate?.provider ?? legacy?.provider);
+  // Post-migration ModelSelection carries `instanceId`; pre-migration (v2
+  // storage, legacy wire shapes) carries `provider`. Accept either so both
+  // normalized stores and legacy drafts round-trip through this helper.
+  const provider = normalizeProviderKind(
+    candidate?.instanceId ?? candidate?.provider ?? legacy?.provider,
+  );
   if (provider === null) {
     return null;
   }
@@ -672,7 +684,7 @@ function normalizeModelSelection(
   }
   if (Array.isArray(candidate?.options)) {
     const selections = coerceProviderOptionSelections(candidate.options);
-    return createModelSelection(provider, model, selections);
+    return createModelSelection(provider, model, selections) as NormalizedModelSelection;
   }
   const modelOptions = normalizeProviderModelOptions(
     candidate?.options ? { [provider]: candidate.options } : legacy?.modelOptions,
@@ -680,24 +692,37 @@ function normalizeModelSelection(
     provider === "codex" ? legacy?.legacyCodex : undefined,
   );
   const options = modelOptions?.[provider];
-  return createModelSelection(provider, model, options);
+  return createModelSelection(provider, model, options) as NormalizedModelSelection;
 }
 
+type NormalizedModelSelection = Omit<ModelSelection, "instanceId"> & {
+  readonly instanceId: ProviderKind;
+};
+
 // ── Legacy sync helpers (used only during migration from v2 storage) ──
+//
+// These accept the narrowed shape produced by `normalizeModelSelection`
+// (whose `instanceId` is a closed `ProviderKind`) so they can index the
+// per-provider options map directly. Unknown drivers are filtered out
+// upstream by the normalizer.
 
 function legacySyncModelSelectionOptions(
-  modelSelection: ModelSelection | null,
+  modelSelection: NormalizedModelSelection | null,
   modelOptions: ProviderOptionSelectionsByProvider | null | undefined,
-): ModelSelection | null {
+): NormalizedModelSelection | null {
   if (modelSelection === null) {
     return null;
   }
-  const options = modelOptions?.[modelSelection.provider];
-  return createModelSelection(modelSelection.provider, modelSelection.model, options);
+  const options = modelOptions?.[modelSelection.instanceId];
+  return createModelSelection(
+    modelSelection.instanceId,
+    modelSelection.model,
+    options,
+  ) as NormalizedModelSelection;
 }
 
 function legacyMergeModelSelectionIntoProviderModelOptions(
-  modelSelection: ModelSelection | null,
+  modelSelection: NormalizedModelSelection | null,
   currentModelOptions: ProviderOptionSelectionsByProvider | null | undefined,
 ): ProviderOptionSelectionsByProvider | null {
   if (!modelSelection?.options || modelSelection.options.length === 0) {
@@ -705,7 +730,7 @@ function legacyMergeModelSelectionIntoProviderModelOptions(
   }
   return legacyReplaceProviderModelOptions(
     normalizeProviderModelOptions(currentModelOptions),
-    modelSelection.provider,
+    modelSelection.instanceId,
     modelSelection.options,
   );
 }
@@ -727,7 +752,7 @@ function legacyReplaceProviderModelOptions(
 // ── New helpers for the consolidated representation ────────────────────
 
 function legacyToModelSelectionByProvider(
-  modelSelection: ModelSelection | null,
+  modelSelection: NormalizedModelSelection | null,
   modelOptions: ProviderOptionSelectionsByProvider | null | undefined,
 ): Partial<Record<ProviderKind, ModelSelection>> {
   const result: Partial<Record<ProviderKind, ModelSelection>> = {};
@@ -737,7 +762,7 @@ function legacyToModelSelectionByProvider(
       if (options && options.length > 0) {
         result[provider] = createModelSelection(
           provider,
-          modelSelection?.provider === provider
+          modelSelection?.instanceId === provider
             ? modelSelection.model
             : DEFAULT_MODEL_BY_PROVIDER[provider],
           options,
@@ -746,7 +771,7 @@ function legacyToModelSelectionByProvider(
     }
   }
   if (modelSelection) {
-    result[modelSelection.provider] = modelSelection;
+    result[modelSelection.instanceId] = modelSelection as ModelSelection;
   }
   return result;
 }
@@ -1406,7 +1431,7 @@ function normalizePersistedDraftsByThreadId(
         modelSelection,
         mergedModelOptions,
       );
-      activeProvider = modelSelection?.provider ?? null;
+      activeProvider = modelSelection?.instanceId ?? null;
     }
 
     const hasModelData =
@@ -2119,16 +2144,16 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             }
             const nextMap: Partial<Record<ProviderKind, ModelSelection>> = {
               ...state.stickyModelSelectionByProvider,
-              [normalized.provider]: normalized,
+              [normalized.instanceId]: normalized,
             };
             if (Equal.equals(state.stickyModelSelectionByProvider, nextMap)) {
-              return state.stickyActiveProvider === normalized.provider
+              return state.stickyActiveProvider === normalized.instanceId
                 ? state
-                : { stickyActiveProvider: normalized.provider };
+                : { stickyActiveProvider: normalized.instanceId };
             }
             return {
               stickyModelSelectionByProvider: nextMap,
-              stickyActiveProvider: normalized.provider,
+              stickyActiveProvider: normalized.instanceId,
             };
           });
         },
@@ -2235,20 +2260,20 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             const base = existing ?? createEmptyThreadDraft();
             const nextMap = { ...base.modelSelectionByProvider };
             if (normalized) {
-              const current = nextMap[normalized.provider];
+              const current = nextMap[normalized.instanceId];
               if (normalized.options !== undefined) {
                 // Explicit options provided → use them
-                nextMap[normalized.provider] = normalized;
+                nextMap[normalized.instanceId] = normalized as ModelSelection;
               } else {
                 // No options in selection → preserve existing options, update provider+model
-                nextMap[normalized.provider] = createModelSelection(
-                  normalized.provider,
+                nextMap[normalized.instanceId] = createModelSelection(
+                  normalized.instanceId,
                   normalized.model,
                   current?.options,
                 );
               }
             }
-            const nextActiveProvider = normalized?.provider ?? base.activeProvider;
+            const nextActiveProvider = normalized?.instanceId ?? base.activeProvider;
             if (
               Equal.equals(base.modelSelectionByProvider, nextMap) &&
               base.activeProvider === nextActiveProvider

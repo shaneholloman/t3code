@@ -277,15 +277,28 @@ const make = Effect.gen(function* () {
       ? thread.session.providerName
       : undefined;
     const requestedModelSelection = options?.modelSelection;
-    const threadProvider: ProviderKind = currentProvider ?? thread.modelSelection.provider;
+    // The thread's model selection is keyed by `instanceId` (an open slug);
+    // for built-in drivers the default instance id equals the driver id, so
+    // narrow back to the closed `ProviderKind` here. Threads persisted
+    // against a fork/unknown driver are surfaced via a structured error
+    // rather than silently routed to the wrong provider.
+    const threadProviderCandidate: string = currentProvider ?? thread.modelSelection.instanceId;
+    if (!Schema.is(ProviderKind)(threadProviderCandidate)) {
+      return yield* new ProviderAdapterRequestError({
+        provider: "codex",
+        method: "thread.turn.start",
+        detail: `Thread '${threadId}' references unknown provider driver '${threadProviderCandidate}'. The driver is not installed in this build (rolled-back / fork mismatch).`,
+      });
+    }
+    const threadProvider: ProviderKind = threadProviderCandidate;
     if (
       requestedModelSelection !== undefined &&
-      requestedModelSelection.provider !== threadProvider
+      requestedModelSelection.instanceId !== threadProvider
     ) {
       return yield* new ProviderAdapterRequestError({
         provider: threadProvider,
         method: "thread.turn.start",
-        detail: `Thread '${threadId}' is bound to provider '${threadProvider}' and cannot switch to '${requestedModelSelection.provider}'.`,
+        detail: `Thread '${threadId}' is bound to provider '${threadProvider}' and cannot switch to '${requestedModelSelection.instanceId}'.`,
       });
     }
     const preferredProvider: ProviderKind = threadProvider;
@@ -365,7 +378,7 @@ const make = Effect.gen(function* () {
         threadId,
         existingSessionThreadId,
         currentProvider,
-        desiredProvider: desiredModelSelection.provider,
+        desiredProvider: desiredModelSelection.instanceId,
         currentRuntimeMode: thread.session?.runtimeMode,
         desiredRuntimeMode: thread.runtimeMode,
         runtimeModeChanged,

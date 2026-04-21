@@ -1,7 +1,7 @@
 import { Effect, Layer, Option, Ref, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
-import { CursorModelSelection } from "@t3tools/contracts";
+import { type ModelSelection } from "@t3tools/contracts";
 import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@t3tools/shared/git";
 
 import { TextGenerationError } from "@t3tools/contracts";
@@ -74,7 +74,7 @@ const makeCursorTextGeneration = Effect.gen(function* () {
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
-    modelSelection: CursorModelSelection;
+    modelSelection: ModelSelection;
   }): Effect.Effect<S["Type"], TextGenerationError, S["DecodingServices"]> =>
     Effect.gen(function* () {
       const cursorSettings = yield* Effect.map(
@@ -186,7 +186,7 @@ const makeCursorTextGeneration = Effect.gen(function* () {
       includeBranch: input.includeBranch === true,
     });
 
-    if (input.modelSelection.provider !== "cursor") {
+    if (input.modelSelection.instanceId !== "cursor") {
       return yield* new TextGenerationError({
         operation: "generateCommitMessage",
         detail: "Invalid model selection.",
@@ -221,7 +221,7 @@ const makeCursorTextGeneration = Effect.gen(function* () {
       diffPatch: input.diffPatch,
     });
 
-    if (input.modelSelection.provider !== "cursor") {
+    if (input.modelSelection.instanceId !== "cursor") {
       return yield* new TextGenerationError({
         operation: "generatePrContent",
         detail: "Invalid model selection.",
@@ -250,7 +250,7 @@ const makeCursorTextGeneration = Effect.gen(function* () {
       attachments: input.attachments,
     });
 
-    if (input.modelSelection.provider !== "cursor") {
+    if (input.modelSelection.instanceId !== "cursor") {
       return yield* new TextGenerationError({
         operation: "generateBranchName",
         detail: "Invalid model selection.",
@@ -278,7 +278,7 @@ const makeCursorTextGeneration = Effect.gen(function* () {
       attachments: input.attachments,
     });
 
-    if (input.modelSelection.provider !== "cursor") {
+    if (input.modelSelection.instanceId !== "cursor") {
       return yield* new TextGenerationError({
         operation: "generateThreadTitle",
         detail: "Invalid model selection.",

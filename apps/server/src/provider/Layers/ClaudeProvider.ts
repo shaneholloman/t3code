@@ -1,7 +1,7 @@
 import type {
   ClaudeSettings,
-  ClaudeModelSelection,
   ModelCapabilities,
+  ModelSelection,
   ServerProvider,
   ServerProviderModel,
   ServerProviderAuth,
@@ -242,7 +242,7 @@ export function normalizeClaudeCliEffort(effort: string | null | undefined): str
   return effort;
 }
 
-export function resolveClaudeApiModelId(modelSelection: ClaudeModelSelection): string {
+export function resolveClaudeApiModelId(modelSelection: ModelSelection): string {
   switch (getModelSelectionStringOptionValue(modelSelection, "contextWindow")) {
     case "1m":
       return `${modelSelection.model}[1m]`;

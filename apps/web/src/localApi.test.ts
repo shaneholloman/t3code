@@ -6,6 +6,7 @@ import {
   type GitStatusResult,
   ProjectId,
   type OrchestrationShellStreamItem,
+  ProviderInstanceId,
   type ServerConfig,
   type ServerProvider,
   type TerminalEvent,
@@ -328,7 +329,7 @@ describe("wsApi", () => {
         title: "Project",
         workspaceRoot: "/tmp/workspace",
         defaultModelSelection: {
-          provider: "codex",
+          instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5-codex",
         },
         scripts: [],
@@ -394,7 +395,7 @@ describe("wsApi", () => {
       title: "Project",
       workspaceRoot: "/tmp/project",
       defaultModelSelection: {
-        provider: "codex",
+        instanceId: ProviderInstanceId.make("codex"),
         model: "gpt-5-codex",
       },
       createdAt: "2026-02-24T00:00:00.000Z",

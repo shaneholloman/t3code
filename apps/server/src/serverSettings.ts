@@ -13,8 +13,10 @@
 import {
   DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
   DEFAULT_SERVER_SETTINGS,
+  isBuiltInDriverId,
   type ModelSelection,
   type ProviderKind,
+  ProviderInstanceId,
   ServerSettings,
   ServerSettingsError,
   type ServerSettingsPatch,
@@ -116,22 +118,29 @@ const PROVIDER_ORDER: readonly ProviderKind[] = ["codex", "claudeAgent", "openco
  */
 function resolveTextGenerationProvider(settings: ServerSettings): ServerSettings {
   const selection = settings.textGenerationModelSelection;
-  if (settings.providers[selection.provider].enabled) {
+  // `selection.instanceId` is now an open routing slug. For built-in drivers
+  // the default instance id equals the driver id; any value outside the
+  // built-in set is treated as "disabled" for fallback purposes — the user
+  // rolled back / switched away from a fork that defined that driver, so
+  // we can't look up an enabled flag for it.
+  if (
+    isBuiltInDriverId(selection.instanceId) &&
+    settings.providers[selection.instanceId as ProviderKind].enabled
+  ) {
     return settings;
   }
 
   const fallback = PROVIDER_ORDER.find((p) => settings.providers[p].enabled);
   if (!fallback) {
-    // No providers enabled — return as-is; callers will report the error.
     return settings;
   }
 
   return {
     ...settings,
     textGenerationModelSelection: {
-      provider: fallback,
+      instanceId: ProviderInstanceId.make(fallback),
       model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[fallback],
-    } as ModelSelection,
+    } satisfies ModelSelection,
   };
 }
 

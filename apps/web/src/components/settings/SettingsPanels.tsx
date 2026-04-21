@@ -12,6 +12,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import {
   type DesktopUpdateChannel,
+  isBuiltInDriverId,
   type ScopedThreadRef,
   type ProviderKind,
   type ServerProvider,
@@ -620,7 +621,14 @@ export function GeneralSettingsPanel() {
   })();
 
   const textGenerationModelSelection = resolveAppModelSelectionState(settings, serverProviders);
-  const textGenProvider = textGenerationModelSelection.provider;
+  // `resolveAppModelSelectionState` already routes through
+  // `resolveSelectableProvider`, which falls back to a built-in driver
+  // when the persisted selection names an unknown one — so a narrow with
+  // "codex" fallback is purely a typing safety net here, not a behavior
+  // change.
+  const textGenProvider: ProviderKind = isBuiltInDriverId(textGenerationModelSelection.instanceId)
+    ? textGenerationModelSelection.instanceId
+    : "codex";
   const textGenModel = textGenerationModelSelection.model;
   const textGenModelOptions = textGenerationModelSelection.options;
   const gitModelOptionsByProvider = getCustomModelOptionsByProvider(

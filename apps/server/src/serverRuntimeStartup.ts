@@ -4,6 +4,7 @@ import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   type ModelSelection,
   ProjectId,
+  ProviderInstanceId,
   ThreadId,
 } from "@t3tools/contracts";
 import {
@@ -154,7 +155,7 @@ export const launchStartupHeartbeat = recordStartupHeartbeat.pipe(
 );
 
 export const getAutoBootstrapDefaultModelSelection = (): ModelSelection => ({
-  provider: "codex",
+  instanceId: ProviderInstanceId.make("codex"),
   model: DEFAULT_MODEL_BY_PROVIDER.codex,
 });
 

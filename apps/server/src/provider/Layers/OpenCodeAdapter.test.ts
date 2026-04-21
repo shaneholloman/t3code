@@ -5,7 +5,7 @@ import { it } from "@effect/vitest";
 import { Effect, Layer, Option } from "effect";
 import { beforeEach } from "vitest";
 
-import { ThreadId } from "@t3tools/contracts";
+import { ThreadId, ProviderInstanceId } from "@t3tools/contracts";
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
@@ -276,7 +276,7 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
           threadId: asThreadId("thread-send-turn-failure"),
           input: "Fix it",
           modelSelection: {
-            provider: "opencode",
+            instanceId: ProviderInstanceId.make("opencode"),
             model: "openai/gpt-5",
           },
         })

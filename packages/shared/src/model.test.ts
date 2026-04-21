@@ -187,7 +187,7 @@ describe("descriptor helpers", () => {
         { id: "fastMode", value: true },
       ]),
     ).toEqual({
-      provider: "codex",
+      instanceId: "codex",
       model: "gpt-5.4",
       options: [
         { id: "reasoningEffort", value: "high" },

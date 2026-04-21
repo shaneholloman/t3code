@@ -1,5 +1,6 @@
 import {
   DEFAULT_MODEL_BY_PROVIDER,
+  isBuiltInDriverId,
   type ModelCapabilities,
   type ProviderKind,
   type ServerProvider,
@@ -58,11 +59,15 @@ export function isProviderEnabled(
   return getProviderSnapshot(providers, provider)?.enabled ?? false;
 }
 
+// Accepts the open-driver string carried on `ModelSelection.provider` so
+// persisted/threaded selections referencing an unknown driver (rollback /
+// fork case) degrade to the first enabled built-in instead of crashing
+// downstream code that requires a closed `ProviderKind`.
 export function resolveSelectableProvider(
   providers: ReadonlyArray<ServerProvider>,
-  provider: ProviderKind | null | undefined,
+  provider: ProviderKind | string | null | undefined,
 ): ProviderKind {
-  const requested = provider ?? "codex";
+  const requested: ProviderKind = provider && isBuiltInDriverId(provider) ? provider : "codex";
   if (isProviderEnabled(providers, requested)) {
     return requested;
   }

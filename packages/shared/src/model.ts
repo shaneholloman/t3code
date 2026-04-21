@@ -3,6 +3,7 @@ import {
   MODEL_SLUG_ALIASES_BY_PROVIDER,
   type ModelCapabilities,
   type ModelSelection,
+  ProviderInstanceId,
   type ProviderOptionDescriptor,
   type ProviderOptionSelection,
   type ProviderKind,
@@ -309,17 +310,27 @@ function cloneSelections(
   return selections.map(cloneSelection);
 }
 
+// Accepts both the closed `ProviderKind` (for built-in callers that still
+// statically know the driver) and any `string` (post-migration callers pass
+// a `ProviderInstanceId` routing key — see `ModelSelection.instanceId`
+// docstring on why that field is intentionally an open slug).
+//
+// Note: the parameter is named `provider` for back-compat with the many
+// built-in callers that still pass the driver id literally. For built-in
+// drivers the default instance id equals the driver id, so no mapping is
+// needed. Callers targeting a non-default instance should pass its
+// instance id directly.
 export function createModelSelection(
-  provider: ProviderKind,
+  provider: ProviderKind | (string & {}),
   model: string,
   options?: ReadonlyArray<ProviderOptionSelection> | null,
 ): ModelSelection {
   const selections = options ? cloneSelections(options) : [];
-  return {
-    provider,
+  const base: ModelSelection = {
+    instanceId: ProviderInstanceId.make(provider),
     model,
-    ...(selections.length > 0 ? { options: selections } : {}),
-  } as ModelSelection;
+  };
+  return selections.length > 0 ? { ...base, options: selections } : base;
 }
 
 /**

@@ -11,7 +11,7 @@ import {
 import { KeybindingRule, ResolvedKeybindingsConfig } from "./keybindings.ts";
 import { EditorId } from "./editor.ts";
 import { ModelCapabilities } from "./model.ts";
-import { ProviderKind } from "./orchestration.ts";
+import { ProviderDriverId, ProviderInstanceId, ProviderKind } from "./providerInstance.ts";
 import { ServerSettings } from "./settings.ts";
 
 const KeybindingsMalformedConfigIssue = Schema.Struct({
@@ -83,8 +83,42 @@ export const ServerProviderSkill = Schema.Struct({
 });
 export type ServerProviderSkill = typeof ServerProviderSkill.Type;
 
+/**
+ * Availability of a configured provider instance from the runtime's POV.
+ *
+ *  - `available` — the build ships this driver and an instance is wired
+ *    up. Default for legacy snapshots produced from the closed
+ *    `ServerSettings.providers` map.
+ *  - `unavailable` — the user's `ServerSettings.providerInstances` (or a
+ *    persisted thread / session binding) references a driver this build
+ *    doesn't ship. Common after rolling back from a fork or PR branch
+ *    that introduced a new driver. The snapshot is preserved so the UI
+ *    can render "missing driver" affordances and so the data round-trips
+ *    when the user moves back to the fork.
+ *
+ * Snapshots with `availability: "unavailable"` MUST set
+ * `installed: false` and `enabled: false`; the runtime refuses turn
+ * starts against them with a structured error.
+ */
+export const ServerProviderAvailability = Schema.Literals(["available", "unavailable"]);
+export type ServerProviderAvailability = typeof ServerProviderAvailability.Type;
+
 export const ServerProvider = Schema.Struct({
   provider: ProviderKind,
+  // Routing key for the configured instance this snapshot represents.
+  // Optional during the migration: once `ProviderInstanceRegistry` is the
+  // sole producer (post-slice-4) every snapshot will carry it and routing
+  // by `provider` is removed. Multiple snapshots may share the same
+  // `provider` (multiple instances of the same driver) and disambiguate
+  // by `instanceId`.
+  instanceId: Schema.optional(ProviderInstanceId),
+  // Open driver-id slug. Always present on instance-aware snapshots; for
+  // built-in drivers it equals `provider`. For unavailable snapshots
+  // (driver not installed in this build) `provider` is forced to a
+  // placeholder built-in for wire-shape compatibility while `driver`
+  // carries the real fork id — consumers branching on driver behavior
+  // should prefer `driver`.
+  driver: Schema.optional(ProviderDriverId),
   displayName: Schema.optional(TrimmedNonEmptyString),
   badgeLabel: Schema.optional(TrimmedNonEmptyString),
   showInteractionModeToggle: Schema.optional(Schema.Boolean),
@@ -95,6 +129,15 @@ export const ServerProvider = Schema.Struct({
   auth: ServerProviderAuth,
   checkedAt: IsoDateTime,
   message: Schema.optional(TrimmedNonEmptyString),
+  // Optional for back-compat: every legacy producer omits this field and
+  // an absent value is interpreted as `"available"` by consumers (see
+  // `isProviderAvailable`). New `ProviderInstanceRegistry` outputs set it
+  // explicitly so the UI can render unavailable shadows from
+  // `ServerSettings.providerInstances`.
+  availability: Schema.optional(ServerProviderAvailability),
+  // Human-readable reason populated when `availability === "unavailable"`.
+  // Surfaces in the UI alongside the missing-driver affordance.
+  unavailableReason: Schema.optional(TrimmedNonEmptyString),
   models: Schema.Array(ServerProviderModel),
   slashCommands: Schema.Array(ServerProviderSlashCommand).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
@@ -105,6 +148,15 @@ export type ServerProvider = typeof ServerProvider.Type;
 
 export const ServerProviders = Schema.Array(ServerProvider);
 export type ServerProviders = typeof ServerProviders.Type;
+
+/**
+ * Treat the optional `availability` as "available" when absent. This is
+ * the rule legacy producers (which omit the field) and new producers
+ * (which set it explicitly) agree on so consumers never have to thread
+ * `?? "available"` defaults through their code paths.
+ */
+export const isProviderAvailable = (snapshot: ServerProvider): boolean =>
+  snapshot.availability !== "unavailable";
 
 export const ServerObservability = Schema.Struct({
   logsDirectoryPath: TrimmedNonEmptyString,
