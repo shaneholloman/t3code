@@ -1368,10 +1368,8 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             ? { resumeCursor: input.resumeCursor }
             : {}),
           runtimeMode: input.runtimeMode,
-          ...(input.modelSelection?.instanceId === "codex"
-            ? { model: input.modelSelection.model }
-            : {}),
-          ...(input.modelSelection?.instanceId === "codex" &&
+          ...(input.modelSelection ? { model: input.modelSelection.model } : {}),
+          ...(input.modelSelection &&
           getModelSelectionOptionValue(input.modelSelection, "fastMode") === true
             ? { serviceTier: "fast" }
             : {}),
