@@ -207,9 +207,7 @@ export function getProviderInstanceEntry(
   providers: ReadonlyArray<ServerProvider>,
   instanceId: ProviderInstanceId,
 ): ProviderInstanceEntry | undefined {
-  return deriveProviderInstanceEntries(providers).find(
-    (entry) => entry.instanceId === instanceId,
-  );
+  return deriveProviderInstanceEntries(providers).find((entry) => entry.instanceId === instanceId);
 }
 
 /**

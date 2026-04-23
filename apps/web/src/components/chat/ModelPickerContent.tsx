@@ -385,11 +385,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   );
   const filteredModelByKey = useMemo(
     (): ReadonlyMap<string, ModelPickerItem> =>
-      new Map(
-        filteredModels.map(
-          (model) => [`${model.instanceId}:${model.slug}`, model] as const,
-        ),
-      ),
+      new Map(filteredModels.map((model) => [`${model.instanceId}:${model.slug}`, model] as const)),
     [filteredModels],
   );
   const modelJumpShortcutContext = useMemo(

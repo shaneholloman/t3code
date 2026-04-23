@@ -51,10 +51,7 @@ export const scopedSafeTeardown =
   <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, Exclude<R, Scope.Scope>> =>
     Effect.gen(function* () {
       const scope = yield* Scope.make();
-      const bodyExit = yield* effect.pipe(
-        Effect.provideService(Scope.Scope, scope),
-        Effect.exit,
-      );
+      const bodyExit = yield* effect.pipe(Effect.provideService(Scope.Scope, scope), Effect.exit);
       yield* Scope.close(scope, Exit.void).pipe(
         Effect.catchCause((cause) =>
           Effect.logWarning(`${label} teardown errored; preserving body result`, cause),

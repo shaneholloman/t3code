@@ -2,11 +2,7 @@
 
 import { InfoIcon, PlusIcon, XIcon } from "lucide-react";
 import { useRef, useState } from "react";
-import type {
-  ProviderInstanceId,
-  ProviderKind,
-  ServerProviderModel,
-} from "@t3tools/contracts";
+import type { ProviderInstanceId, ProviderKind, ServerProviderModel } from "@t3tools/contracts";
 import { normalizeModelSlug } from "@t3tools/shared/model";
 
 import { MAX_CUSTOM_MODEL_LENGTH } from "../../modelSelection";
@@ -81,9 +77,7 @@ export function ProviderModelsSection({
     // alias tables are keyed by closed `ProviderKind`), so keep the
     // verbatim trimmed slug for forks. Built-in drivers still get alias
     // rewrites ("sonnet" → "claude-sonnet-4-6" etc).
-    const normalized = driverKind
-      ? normalizeModelSlug(input, driverKind)
-      : input.trim() || null;
+    const normalized = driverKind ? normalizeModelSlug(input, driverKind) : input.trim() || null;
     if (!normalized) {
       setError("Enter a model slug.");
       return;

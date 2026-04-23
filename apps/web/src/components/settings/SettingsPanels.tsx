@@ -718,8 +718,7 @@ export function GeneralSettingsPanel() {
    */
   const resetDefaultInstance = (driverKind: ProviderKind) => {
     const defaultInstanceId = defaultInstanceIdForDriver(ProviderDriverId.make(driverKind));
-    const { [defaultInstanceId]: _removed, ...restInstances } =
-      settings.providerInstances ?? {};
+    const { [defaultInstanceId]: _removed, ...restInstances } = settings.providerInstances ?? {};
     updateSettings({
       providers: {
         ...settings.providers,
@@ -1050,9 +1049,8 @@ export function GeneralSettingsPanel() {
                   // first-kind-match) so a custom text-gen instance like
                   // `codex_personal` gets its own model list, not the
                   // default Codex one.
-                  gitModelInstanceEntries.find(
-                    (entry) => entry.instanceId === textGenInstanceId,
-                  )?.models ??
+                  gitModelInstanceEntries.find((entry) => entry.instanceId === textGenInstanceId)
+                    ?.models ??
                   serverProviders.find((provider) => provider.provider === textGenProvider)
                     ?.models ??
                   []
@@ -1167,8 +1165,7 @@ export function GeneralSettingsPanel() {
                 // untouched).
                 const wasEnabled = row.instance.enabled ?? true;
                 const isDisabling = next.enabled === false && wasEnabled;
-                const shouldClearTextGen =
-                  isDisabling && textGenInstanceId === row.instanceId;
+                const shouldClearTextGen = isDisabling && textGenInstanceId === row.instanceId;
                 if (shouldClearTextGen) {
                   updateSettings({
                     providerInstances: {
@@ -1182,9 +1179,7 @@ export function GeneralSettingsPanel() {
                   updateProviderInstance(row.instanceId, next);
                 }
               }}
-              onDelete={
-                row.isDefault ? undefined : () => deleteProviderInstance(row.instanceId)
-              }
+              onDelete={row.isDefault ? undefined : () => deleteProviderInstance(row.instanceId)}
               headerAction={headerAction}
             />
           );

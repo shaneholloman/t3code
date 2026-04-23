@@ -104,9 +104,7 @@ const PersistedComposerThreadDraftState = Schema.Struct({
   // key set, and `Schema.Record(<branded string>, …)` produces an index
   // signature at runtime (Schema rejects the combination). Absence of
   // an entry already encodes "no selection for this instance".
-  modelSelectionByProvider: Schema.optionalKey(
-    Schema.Record(ProviderInstanceId, ModelSelection),
-  ),
+  modelSelectionByProvider: Schema.optionalKey(Schema.Record(ProviderInstanceId, ModelSelection)),
   activeProvider: Schema.optionalKey(Schema.NullOr(ProviderInstanceId)),
   runtimeMode: Schema.optionalKey(RuntimeMode),
   interactionMode: Schema.optionalKey(ProviderInteractionMode),
@@ -446,15 +444,14 @@ function cloneModelSelection(selection: ModelSelection): DeepMutable<ModelSelect
   } as DeepMutable<ModelSelection>;
 }
 
-function cloneModelSelectionByProvider(
-  selections: Partial<Record<ProviderKind, ModelSelection>>,
-): DeepMutable<Partial<Record<ProviderKind, ModelSelection>>> {
+function compactModelSelectionByProvider(
+  selections: Partial<Record<ProviderInstanceId, ModelSelection>>,
+): DeepMutable<Record<ProviderInstanceId, ModelSelection>> {
   return Object.fromEntries(
-    Object.entries(selections).map(([provider, selection]) => [
-      provider,
-      selection ? cloneModelSelection(selection) : selection,
-    ]),
-  ) as DeepMutable<Partial<Record<ProviderKind, ModelSelection>>>;
+    Object.entries(selections)
+      .filter((entry): entry is [string, ModelSelection] => entry[1] !== undefined)
+      .map(([provider, selection]) => [provider, cloneModelSelection(selection)]),
+  ) as DeepMutable<Record<ProviderInstanceId, ModelSelection>>;
 }
 
 const EMPTY_PERSISTED_DRAFT_STORE_STATE = Object.freeze<PersistedComposerDraftStoreState>({
@@ -1547,7 +1544,7 @@ function normalizePersistedDraftsByThreadId(
       ...(terminalContexts.length > 0 ? { terminalContexts } : {}),
       ...(hasModelData
         ? {
-            modelSelectionByProvider: cloneModelSelectionByProvider(modelSelectionByProvider),
+            modelSelectionByProvider: compactModelSelectionByProvider(modelSelectionByProvider),
             activeProvider,
           }
         : {}),
@@ -1606,7 +1603,7 @@ function migratePersistedComposerDraftStoreState(
     draftsByThreadKey,
     draftThreadsByThreadKey,
     logicalProjectDraftThreadKeyByLogicalProjectKey,
-    stickyModelSelectionByProvider,
+    stickyModelSelectionByProvider: compactModelSelectionByProvider(stickyModelSelectionByProvider),
     stickyActiveProvider,
   };
 }
@@ -1651,7 +1648,9 @@ function partializeComposerDraftStoreState(
         : {}),
       ...(hasModelData
         ? {
-            modelSelectionByProvider: cloneModelSelectionByProvider(draft.modelSelectionByProvider),
+            modelSelectionByProvider: compactModelSelectionByProvider(
+              draft.modelSelectionByProvider,
+            ),
             activeProvider: draft.activeProvider,
           }
         : {}),
@@ -1665,7 +1664,9 @@ function partializeComposerDraftStoreState(
     draftThreadsByThreadKey: state.draftThreadsByThreadKey,
     logicalProjectDraftThreadKeyByLogicalProjectKey:
       state.logicalProjectDraftThreadKeyByLogicalProjectKey,
-    stickyModelSelectionByProvider: state.stickyModelSelectionByProvider,
+    stickyModelSelectionByProvider: compactModelSelectionByProvider(
+      state.stickyModelSelectionByProvider,
+    ),
     stickyActiveProvider: state.stickyActiveProvider,
   };
 }
@@ -1735,7 +1736,7 @@ function normalizeCurrentPersistedComposerDraftStoreState(
     ),
     draftThreadsByThreadKey,
     logicalProjectDraftThreadKeyByLogicalProjectKey,
-    stickyModelSelectionByProvider,
+    stickyModelSelectionByProvider: compactModelSelectionByProvider(stickyModelSelectionByProvider),
     stickyActiveProvider,
   };
 }

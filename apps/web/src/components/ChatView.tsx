@@ -3153,9 +3153,7 @@ export default function ChatView(props: ChatViewProps) {
       // instance ids (e.g. a stale thread selection after the user deleted
       // the custom instance) fall through to the legacy kind-keyed path
       // with a best-effort driver kind so we don't silently no-op.
-      const entry = providerStatuses.find(
-        (snapshot) => snapshot.instanceId === instanceId,
-      );
+      const entry = providerStatuses.find((snapshot) => snapshot.instanceId === instanceId);
       const resolvedDriverKind = entry?.provider ?? null;
       if (
         lockedProvider !== null &&

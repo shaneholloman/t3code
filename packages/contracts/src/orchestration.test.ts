@@ -410,7 +410,7 @@ it.effect("normalizes legacy object-shaped modelSelection.options on decode", ()
       updatedAt: "2026-01-01T00:00:00.000Z",
     });
 
-    assert.strictEqual(parsed.modelSelection.provider, "claudeAgent");
+    assert.strictEqual(parsed.modelSelection.instanceId, ProviderInstanceId.make("claudeAgent"));
     assert.deepStrictEqual(parsed.modelSelection.options, [
       { id: "effort", value: "max" },
       { id: "fastMode", value: true },

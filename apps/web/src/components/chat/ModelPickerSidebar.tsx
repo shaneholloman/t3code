@@ -67,9 +67,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
       {/* Favorites section */}
       <div className="pb-1 mb-1 border-b">
         <div className="relative w-full">
-          {props.selectedInstanceId === "favorites" && (
-            <div className={SELECTED_INDICATOR_CLASS} />
-          )}
+          {props.selectedInstanceId === "favorites" && <div className={SELECTED_INDICATOR_CLASS} />}
           <Tooltip>
             <TooltipTrigger
               render={
@@ -123,11 +121,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
             disabled={isDisabled}
             type="button"
             aria-label={
-              isDisabled
-                ? tooltip
-                : showNewBadge
-                  ? `${entry.displayName}, new`
-                  : entry.displayName
+              isDisabled ? tooltip : showNewBadge ? `${entry.displayName}, new` : entry.displayName
             }
           >
             <OptionIcon className="size-5 shrink-0" aria-hidden />

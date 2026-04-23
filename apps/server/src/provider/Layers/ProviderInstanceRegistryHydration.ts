@@ -122,11 +122,13 @@ const SettingsWatcherLive: Layer.Layer<
     const serverSettings = yield* ServerSettingsService;
     yield* serverSettings.streamChanges.pipe(
       Stream.runForEach((next) =>
-        mutator.reconcile(deriveProviderInstanceConfigMap(next)).pipe(
-          Effect.catchCause((cause) =>
-            Effect.logError("ProviderInstanceRegistry reconcile failed", cause),
+        mutator
+          .reconcile(deriveProviderInstanceConfigMap(next))
+          .pipe(
+            Effect.catchCause((cause) =>
+              Effect.logError("ProviderInstanceRegistry reconcile failed", cause),
+            ),
           ),
-        ),
       ),
       Effect.forkScoped,
     );

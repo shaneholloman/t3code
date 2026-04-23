@@ -250,9 +250,7 @@ async function mountPicker(props: {
   document.body.append(host);
   const onInstanceModelChange = vi.fn();
   const providers = props.providers ?? TEST_PROVIDERS;
-  const instanceEntries = sortProviderInstanceEntries(
-    deriveProviderInstanceEntries(providers),
-  );
+  const instanceEntries = sortProviderInstanceEntries(deriveProviderInstanceEntries(providers));
   // The legacy test shape passes a driver kind; translate to the default
   // instance id for that kind (they're the same string by design).
   const activeInstanceId = props.provider as unknown as ProviderInstanceId;

@@ -20,10 +20,7 @@ import {
   resolveSelectableProvider,
 } from "./providerModels";
 import { ModelEsque } from "./components/chat/providerIconUtils";
-import {
-  type ProviderInstanceEntry,
-  deriveProviderInstanceEntries,
-} from "./providerInstances";
+import { type ProviderInstanceEntry, deriveProviderInstanceEntries } from "./providerInstances";
 
 const MAX_CUSTOM_MODEL_COUNT = 32;
 export const MAX_CUSTOM_MODEL_LENGTH = 256;
@@ -191,11 +188,7 @@ export function getAppModelOptionsForInstance(
   );
 
   const customModels = readInstanceCustomModels(settings, entry.instanceId, entry.driverKind);
-  for (const slug of normalizeCustomModelSlugs(
-    customModels,
-    builtInModelSlugs,
-    entry.driverKind,
-  )) {
+  for (const slug of normalizeCustomModelSlugs(customModels, builtInModelSlugs, entry.driverKind)) {
     if (seen.has(slug)) {
       continue;
     }

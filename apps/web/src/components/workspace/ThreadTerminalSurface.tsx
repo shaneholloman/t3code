@@ -175,7 +175,7 @@ export function ThreadTerminalSurface(props: { threadRef: ScopedThreadRef }) {
           storeSetTerminalHeight(threadRef, height);
         }}
         onAddTerminalContext={handleAddTerminalContext}
-        showResizeHandle={false}
+        keybindings={[]}
       />
     </div>
   );

@@ -645,9 +645,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
               return yield* registry.getProviders;
             });
 
-            const reprobedCodex = refreshed.find(
-              (provider) => provider.instanceId === "codex",
-            );
+            const reprobedCodex = refreshed.find((provider) => provider.instanceId === "codex");
             assert.notStrictEqual(
               reprobedCodex?.checkedAt,
               initialCheckedAt,
