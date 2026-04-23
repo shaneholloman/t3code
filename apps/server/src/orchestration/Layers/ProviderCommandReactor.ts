@@ -170,6 +170,22 @@ const make = Effect.gen(function* () {
       ),
     );
 
+  const resolveDriverKindForInstanceId = (
+    instanceId: string,
+  ): Effect.Effect<ProviderKind | undefined> => {
+    if (Schema.is(ProviderKind)(instanceId)) {
+      return Effect.succeed(instanceId);
+    }
+    return serverSettingsService.getSettings.pipe(
+      Effect.map((settings) => {
+        const instances = settings.providerInstances as Record<string, { driver?: string }>;
+        const driver = instances[instanceId]?.driver;
+        return driver !== undefined && Schema.is(ProviderKind)(driver) ? driver : undefined;
+      }),
+      Effect.orElseSucceed(() => undefined),
+    );
+  };
+
   const threadModelSelections = new Map<string, ModelSelection>();
 
   const appendProviderFailureActivity = (input: {
@@ -277,29 +293,28 @@ const make = Effect.gen(function* () {
       ? thread.session.providerName
       : undefined;
     const requestedModelSelection = options?.modelSelection;
-    // The thread's model selection is keyed by `instanceId` (an open slug);
-    // for built-in drivers the default instance id equals the driver id, so
-    // narrow back to the closed `ProviderKind` here. Threads persisted
-    // against a fork/unknown driver are surfaced via a structured error
-    // rather than silently routed to the wrong provider.
-    const threadProviderCandidate: string = currentProvider ?? thread.modelSelection.instanceId;
-    if (!Schema.is(ProviderKind)(threadProviderCandidate)) {
+    const threadInstanceId: string = currentProvider ?? thread.modelSelection.instanceId;
+    const resolvedThreadDriver: ProviderKind | undefined =
+      yield* resolveDriverKindForInstanceId(threadInstanceId);
+    if (resolvedThreadDriver === undefined) {
       return yield* new ProviderAdapterRequestError({
-        provider: "codex",
+        provider: threadInstanceId,
         method: "thread.turn.start",
-        detail: `Thread '${threadId}' references unknown provider driver '${threadProviderCandidate}'. The driver is not installed in this build (rolled-back / fork mismatch).`,
+        detail: `Thread '${threadId}' references unknown provider driver '${threadInstanceId}'. The driver is not installed in this build (rolled-back / fork mismatch).`,
       });
     }
-    const threadProvider: ProviderKind = threadProviderCandidate;
-    if (
-      requestedModelSelection !== undefined &&
-      requestedModelSelection.instanceId !== threadProvider
-    ) {
-      return yield* new ProviderAdapterRequestError({
-        provider: threadProvider,
-        method: "thread.turn.start",
-        detail: `Thread '${threadId}' is bound to provider '${threadProvider}' and cannot switch to '${requestedModelSelection.instanceId}'.`,
-      });
+    const threadProvider: ProviderKind = resolvedThreadDriver;
+    if (requestedModelSelection !== undefined) {
+      const requestedDriver: ProviderKind | undefined = yield* resolveDriverKindForInstanceId(
+        requestedModelSelection.instanceId,
+      );
+      if (requestedDriver !== threadProvider) {
+        return yield* new ProviderAdapterRequestError({
+          provider: threadProvider,
+          method: "thread.turn.start",
+          detail: `Thread '${threadId}' is bound to provider '${threadProvider}' and cannot switch to '${requestedModelSelection.instanceId}'.`,
+        });
+      }
     }
     const preferredProvider: ProviderKind = threadProvider;
     const desiredModelSelection = requestedModelSelection ?? thread.modelSelection;
