@@ -250,7 +250,18 @@ function resolveDesktopPairingUrl(endpointUrl: string, credential: string): stri
   return setPairingTokenOnUrl(url, credential).toString();
 }
 
-function resolveHostedPairingUrl(endpointUrl: string, credential: string): string {
+function isHostedPairingCompatible(endpointUrl: string): boolean {
+  try {
+    return new URL(endpointUrl).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function resolveHostedPairingUrl(endpointUrl: string, credential: string): string | null {
+  if (!isHostedPairingCompatible(endpointUrl)) {
+    return null;
+  }
   return buildHostedPairingUrl({
     host: endpointUrl,
     token: credential,
