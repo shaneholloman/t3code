@@ -165,9 +165,9 @@ export function useUpdateSettings() {
       const currentServerConfig = getServerConfig();
       if (currentServerConfig) {
         applySettingsUpdated(applyServerSettingsPatch(currentServerConfig.settings, serverPatch));
+        // Fire-and-forget RPC — push will reconcile on success
+        void ensureLocalApi().server.updateSettings(serverPatch);
       }
-      // Fire-and-forget RPC — push will reconcile on success
-      void ensureLocalApi().server.updateSettings(serverPatch);
     }
 
     if (Object.keys(clientPatch).length > 0) {
