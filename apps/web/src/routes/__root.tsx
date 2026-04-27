@@ -55,6 +55,7 @@ import { configureClientTracing } from "../observability/clientTracing";
 import {
   ensurePrimaryEnvironmentReady,
   getPrimaryKnownEnvironment,
+  readPrimaryEnvironmentTarget,
   resolveInitialServerAuthGateState,
   updatePrimaryEnvironmentDescriptor,
 } from "../environments/primary";
@@ -81,7 +82,8 @@ export const Route = createRootRouteWithContext<{
         authGateState,
       };
     } catch (error) {
-      if (location.pathname === "/pair") {
+      const primaryTarget = readPrimaryEnvironmentTarget();
+      if (location.pathname === "/pair" || primaryTarget?.source !== "window-origin") {
         throw error;
       }
 
