@@ -126,12 +126,12 @@ describe("ProviderInstanceRegistryLive — multi-instance codex slice", () => {
       });
 
       const instances = yield* registry.listInstances;
-      expect(instances.map((instance) => instance.instanceId).sort()).toEqual(
-        [personalId, workId].sort(),
+      expect(instances.map((instance) => instance.instanceId).toSorted()).toEqual(
+        [personalId, workId].toSorted(),
       );
       expect(instances.every((instance) => instance.driverId === codexDriverId)).toBe(true);
-      expect(instances.map((instance) => instance.displayName).sort()).toEqual(
-        ["Codex (personal)", "Codex (work)"].sort(),
+      expect(instances.map((instance) => instance.displayName).toSorted()).toEqual(
+        ["Codex (personal)", "Codex (work)"].toSorted(),
       );
 
       // Each instance must be retrievable by id and carry its *own* closures.
@@ -149,11 +149,15 @@ describe("ProviderInstanceRegistryLive — multi-instance codex slice", () => {
       expect(personalSnapshot.instanceId).toBe(personalId);
       expect(personalSnapshot.driver).toBe(codexDriverId);
       expect(personalSnapshot.enabled).toBe(false);
+      expect(personalSnapshot.continuation?.groupKey).toBe(
+        "codex:home:/home/julius/.codex_personal",
+      );
 
       const workSnapshot = yield* work!.snapshot.getSnapshot;
       expect(workSnapshot.instanceId).toBe(workId);
       expect(workSnapshot.driver).toBe(codexDriverId);
       expect(workSnapshot.enabled).toBe(false);
+      expect(workSnapshot.continuation?.groupKey).toBe("codex:home:/home/julius/.codex");
 
       // Nothing goes to the unavailable bucket — both drivers are registered.
       const unavailable = yield* registry.listUnavailable;
@@ -274,8 +278,8 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
 
       const instances = yield* registry.listInstances;
       expect(instances).toHaveLength(4);
-      expect(instances.map((instance) => instance.instanceId).sort()).toEqual(
-        [codexId, claudeId, cursorId, openCodeId].sort(),
+      expect(instances.map((instance) => instance.instanceId).toSorted()).toEqual(
+        [codexId, claudeId, cursorId, openCodeId].toSorted(),
       );
 
       // Instance lookup by id resolves each instance to its own bundle —
@@ -321,21 +325,27 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
       expect(codexSnapshot.instanceId).toBe(codexId);
       expect(codexSnapshot.driver).toBe(codexDriverId);
       expect(codexSnapshot.enabled).toBe(false);
+      expect(codexSnapshot.continuation?.groupKey).toBe("codex:home:/home/julius/.codex");
 
       const claudeSnapshot = yield* claude!.snapshot.getSnapshot;
       expect(claudeSnapshot.instanceId).toBe(claudeId);
       expect(claudeSnapshot.driver).toBe(claudeDriverId);
       expect(claudeSnapshot.enabled).toBe(false);
+      expect(claudeSnapshot.continuation?.groupKey).toBe(`${claudeDriverId}:instance:${claudeId}`);
 
       const cursorSnapshot = yield* cursor!.snapshot.getSnapshot;
       expect(cursorSnapshot.instanceId).toBe(cursorId);
       expect(cursorSnapshot.driver).toBe(cursorDriverId);
       expect(cursorSnapshot.enabled).toBe(false);
+      expect(cursorSnapshot.continuation?.groupKey).toBe(`${cursorDriverId}:instance:${cursorId}`);
 
       const openCodeSnapshot = yield* openCode!.snapshot.getSnapshot;
       expect(openCodeSnapshot.instanceId).toBe(openCodeId);
       expect(openCodeSnapshot.driver).toBe(openCodeDriverId);
       expect(openCodeSnapshot.enabled).toBe(false);
+      expect(openCodeSnapshot.continuation?.groupKey).toBe(
+        `${openCodeDriverId}:instance:${openCodeId}`,
+      );
     }).pipe(Effect.provide(testLayer)),
   );
 });

@@ -28,6 +28,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   activeInstanceId: ProviderInstanceId;
   model: string;
   lockedProvider: ProviderKind | null;
+  lockedContinuationGroupKey?: string | null;
   /** Instance entries rendered in the sidebar + used to resolve display name. */
   instanceEntries: ReadonlyArray<ProviderInstanceEntry>;
   keybindings?: ResolvedKeybindingsConfig;
@@ -57,11 +58,21 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
     if (direct) return direct;
     if (props.lockedProvider) {
       return (
-        props.instanceEntries.find((entry) => entry.driverKind === props.lockedProvider) ?? null
+        props.instanceEntries.find(
+          (entry) =>
+            entry.driverKind === props.lockedProvider &&
+            (!props.lockedContinuationGroupKey ||
+              entry.continuationGroupKey === props.lockedContinuationGroupKey),
+        ) ?? null
       );
     }
     return props.instanceEntries[0] ?? null;
-  }, [props.activeInstanceId, props.instanceEntries, props.lockedProvider]);
+  }, [
+    props.activeInstanceId,
+    props.instanceEntries,
+    props.lockedContinuationGroupKey,
+    props.lockedProvider,
+  ]);
 
   const activeInstanceId = activeEntry?.instanceId ?? props.activeInstanceId;
   const activeDriverKind = activeEntry?.driverKind ?? "codex";
@@ -172,6 +183,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           activeInstanceId={activeInstanceId}
           model={props.model}
           lockedProvider={props.lockedProvider}
+          lockedContinuationGroupKey={props.lockedContinuationGroupKey ?? null}
           instanceEntries={props.instanceEntries}
           {...(props.keybindings ? { keybindings: props.keybindings } : {})}
           modelOptionsByInstance={props.modelOptionsByInstance}

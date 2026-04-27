@@ -36,6 +36,7 @@ export interface ProviderInstanceEntry {
   readonly driverKind: ProviderKind;
   readonly displayName: string;
   readonly accentColor?: string | undefined;
+  readonly continuationGroupKey?: string | undefined;
   readonly enabled: boolean;
   readonly installed: boolean;
   readonly status: ServerProviderState;
@@ -162,6 +163,7 @@ export function deriveProviderInstanceEntries(
       driverKind,
       displayName,
       accentColor: normalizeProviderAccentColor(snapshot.accentColor),
+      continuationGroupKey: snapshot.continuation?.groupKey,
       enabled: snapshot.enabled,
       installed: snapshot.installed,
       status: snapshot.status,

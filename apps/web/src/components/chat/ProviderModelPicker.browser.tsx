@@ -244,6 +244,7 @@ async function mountPicker(props: {
   activeInstanceId?: ProviderInstanceId;
   model: string;
   lockedProvider: ProviderKind | null;
+  lockedContinuationGroupKey?: string | null;
   providers?: ReadonlyArray<ServerProvider>;
   triggerVariant?: "ghost" | "outline";
 }) {
@@ -267,6 +268,7 @@ async function mountPicker(props: {
       activeInstanceId={activeInstanceId}
       model={props.model}
       lockedProvider={props.lockedProvider}
+      lockedContinuationGroupKey={props.lockedContinuationGroupKey ?? null}
       instanceEntries={instanceEntries}
       modelOptionsByInstance={modelOptionsByInstance}
       triggerVariant={props.triggerVariant}
@@ -480,18 +482,35 @@ describe("ProviderModelPicker", () => {
         capabilities: createModelCapabilities({ optionDescriptors: [] }),
       },
     ];
+    const isolatedCodexModels: ServerProvider["models"] = [
+      {
+        slug: "gpt-isolated",
+        name: "GPT Isolated",
+        isCustom: false,
+        capabilities: createModelCapabilities({ optionDescriptors: [] }),
+      },
+    ];
     const providers: ReadonlyArray<ServerProvider> = [
       {
         ...buildCodexProvider(defaultCodexModels),
         instanceId: "codex" as ProviderInstanceId,
         displayName: "Codex Work",
         accentColor: "#2563eb",
+        continuation: { groupKey: "codex:home:/Users/julius/.codex" },
       },
       {
         ...buildCodexProvider(personalCodexModels),
         instanceId: "codex_personal" as ProviderInstanceId,
         displayName: "Codex Personal",
         accentColor: "#dc2626",
+        continuation: { groupKey: "codex:home:/Users/julius/.codex" },
+      },
+      {
+        ...buildCodexProvider(isolatedCodexModels),
+        instanceId: "codex_isolated" as ProviderInstanceId,
+        displayName: "Codex Isolated",
+        accentColor: "#16a34a",
+        continuation: { groupKey: "codex:home:/Users/julius/.codex_isolated" },
       },
       TEST_PROVIDERS[1]!,
     ];
@@ -500,6 +519,7 @@ describe("ProviderModelPicker", () => {
       activeInstanceId: "codex" as ProviderInstanceId,
       model: "gpt-work",
       lockedProvider: "codex",
+      lockedContinuationGroupKey: "codex:home:/Users/julius/.codex",
       providers,
     });
 
@@ -508,6 +528,7 @@ describe("ProviderModelPicker", () => {
 
       await vi.waitFor(() => {
         expect(getSidebarProviderOrder()).toEqual(["codex", "codex_personal"]);
+        expect(getModelPickerListText()).not.toContain("Codex Isolated");
         expect(
           document.querySelector<HTMLElement>('[data-model-picker-provider="codex_personal"]')
             ?.dataset.providerAccentColor,

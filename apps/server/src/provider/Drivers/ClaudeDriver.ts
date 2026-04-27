@@ -50,6 +50,7 @@ const withInstanceIdentity =
     readonly instanceId: ProviderInstance["instanceId"];
     readonly displayName: string | undefined;
     readonly accentColor: string | undefined;
+    readonly continuationGroupKey: string;
   }) =>
   (snapshot: ServerProvider): ServerProvider => ({
     ...snapshot,
@@ -57,6 +58,7 @@ const withInstanceIdentity =
     driver: DRIVER_ID,
     ...(input.displayName ? { displayName: input.displayName } : {}),
     ...(input.accentColor ? { accentColor: input.accentColor } : {}),
+    continuation: { groupKey: input.continuationGroupKey },
   });
 
 export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
@@ -71,7 +73,16 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const eventLoggers = yield* ProviderEventLoggers;
-      const stampIdentity = withInstanceIdentity({ instanceId, displayName, accentColor });
+      const continuationIdentity = defaultProviderContinuationIdentity({
+        driverId: DRIVER_ID,
+        instanceId,
+      });
+      const stampIdentity = withInstanceIdentity({
+        instanceId,
+        displayName,
+        accentColor,
+        continuationGroupKey: continuationIdentity.continuationKey,
+      });
       const effectiveConfig = { ...config, enabled } satisfies ClaudeSettings;
 
       const adapter = yield* makeClaudeAdapter(effectiveConfig, {
@@ -127,10 +138,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
       return {
         instanceId,
         driverId: DRIVER_ID,
-        continuationIdentity: defaultProviderContinuationIdentity({
-          driverId: DRIVER_ID,
-          instanceId,
-        }),
+        continuationIdentity,
         displayName,
         accentColor,
         enabled,

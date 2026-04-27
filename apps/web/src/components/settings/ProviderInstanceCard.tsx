@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDownIcon, Trash2Icon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   isBuiltInDriverId,
   type ProviderInstanceConfig,
@@ -36,6 +36,27 @@ const PROVIDER_ACCENT_SWATCHES = [
   "#7c3aed",
   "#0891b2",
 ] as const;
+
+const REDACTED_EMAIL_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+function redactedEmailPlaceholder(email: string): string {
+  let state = 0x811c9dc5;
+  for (let index = 0; index < email.length; index += 1) {
+    state ^= email.charCodeAt(index);
+    state = Math.imul(state, 0x01000193);
+  }
+
+  const nextChar = () => {
+    state = Math.imul(state ^ (state >>> 13), 0x85ebca6b);
+    state = Math.imul(state ^ (state >>> 16), 0xc2b2ae35);
+    return REDACTED_EMAIL_ALPHABET[Math.abs(state) % REDACTED_EMAIL_ALPHABET.length] ?? "x";
+  };
+
+  return Array.from(email, (char) => {
+    if (char === "@" || char === "." || char === "-" || char === "_") return char;
+    return nextChar();
+  }).join("");
+}
 
 /**
  * Read a string value at `key` from the opaque per-driver config blob.
@@ -116,6 +137,7 @@ function ProviderAuthEmail(props: {
 }) {
   const [revealed, setRevealed] = useState(false);
   const trimmed = props.email?.trim();
+  const redacted = useMemo(() => (trimmed ? redactedEmailPlaceholder(trimmed) : ""), [trimmed]);
   if (!trimmed) return null;
 
   return (
@@ -128,13 +150,13 @@ function ProviderAuthEmail(props: {
             <button
               type="button"
               className={cn(
-                "min-w-0 cursor-pointer truncate rounded-sm font-mono text-[11px] transition hover:text-foreground",
-                revealed ? "text-muted-foreground" : "select-none text-muted-foreground blur-sm",
+                "min-w-0 cursor-pointer rounded-sm font-mono text-[11px] leading-none transition hover:text-foreground",
+                revealed ? "text-muted-foreground" : "select-none text-muted-foreground blur-[2px]",
               )}
               onClick={() => setRevealed((value) => !value)}
               aria-label={revealed ? "Hide account email" : "Reveal account email"}
             >
-              {trimmed}
+              {revealed ? trimmed : redacted}
             </button>
           }
         />

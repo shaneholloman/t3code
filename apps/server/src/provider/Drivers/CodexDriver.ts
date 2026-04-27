@@ -65,6 +65,7 @@ const withInstanceIdentity =
     readonly instanceId: ProviderInstance["instanceId"];
     readonly displayName: string | undefined;
     readonly accentColor: string | undefined;
+    readonly continuationGroupKey: string;
   }) =>
   (snapshot: ServerProvider): ServerProvider => ({
     ...snapshot,
@@ -72,6 +73,7 @@ const withInstanceIdentity =
     driver: DRIVER_ID,
     ...(input.displayName ? { displayName: input.displayName } : {}),
     ...(input.accentColor ? { accentColor: input.accentColor } : {}),
+    continuation: { groupKey: input.continuationGroupKey },
   });
 
 export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
@@ -86,7 +88,13 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const eventLoggers = yield* ProviderEventLoggers;
-      const stampIdentity = withInstanceIdentity({ instanceId, displayName, accentColor });
+      const continuationIdentity = codexContinuationIdentity(config);
+      const stampIdentity = withInstanceIdentity({
+        instanceId,
+        displayName,
+        accentColor,
+        continuationGroupKey: continuationIdentity.continuationKey,
+      });
       const homeLayout = resolveCodexHomeLayout(config);
       yield* materializeCodexShadowHome(homeLayout).pipe(
         Effect.mapError(
@@ -147,7 +155,7 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
       return {
         instanceId,
         driverId: DRIVER_ID,
-        continuationIdentity: codexContinuationIdentity(config),
+        continuationIdentity,
         displayName,
         accentColor,
         enabled,

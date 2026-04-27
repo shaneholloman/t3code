@@ -32,6 +32,7 @@ type ModelPickerItem = {
   driverKind: ProviderKind;
   instanceDisplayName: string;
   instanceAccentColor?: string | undefined;
+  continuationGroupKey?: string | undefined;
 };
 
 const EMPTY_MODEL_JUMP_LABELS = new Map<string, string>();
@@ -62,6 +63,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
    * between the default Codex and a custom Codex Personal).
    */
   lockedProvider: ProviderKind | null;
+  lockedContinuationGroupKey?: string | null;
   /**
    * All configured provider instances in display order. Used to render
    * the sidebar (one button per instance) and to resolve display names
@@ -158,6 +160,15 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     () => new Map(instanceEntries.map((entry) => [entry.instanceId, entry])),
     [instanceEntries],
   );
+  const matchesLockedProvider = useCallback(
+    (entry: Pick<ProviderInstanceEntry, "driverKind" | "continuationGroupKey">): boolean => {
+      if (props.lockedProvider === null) return true;
+      if (entry.driverKind !== props.lockedProvider) return false;
+      if (!props.lockedContinuationGroupKey) return true;
+      return entry.continuationGroupKey === props.lockedContinuationGroupKey;
+    },
+    [props.lockedContinuationGroupKey, props.lockedProvider],
+  );
 
   const readyInstanceSet = useMemo(() => {
     const ready = new Set<ProviderInstanceId>();
@@ -195,6 +206,9 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
           driverKind: entry.driverKind,
           instanceDisplayName: entry.displayName,
           ...(entry.accentColor ? { instanceAccentColor: entry.accentColor } : {}),
+          ...(entry.continuationGroupKey
+            ? { continuationGroupKey: entry.continuationGroupKey }
+            : {}),
         });
       }
     }
@@ -205,10 +219,8 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   const isSearching = searchQuery.trim().length > 0;
   const lockedInstanceEntries = useMemo(
     () =>
-      props.lockedProvider
-        ? instanceEntries.filter((entry) => entry.driverKind === props.lockedProvider)
-        : [],
-    [instanceEntries, props.lockedProvider],
+      props.lockedProvider ? instanceEntries.filter((entry) => matchesLockedProvider(entry)) : [],
+    [instanceEntries, matchesLockedProvider, props.lockedProvider],
   );
   const showLockedInstanceSidebar = isLocked && lockedInstanceEntries.length > 1;
   const showSidebar = !isSearching && (!isLocked || showLockedInstanceSidebar);
@@ -261,7 +273,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       // model before the user chooses a specific instance rail item.
       if (props.lockedProvider !== null) {
         return rankedMatches
-          .filter((rankedModel) => rankedModel.model.driverKind === props.lockedProvider)
+          .filter((rankedModel) => matchesLockedProvider(rankedModel.model))
           .toSorted((a, b) => {
             const scoreDelta = a.score - b.score;
             if (scoreDelta !== 0) {
@@ -290,7 +302,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     }
 
     if (props.lockedProvider !== null) {
-      result = result.filter((m) => m.driverKind === props.lockedProvider);
+      result = result.filter((m) => matchesLockedProvider(m));
       if (showLockedInstanceSidebar) {
         result = result.filter((m) => m.instanceId === selectedInstanceId);
       }
@@ -319,6 +331,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     favoriteOrder,
     favoritesSet,
     flatModels,
+    matchesLockedProvider,
     props.lockedProvider,
     searchQuery,
     showLockedInstanceSidebar,
@@ -369,11 +382,17 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   // matching entry otherwise.
   const lockedHeaderLabel = useMemo(() => {
     if (!isLocked || !props.lockedProvider) return null;
-    const matches = instanceEntries.filter((entry) => entry.driverKind === props.lockedProvider);
+    const matches = instanceEntries.filter((entry) => matchesLockedProvider(entry));
     if (matches.length === 0) return null;
     const active = matches.find((entry) => entry.instanceId === props.activeInstanceId);
     return (active ?? matches[0])?.displayName ?? null;
-  }, [isLocked, props.lockedProvider, props.activeInstanceId, instanceEntries]);
+  }, [
+    isLocked,
+    matchesLockedProvider,
+    props.lockedProvider,
+    props.activeInstanceId,
+    instanceEntries,
+  ]);
   const modelJumpCommandByKey = useMemo(() => {
     const mapping = new Map<
       string,

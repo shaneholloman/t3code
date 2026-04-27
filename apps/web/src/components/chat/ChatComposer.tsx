@@ -594,6 +594,20 @@ export const ChatComposer = memo(
       () => sortProviderInstanceEntries(deriveProviderInstanceEntries(providerStatuses)),
       [providerStatuses],
     );
+    const lockedContinuationGroupKey = useMemo((): string | null => {
+      if (!lockedProvider || !activeThread) return null;
+      const lockedInstanceId = activeThreadModelSelection?.instanceId;
+      if (!lockedInstanceId) return null;
+      return (
+        providerInstanceEntries.find((entry) => entry.instanceId === lockedInstanceId)
+          ?.continuationGroupKey ?? null
+      );
+    }, [
+      activeThread,
+      activeThreadModelSelection?.instanceId,
+      lockedProvider,
+      providerInstanceEntries,
+    ]);
 
     // Resolve which configured instance the composer is currently targeting.
     // Priority:
@@ -621,13 +635,23 @@ export const ChatComposer = memo(
         );
         if (match) {
           // When locked to a specific driver kind, ignore persisted instance
-          // ids from a different kind.
+          // ids from a different kind or continuation group.
           if (lockedProvider && match.driverKind !== lockedProvider) continue;
+          if (
+            lockedContinuationGroupKey &&
+            match.continuationGroupKey !== lockedContinuationGroupKey
+          ) {
+            continue;
+          }
           return match.instanceId;
         }
       }
       const byKind = providerInstanceEntries.find(
-        (entry) => entry.enabled && entry.driverKind === selectedProvider,
+        (entry) =>
+          entry.enabled &&
+          entry.driverKind === selectedProvider &&
+          (!lockedContinuationGroupKey ||
+            entry.continuationGroupKey === lockedContinuationGroupKey),
       );
       if (byKind) return byKind.instanceId;
       const anyEnabled = providerInstanceEntries.find((entry) => entry.enabled);
@@ -640,6 +664,7 @@ export const ChatComposer = memo(
       activeProjectDefaultModelSelection?.instanceId,
       activeThreadModelSelection?.instanceId,
       composerDraft.activeProvider,
+      lockedContinuationGroupKey,
       lockedProvider,
       providerInstanceEntries,
       selectedProvider,
@@ -1981,6 +2006,7 @@ export const ChatComposer = memo(
                     activeInstanceId={selectedInstanceId}
                     model={selectedModelForPickerWithCustomFallback}
                     lockedProvider={lockedProvider}
+                    lockedContinuationGroupKey={lockedContinuationGroupKey}
                     instanceEntries={providerInstanceEntries}
                     keybindings={keybindings}
                     modelOptionsByInstance={modelOptionsByInstance}
