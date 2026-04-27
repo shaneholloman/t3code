@@ -888,7 +888,10 @@ describe("ProviderCommandReactor", () => {
 
   it("restarts the provider session when the thread workspace changes", async () => {
     const harness = await createHarness({
-      threadModelSelection: { provider: "claudeAgent", model: "claude-sonnet-4-6" },
+      threadModelSelection: {
+        instanceId: ProviderInstanceId.make("claudeAgent"),
+        model: "claude-sonnet-4-6",
+      },
     });
     const now = new Date().toISOString();
 
@@ -949,7 +952,7 @@ describe("ProviderCommandReactor", () => {
       cwd: "/tmp/provider-project-worktree",
       resumeCursor: { opaque: "resume-1" },
       modelSelection: {
-        provider: "claudeAgent",
+        instanceId: ProviderInstanceId.make("claudeAgent"),
         model: "claude-sonnet-4-6",
       },
       runtimeMode: "approval-required",

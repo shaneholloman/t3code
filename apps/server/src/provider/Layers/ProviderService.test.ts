@@ -25,7 +25,6 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import {
   ProviderAdapterSessionNotFoundError,
-  ProviderUnsupportedError,
   ProviderValidationError,
   type ProviderAdapterError,
 } from "../Errors.ts";
@@ -1035,13 +1034,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
         );
 
         const firstClaude = makeFakeCodexAdapter("claudeAgent");
-        const firstRegistry: typeof ProviderAdapterRegistry.Service = {
-          getByProvider: (provider) =>
-            provider === "claudeAgent"
-              ? Effect.succeed(firstClaude.adapter)
-              : Effect.fail(new ProviderUnsupportedError({ provider })),
-          listProviders: () => Effect.succeed(["claudeAgent"]),
-        };
+        const firstRegistry = makeAdapterRegistryMock({ claudeAgent: firstClaude.adapter });
         const firstDirectoryLayer = ProviderSessionDirectoryLive.pipe(
           Layer.provide(runtimeRepositoryLayer),
         );
@@ -1050,6 +1043,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
           Layer.provide(firstDirectoryLayer),
           Layer.provide(defaultServerSettingsLayer),
           Layer.provide(AnalyticsService.layerTest),
+          Layer.provide(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
         );
 
         const initial = yield* Effect.gen(function* () {
@@ -1063,13 +1057,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
         }).pipe(Effect.provide(firstProviderLayer));
 
         const secondClaude = makeFakeCodexAdapter("claudeAgent");
-        const secondRegistry: typeof ProviderAdapterRegistry.Service = {
-          getByProvider: (provider) =>
-            provider === "claudeAgent"
-              ? Effect.succeed(secondClaude.adapter)
-              : Effect.fail(new ProviderUnsupportedError({ provider })),
-          listProviders: () => Effect.succeed(["claudeAgent"]),
-        };
+        const secondRegistry = makeAdapterRegistryMock({ claudeAgent: secondClaude.adapter });
         const secondDirectoryLayer = ProviderSessionDirectoryLive.pipe(
           Layer.provide(runtimeRepositoryLayer),
         );
@@ -1078,6 +1066,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
           Layer.provide(secondDirectoryLayer),
           Layer.provide(defaultServerSettingsLayer),
           Layer.provide(AnalyticsService.layerTest),
+          Layer.provide(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
         );
 
         secondClaude.startSession.mockClear();
