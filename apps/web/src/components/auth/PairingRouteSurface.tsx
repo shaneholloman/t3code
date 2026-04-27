@@ -240,13 +240,15 @@ export function HostedPairingRouteSurface() {
         ) : null}
 
         <div className="mt-6 flex flex-wrap gap-2">
-          <Button
-            disabled={status === "pairing"}
-            size="sm"
-            onClick={() => void submitHostedPairingRequest()}
-          >
-            {status === "pairing" ? "Pairing..." : "Try again"}
-          </Button>
+          {status !== "paired" ? (
+            <Button
+              disabled={status === "pairing"}
+              size="sm"
+              onClick={() => void submitHostedPairingRequest()}
+            >
+              {status === "pairing" ? "Pairing..." : "Try again"}
+            </Button>
+          ) : null}
           {status === "paired" ? (
             <Button size="sm" variant="outline" onClick={() => (window.location.href = "/")}>
               Open app
