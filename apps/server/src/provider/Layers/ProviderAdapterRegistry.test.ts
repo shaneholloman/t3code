@@ -102,6 +102,10 @@ const makeFakeInstance = (
   return {
     instanceId: defaultInstanceIdForDriver(driverId),
     driverId,
+    continuationIdentity: {
+      driverId,
+      continuationKey: `${driverId}:instance:${defaultInstanceIdForDriver(driverId)}`,
+    },
     displayName: undefined,
     enabled: true,
     snapshot: {

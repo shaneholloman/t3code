@@ -12,6 +12,7 @@ import {
   type CanonicalRequestType,
   type CodexSettings,
   type ProviderEvent,
+  type ProviderInstanceId,
   type ProviderRuntimeEvent,
   type ProviderRequestKind,
   type ThreadTokenUsageSnapshot,
@@ -56,6 +57,7 @@ import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogg
 const PROVIDER = "codex" as const;
 
 export interface CodexAdapterLiveOptions {
+  readonly instanceId?: ProviderInstanceId;
   readonly makeRuntime?: (
     options: CodexSessionRuntimeOptions,
   ) => Effect.Effect<
@@ -1364,6 +1366,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
 
         const runtimeInput: CodexSessionRuntimeOptions = {
           threadId: input.threadId,
+          ...(options?.instanceId ? { providerInstanceId: options.instanceId } : {}),
           cwd: input.cwd ?? process.cwd(),
           binaryPath: codexConfig.binaryPath,
           ...(codexConfig.homePath ? { homePath: codexConfig.homePath } : {}),
@@ -1371,10 +1374,8 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             ? { resumeCursor: input.resumeCursor }
             : {}),
           runtimeMode: input.runtimeMode,
-          ...(input.modelSelection?.instanceId === "codex"
-            ? { model: input.modelSelection.model }
-            : {}),
-          ...(input.modelSelection?.instanceId === "codex" &&
+          ...(input.modelSelection ? { model: input.modelSelection.model } : {}),
+          ...(input.modelSelection &&
           getModelSelectionBooleanOptionValue(input.modelSelection, "fastMode") === true
             ? { serviceTier: "fast" }
             : {}),

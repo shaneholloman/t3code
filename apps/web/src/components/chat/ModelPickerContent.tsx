@@ -31,6 +31,7 @@ type ModelPickerItem = {
   instanceId: ProviderInstanceId;
   driverKind: ProviderKind;
   instanceDisplayName: string;
+  instanceAccentColor?: string | undefined;
 };
 
 const EMPTY_MODEL_JUMP_LABELS = new Map<string, string>();
@@ -193,11 +194,27 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
           instanceId,
           driverKind: entry.driverKind,
           instanceDisplayName: entry.displayName,
+          ...(entry.accentColor ? { instanceAccentColor: entry.accentColor } : {}),
         });
       }
     }
     return out;
   }, [modelOptionsByInstance, entryByInstanceId, readyInstanceSet]);
+
+  const isLocked = props.lockedProvider !== null;
+  const isSearching = searchQuery.trim().length > 0;
+  const lockedInstanceEntries = useMemo(
+    () =>
+      props.lockedProvider
+        ? instanceEntries.filter((entry) => entry.driverKind === props.lockedProvider)
+        : [],
+    [instanceEntries, props.lockedProvider],
+  );
+  const showLockedInstanceSidebar = isLocked && lockedInstanceEntries.length > 1;
+  const showSidebar = !isSearching && (!isLocked || showLockedInstanceSidebar);
+  const sidebarInstanceEntries = showLockedInstanceSidebar
+    ? lockedInstanceEntries
+    : instanceEntries;
 
   // Filter models based on search query and selected instance
   const filteredModels = useMemo(() => {
@@ -240,7 +257,8 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
         );
 
       // When searching, we only respect locked provider (by driver kind),
-      // ignoring sidebar selection.
+      // ignoring sidebar selection so account-scoped searches can find a
+      // model before the user chooses a specific instance rail item.
       if (props.lockedProvider !== null) {
         return rankedMatches
           .filter((rankedModel) => rankedModel.model.driverKind === props.lockedProvider)
@@ -271,10 +289,11 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
         .map((rankedModel) => rankedModel.model);
     }
 
-    // Locked provider mode always shows that driver kind's models (across
-    // all instances), with favorites first.
     if (props.lockedProvider !== null) {
       result = result.filter((m) => m.driverKind === props.lockedProvider);
+      if (showLockedInstanceSidebar) {
+        result = result.filter((m) => m.instanceId === selectedInstanceId);
+      }
     } else if (selectedInstanceId === "favorites") {
       result = result.filter((m) => favoritesSet.has(`${m.instanceId}:${m.slug}`));
     } else {
@@ -302,6 +321,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     flatModels,
     props.lockedProvider,
     searchQuery,
+    showLockedInstanceSidebar,
     selectedInstanceId,
   ]);
 
@@ -341,9 +361,6 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     [favorites, updateSettings],
   );
 
-  const isLocked = props.lockedProvider !== null;
-  const isSearching = searchQuery.trim().length > 0;
-  const showSidebar = !isLocked && !isSearching;
   const LockedProviderIcon =
     isLocked && props.lockedProvider ? PROVIDER_ICON_BY_PROVIDER[props.lockedProvider] : null;
   // Header label for locked mode. Use the active instance's displayName
@@ -495,11 +512,11 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       <div
         className={cn(
           "relative flex h-screen max-h-96 w-screen max-w-100 overflow-hidden rounded-lg border bg-popover not-dark:bg-clip-padding text-popover-foreground shadow-lg/5 before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
-          isLocked ? "flex-col" : "flex-row",
+          isLocked && !showLockedInstanceSidebar ? "flex-col" : "flex-row",
         )}
       >
         {/* Locked provider header (only shown in locked mode) */}
-        {isLocked && LockedProviderIcon && lockedHeaderLabel && (
+        {isLocked && !showLockedInstanceSidebar && LockedProviderIcon && lockedHeaderLabel && (
           <div className="flex items-center gap-2 px-4 py-3 border-b">
             <LockedProviderIcon className="size-5 shrink-0" />
             <span className="font-medium text-sm">{lockedHeaderLabel}</span>
@@ -511,7 +528,9 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
           <ModelPickerSidebar
             selectedInstanceId={selectedInstanceId}
             onSelectInstance={handleSelectInstance}
-            instanceEntries={instanceEntries}
+            instanceEntries={sidebarInstanceEntries}
+            showFavorites={!isLocked}
+            showComingSoon={!isLocked}
           />
         )}
 
@@ -538,7 +557,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
           <div
             className={cn(
               "flex min-h-0 flex-1 flex-col overflow-hidden",
-              isLocked ? "min-w-0" : showSidebar && "border-l",
+              isLocked && !showLockedInstanceSidebar ? "min-w-0" : showSidebar && "border-l",
             )}
           >
             {/* Search bar */}
@@ -598,10 +617,11 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                       instanceId={model.instanceId}
                       driverKind={model.driverKind}
                       providerDisplayName={model.instanceDisplayName}
+                      providerAccentColor={model.instanceAccentColor}
                       isFavorite={favoritesSet.has(modelKey)}
-                      showProvider={!isLocked}
+                      showProvider={!isLocked || showLockedInstanceSidebar}
                       preferShortName={!isLocked}
-                      useTriggerLabel={isLocked}
+                      useTriggerLabel={isLocked && !showLockedInstanceSidebar}
                       showNewBadge={isModelPickerNewModel(model.driverKind, model.slug)}
                       jumpLabel={modelJumpLabelByKey.get(modelKey) ?? null}
                       onToggleFavorite={() => toggleFavorite(model.instanceId, model.slug)}

@@ -28,7 +28,11 @@ import {
 } from "../Layers/ClaudeProvider.ts";
 import { ProviderEventLoggers } from "../Layers/ProviderEventLoggers.ts";
 import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
-import type { ProviderDriver, ProviderInstance } from "../ProviderDriver.ts";
+import {
+  defaultProviderContinuationIdentity,
+  type ProviderDriver,
+  type ProviderInstance,
+} from "../ProviderDriver.ts";
 
 const DRIVER_ID = ProviderDriverId.make("claudeAgent");
 const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
@@ -42,11 +46,17 @@ export type ClaudeDriverEnv =
   | ServerConfig;
 
 const withInstanceIdentity =
-  (instanceId: ProviderInstance["instanceId"]) =>
+  (input: {
+    readonly instanceId: ProviderInstance["instanceId"];
+    readonly displayName: string | undefined;
+    readonly accentColor: string | undefined;
+  }) =>
   (snapshot: ServerProvider): ServerProvider => ({
     ...snapshot,
-    instanceId,
+    instanceId: input.instanceId,
     driver: DRIVER_ID,
+    ...(input.displayName ? { displayName: input.displayName } : {}),
+    ...(input.accentColor ? { accentColor: input.accentColor } : {}),
   });
 
 export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
@@ -57,16 +67,17 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
   },
   configSchema: ClaudeSettings,
   defaultConfig: (): ClaudeSettings => Schema.decodeSync(ClaudeSettings)({}),
-  create: ({ instanceId, displayName, enabled, config }) =>
+  create: ({ instanceId, displayName, accentColor, enabled, config }) =>
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const eventLoggers = yield* ProviderEventLoggers;
-      const stampIdentity = withInstanceIdentity(instanceId);
+      const stampIdentity = withInstanceIdentity({ instanceId, displayName, accentColor });
+      const effectiveConfig = { ...config, enabled } satisfies ClaudeSettings;
 
-      const adapter = yield* makeClaudeAdapter(config, {
+      const adapter = yield* makeClaudeAdapter(effectiveConfig, {
         ...(eventLoggers.native ? { nativeEventLogger: eventLoggers.native } : {}),
       });
-      const textGeneration = yield* makeClaudeTextGeneration(config);
+      const textGeneration = yield* makeClaudeTextGeneration(effectiveConfig);
 
       // Per-instance capabilities cache: keyed on `binaryPath` so two
       // Claude instances pointing at different binaries don't collide, but
@@ -78,7 +89,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
       });
 
       const checkProvider = checkClaudeProviderStatus(
-        config,
+        effectiveConfig,
         (binaryPath) =>
           Cache.get(subscriptionProbeCache, binaryPath).pipe(
             Effect.map((probe) => probe?.subscriptionType),
@@ -87,13 +98,15 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
           Cache.get(subscriptionProbeCache, binaryPath).pipe(
             Effect.map((probe) => probe?.slashCommands),
           ),
+        (binaryPath) =>
+          Cache.get(subscriptionProbeCache, binaryPath).pipe(Effect.map((probe) => probe?.email)),
       ).pipe(
         Effect.map(stampIdentity),
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
       );
 
       const snapshot = yield* makeManagedServerProvider<ClaudeSettings>({
-        getSettings: Effect.succeed(config),
+        getSettings: Effect.succeed(effectiveConfig),
         streamSettings: Stream.never,
         haveSettingsChanged: () => false,
         initialSnapshot: (settings) => stampIdentity(makePendingClaudeProvider(settings)),
@@ -114,7 +127,12 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
       return {
         instanceId,
         driverId: DRIVER_ID,
+        continuationIdentity: defaultProviderContinuationIdentity({
+          driverId: DRIVER_ID,
+          instanceId,
+        }),
         displayName,
+        accentColor,
         enabled,
         snapshot,
         adapter,

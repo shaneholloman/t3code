@@ -248,10 +248,24 @@ export function resolveClaudeApiModelId(modelSelection: ModelSelection): string 
 }
 export function parseClaudeAuthStatusFromOutput(result: CommandResult): {
   readonly status: Exclude<ServerProviderState, "disabled">;
-  readonly auth: Pick<ServerProviderAuth, "status">;
+  readonly auth: ServerProviderAuth;
   readonly message?: string;
 } {
   const lowerOutput = `${result.stdout}\n${result.stderr}`.toLowerCase();
+  const parsedJson = (() => {
+    const trimmed = result.stdout.trim();
+    if (!trimmed || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) {
+      return { attempted: false as const, value: undefined as unknown };
+    }
+    try {
+      return { attempted: true as const, value: JSON.parse(trimmed) as unknown };
+    } catch {
+      return { attempted: false as const, value: undefined as unknown };
+    }
+  })();
+  const email = parsedJson.attempted
+    ? Option.getOrUndefined(findEmail(parsedJson.value))
+    : undefined;
 
   if (
     lowerOutput.includes("unknown command") ||
@@ -280,23 +294,16 @@ export function parseClaudeAuthStatusFromOutput(result: CommandResult): {
     };
   }
 
-  const parsedAuth = (() => {
-    const trimmed = result.stdout.trim();
-    if (!trimmed || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) {
-      return { attemptedJsonParse: false as const, auth: undefined as boolean | undefined };
-    }
-    try {
-      return {
-        attemptedJsonParse: true as const,
-        auth: extractAuthBoolean(JSON.parse(trimmed)),
-      };
-    } catch {
-      return { attemptedJsonParse: false as const, auth: undefined as boolean | undefined };
-    }
-  })();
+  const parsedAuth = {
+    attemptedJsonParse: parsedJson.attempted,
+    auth: parsedJson.attempted ? extractAuthBoolean(parsedJson.value) : undefined,
+  };
 
   if (parsedAuth.auth === true) {
-    return { status: "ready", auth: { status: "authenticated" } };
+    return {
+      status: "ready",
+      auth: { status: "authenticated", ...(email ? { email } : {}) },
+    };
   }
   if (parsedAuth.auth === false) {
     return {
@@ -347,6 +354,8 @@ const SUBSCRIPTION_TYPE_KEYS = [
 const SUBSCRIPTION_CONTAINER_KEYS = ["account", "subscription", "user", "billing"] as const;
 const AUTH_METHOD_KEYS = ["authMethod", "auth_method"] as const;
 const AUTH_METHOD_CONTAINER_KEYS = ["auth", "account", "session"] as const;
+const EMAIL_KEYS = ["email", "userEmail", "user_email"] as const;
+const EMAIL_CONTAINER_KEYS = ["auth", "account", "session", "user", "profile"] as const;
 
 /** Lift an unknown value into `Option<string>` if it is a non-empty string. */
 const asNonEmptyString = (v: unknown): Option.Option<string> =>
@@ -404,6 +413,23 @@ function findAuthMethod(value: unknown): Option.Option<string> {
   );
 }
 
+function findEmail(value: unknown): Option.Option<string> {
+  if (globalThis.Array.isArray(value)) {
+    return Option.firstSomeOf(value.map(findEmail));
+  }
+
+  return asRecord(value).pipe(
+    Option.flatMap((record) => {
+      const direct = Option.firstSomeOf(EMAIL_KEYS.map((key) => asNonEmptyString(record[key])));
+      if (Option.isSome(direct)) return direct;
+
+      return Option.firstSomeOf(
+        EMAIL_CONTAINER_KEYS.map((key) => asRecord(record[key]).pipe(Option.flatMap(findEmail))),
+      );
+    }),
+  );
+}
+
 /**
  * Try to extract a subscription type from the `claude auth status` JSON
  * output. This is a zero-cost operation on data we already have.
@@ -420,6 +446,12 @@ function extractClaudeAuthMethodFromOutput(result: CommandResult): string | unde
   const parsed = decodeUnknownJson(result.stdout.trim());
   if (Result.isFailure(parsed)) return undefined;
   return Option.getOrUndefined(findAuthMethod(parsed.success));
+}
+
+function extractClaudeEmailFromOutput(result: CommandResult): string | undefined {
+  const parsed = decodeUnknownJson(result.stdout.trim());
+  if (Result.isFailure(parsed)) return undefined;
+  return Option.getOrUndefined(findEmail(parsed.success));
 }
 
 function toTitleCaseWords(value: string): string {
@@ -597,6 +629,7 @@ const probeClaudeCapabilities = (binaryPath: string) => {
     });
     const init = await q.initializationResult();
     return {
+      email: init.account?.email,
       subscriptionType: init.account?.subscriptionType,
       slashCommands: parseClaudeInitializationCommands(init.commands),
     };
@@ -631,6 +664,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
   resolveSlashCommands?: (
     binaryPath: string,
   ) => Effect.Effect<ReadonlyArray<ServerProviderSlashCommand> | undefined>,
+  resolveEmail?: (binaryPath: string) => Effect.Effect<string | undefined>,
 ): Effect.fn.Return<ServerProvider, never, ChildProcessSpawner.ChildProcessSpawner> {
   const checkedAt = new Date().toISOString();
   const allModels = providerModelsFromSettings(
@@ -755,14 +789,19 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
 
   let subscriptionType: string | undefined;
   let authMethod: string | undefined;
+  let email: string | undefined;
 
   if (Result.isSuccess(authProbe) && Option.isSome(authProbe.success)) {
     subscriptionType = extractSubscriptionTypeFromOutput(authProbe.success.value);
     authMethod = extractClaudeAuthMethodFromOutput(authProbe.success.value);
+    email = extractClaudeEmailFromOutput(authProbe.success.value);
   }
 
   if (!subscriptionType && resolveSubscriptionType) {
     subscriptionType = yield* resolveSubscriptionType(claudeSettings.binaryPath);
+  }
+  if (!email && resolveEmail) {
+    email = yield* resolveEmail(claudeSettings.binaryPath);
   }
 
   // ── Handle auth results (same logic as before, adjusted models) ──
@@ -822,6 +861,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       status: parsed.status,
       auth: {
         ...parsed.auth,
+        ...(email ? { email } : {}),
         ...(authMetadata ? authMetadata : {}),
       },
       ...(parsed.message

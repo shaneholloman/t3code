@@ -101,7 +101,13 @@ function createBaseServerConfig(): ServerConfig {
         model: "gpt-5.4-mini",
       },
       providers: {
-        codex: { enabled: true, binaryPath: "", homePath: "", customModels: [] },
+        codex: {
+          enabled: true,
+          binaryPath: "",
+          homePath: "",
+          shadowHomePath: "",
+          customModels: [],
+        },
         claudeAgent: { enabled: true, binaryPath: "", customModels: [], launchArgs: "" },
         cursor: { enabled: true, binaryPath: "", apiEndpoint: "", customModels: [] },
         opencode: {

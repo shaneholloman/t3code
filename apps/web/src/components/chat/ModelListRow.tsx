@@ -25,6 +25,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
    * "Codex Personal" render with their user-authored label.
    */
   providerDisplayName: string;
+  providerAccentColor?: string | undefined;
   isFavorite: boolean;
   showProvider: boolean;
   preferShortName?: boolean;
@@ -104,6 +105,13 @@ export const ModelListRow = memo(function ModelListRow(props: {
         {props.showProvider && (
           <div className="flex items-center gap-1 mt-0.5">
             <ProviderIcon className="size-3 shrink-0" />
+            {props.providerAccentColor ? (
+              <span
+                className="size-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: props.providerAccentColor }}
+                aria-hidden
+              />
+            ) : null}
             <span className="text-xs font-normal leading-snug text-muted-foreground/70 truncate">
               {providerLabel}
             </span>

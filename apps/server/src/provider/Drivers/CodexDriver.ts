@@ -33,6 +33,11 @@ import { checkCodexProviderStatus, makePendingCodexProvider } from "../Layers/Co
 import { ProviderEventLoggers } from "../Layers/ProviderEventLoggers.ts";
 import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
 import type { ProviderDriver, ProviderInstance } from "../ProviderDriver.ts";
+import {
+  codexContinuationIdentity,
+  materializeCodexShadowHome,
+  resolveCodexHomeLayout,
+} from "./CodexHomeLayout.ts";
 
 const DRIVER_ID = ProviderDriverId.make("codex");
 const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
@@ -56,11 +61,17 @@ export type CodexDriverEnv =
  * wrapper disappears.
  */
 const withInstanceIdentity =
-  (instanceId: ProviderInstance["instanceId"]) =>
+  (input: {
+    readonly instanceId: ProviderInstance["instanceId"];
+    readonly displayName: string | undefined;
+    readonly accentColor: string | undefined;
+  }) =>
   (snapshot: ServerProvider): ServerProvider => ({
     ...snapshot,
-    instanceId,
+    instanceId: input.instanceId,
     driver: DRIVER_ID,
+    ...(input.displayName ? { displayName: input.displayName } : {}),
+    ...(input.accentColor ? { accentColor: input.accentColor } : {}),
   });
 
 export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
@@ -71,11 +82,28 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
   },
   configSchema: CodexSettings,
   defaultConfig: (): CodexSettings => Schema.decodeSync(CodexSettings)({}),
-  create: ({ instanceId, displayName, enabled, config }) =>
+  create: ({ instanceId, displayName, accentColor, enabled, config }) =>
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const eventLoggers = yield* ProviderEventLoggers;
-      const stampIdentity = withInstanceIdentity(instanceId);
+      const stampIdentity = withInstanceIdentity({ instanceId, displayName, accentColor });
+      const homeLayout = resolveCodexHomeLayout(config);
+      yield* materializeCodexShadowHome(homeLayout).pipe(
+        Effect.mapError(
+          (cause) =>
+            new ProviderDriverError({
+              driver: DRIVER_ID,
+              instanceId,
+              detail: cause.message,
+              cause,
+            }),
+        ),
+      );
+      const effectiveConfig = {
+        ...config,
+        enabled,
+        homePath: homeLayout.effectiveHomePath ?? "",
+      } satisfies CodexSettings;
 
       // `makeCodexAdapter` and `makeCodexTextGeneration` have `never` error
       // channels at construction time — their failure modes are all on the
@@ -83,21 +111,22 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
       // here; the registry only has to worry about snapshot-build and
       // spawner-availability failures surfaced from `checkCodexProviderStatus`
       // below.
-      const adapter = yield* makeCodexAdapter(config, {
+      const adapter = yield* makeCodexAdapter(effectiveConfig, {
+        instanceId,
         ...(eventLoggers.native ? { nativeEventLogger: eventLoggers.native } : {}),
       });
-      const textGeneration = yield* makeCodexTextGeneration(config);
+      const textGeneration = yield* makeCodexTextGeneration(effectiveConfig);
 
       // Build a managed snapshot whose settings never change — mutations come
       // in as instance rebuilds from the registry rather than in-place
       // updates. Pre-provide `ChildProcessSpawner` so the check fits
       // `makeManagedServerProvider.checkProvider`'s `R = never`.
-      const checkProvider = checkCodexProviderStatus(config).pipe(
+      const checkProvider = checkCodexProviderStatus(effectiveConfig).pipe(
         Effect.map(stampIdentity),
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
       );
       const snapshot = yield* makeManagedServerProvider<CodexSettings>({
-        getSettings: Effect.succeed(config),
+        getSettings: Effect.succeed(effectiveConfig),
         streamSettings: Stream.never,
         haveSettingsChanged: () => false,
         initialSnapshot: (settings) => stampIdentity(makePendingCodexProvider(settings)),
@@ -118,7 +147,9 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
       return {
         instanceId,
         driverId: DRIVER_ID,
+        continuationIdentity: codexContinuationIdentity(config),
         displayName,
+        accentColor,
         enabled,
         snapshot,
         adapter,

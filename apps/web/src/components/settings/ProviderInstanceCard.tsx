@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDownIcon, Trash2Icon } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
   isBuiltInDriverId,
   type ProviderInstanceConfig,
@@ -11,6 +12,7 @@ import {
 } from "@t3tools/contracts";
 
 import { cn } from "../../lib/utils";
+import { normalizeProviderAccentColor } from "../../providerInstances";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Collapsible, CollapsibleContent } from "../ui/collapsible";
@@ -25,6 +27,15 @@ import {
   getProviderVersionLabel,
   type ProviderStatusKey,
 } from "./providerStatus";
+
+const PROVIDER_ACCENT_SWATCHES = [
+  "#2563eb",
+  "#16a34a",
+  "#ea580c",
+  "#dc2626",
+  "#7c3aed",
+  "#0891b2",
+] as const;
 
 /**
  * Read a string value at `key` from the opaque per-driver config blob.
@@ -98,6 +109,131 @@ function nextConfigBlobWithValue(
   return base;
 }
 
+function ProviderAuthEmail(props: {
+  readonly email: string | undefined;
+  readonly prefix?: string;
+  readonly separator?: boolean;
+}) {
+  const [revealed, setRevealed] = useState(false);
+  const trimmed = props.email?.trim();
+  if (!trimmed) return null;
+
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      {props.separator ? <span aria-hidden>·</span> : null}
+      {props.prefix ? <span className="text-muted-foreground/80">{props.prefix}</span> : null}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              className={cn(
+                "min-w-0 cursor-pointer truncate rounded-sm font-mono text-[11px] transition hover:text-foreground",
+                revealed ? "text-muted-foreground" : "select-none text-muted-foreground blur-sm",
+              )}
+              onClick={() => setRevealed((value) => !value)}
+              aria-label={revealed ? "Hide account email" : "Reveal account email"}
+            >
+              {trimmed}
+            </button>
+          }
+        />
+        <TooltipPopup side="top">
+          {revealed ? "Click to hide email" : "Click to reveal email"}
+        </TooltipPopup>
+      </Tooltip>
+    </span>
+  );
+}
+
+function ProviderAccentColorPicker(props: {
+  readonly displayName: string;
+  readonly value: string | undefined;
+  readonly onCommit: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(props.value ?? "");
+  const [isEditing, setIsEditing] = useState(false);
+  const draftColor = normalizeProviderAccentColor(draft);
+
+  useEffect(() => {
+    if (isEditing) return;
+    setDraft(props.value ?? "");
+  }, [isEditing, props.value]);
+
+  const commitDraft = () => {
+    setIsEditing(false);
+    props.onCommit(draftColor ?? "");
+  };
+
+  const commitSwatch = (swatch: string) => {
+    setIsEditing(false);
+    setDraft(swatch);
+    props.onCommit(swatch);
+  };
+
+  return (
+    <div className="grid gap-2">
+      <span className="text-xs font-medium text-foreground">Accent color</span>
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <input
+          type="color"
+          value={draftColor ?? PROVIDER_ACCENT_SWATCHES[0]}
+          onFocus={() => setIsEditing(true)}
+          onInput={(event) => {
+            setIsEditing(true);
+            setDraft(event.currentTarget.value);
+          }}
+          onChange={(event) => {
+            setIsEditing(true);
+            setDraft(event.currentTarget.value);
+          }}
+          onBlur={commitDraft}
+          aria-label={`Accent color for ${props.displayName}`}
+          className="h-8 w-10 cursor-pointer rounded border border-input bg-background p-0.5"
+        />
+        <div className="flex flex-wrap gap-1.5">
+          {PROVIDER_ACCENT_SWATCHES.map((swatch) => {
+            const selected = draftColor?.toLowerCase() === swatch;
+            return (
+              <button
+                key={swatch}
+                type="button"
+                className={cn(
+                  "size-6 cursor-pointer rounded-full border transition",
+                  selected
+                    ? "border-foreground ring-2 ring-ring ring-offset-1 ring-offset-background"
+                    : "border-black/10 hover:scale-105 dark:border-white/20",
+                )}
+                style={{ backgroundColor: swatch }}
+                onClick={() => commitSwatch(swatch)}
+                aria-label={`Use ${swatch} accent`}
+              />
+            );
+          })}
+        </div>
+        {draftColor ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs text-muted-foreground"
+            onClick={() => {
+              setIsEditing(false);
+              setDraft("");
+              props.onCommit("");
+            }}
+          >
+            Clear
+          </Button>
+        ) : null}
+      </div>
+      <span className="text-xs text-muted-foreground">
+        Used to distinguish this instance in picker rails and model lists.
+      </span>
+    </div>
+  );
+}
+
 interface ProviderInstanceCardProps {
   readonly instanceId: ProviderInstanceId;
   readonly instance: ProviderInstanceConfig;
@@ -165,11 +301,19 @@ export function ProviderInstanceCard({
   const statusKey: ProviderStatusKey =
     (liveProvider?.status as ProviderStatusKey | undefined) ?? (enabled ? "warning" : "disabled");
   const statusStyle = PROVIDER_STATUS_STYLES[statusKey];
-  const summary = getProviderSummary(liveProvider);
+  const rawSummary = getProviderSummary(liveProvider);
+  const authEmail = liveProvider?.auth.email;
+  const hasAuthenticatedEmail =
+    liveProvider?.auth.status === "authenticated" && Boolean(authEmail?.trim());
+  const authenticatedDetail = hasAuthenticatedEmail
+    ? (liveProvider?.auth.label ?? liveProvider?.auth.type ?? null)
+    : null;
+  const summary = rawSummary;
   const versionLabel = getProviderVersionLabel(liveProvider?.version);
   const IconComponent = driverOption?.icon;
   const displayName =
     instance.displayName?.trim() || driverOption?.label || String(instance.driver);
+  const accentColor = normalizeProviderAccentColor(instance.accentColor);
 
   // Narrow `instance.driver` for callers that key on the closed
   // `ProviderKind` union (e.g. `normalizeModelSlug`'s alias table). Custom
@@ -206,6 +350,16 @@ export function ProviderInstanceCard({
     onUpdate({ ...instance, enabled: value });
   };
 
+  const updateAccentColor = (value: string) => {
+    const normalized = normalizeProviderAccentColor(value);
+    const { accentColor: _omit, ...rest } = instance;
+    onUpdate(
+      normalized
+        ? ({ ...rest, accentColor: normalized } as ProviderInstanceConfig)
+        : (rest as ProviderInstanceConfig),
+    );
+  };
+
   const updateConfigField = (key: string, value: string) => {
     const nextConfig = nextConfigBlobWithString(instance.config, key, value);
     const { config: _omit, ...rest } = instance;
@@ -229,6 +383,13 @@ export function ProviderInstanceCard({
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex min-h-5 items-center gap-1.5">
               <span className={cn("size-2 shrink-0 rounded-full", statusStyle.dot)} />
+              {accentColor ? (
+                <span
+                  className="size-2.5 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/20"
+                  style={{ backgroundColor: accentColor }}
+                  aria-hidden
+                />
+              ) : null}
               {IconComponent ? (
                 <IconComponent className="size-4 shrink-0 text-foreground/80" aria-hidden />
               ) : null}
@@ -277,9 +438,20 @@ export function ProviderInstanceCard({
                 </span>
               ) : null}
             </div>
-            <p className="text-xs text-muted-foreground">
-              {summary.headline}
-              {summary.detail ? ` - ${summary.detail}` : null}
+            <p className="flex min-w-0 flex-wrap items-center gap-x-1 text-xs text-muted-foreground">
+              {hasAuthenticatedEmail ? (
+                <>
+                  <span>Authenticated as</span>
+                  <ProviderAuthEmail email={authEmail} />
+                  {authenticatedDetail ? <span>· {authenticatedDetail}</span> : null}
+                </>
+              ) : (
+                <>
+                  <span>{summary.headline}</span>
+                  <ProviderAuthEmail email={authEmail} separator prefix="Email" />
+                </>
+              )}
+              {summary.detail ? <span>- {summary.detail}</span> : null}
             </p>
           </div>
           <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">
@@ -321,6 +493,14 @@ export function ProviderInstanceCard({
                   Optional label shown in the provider list.
                 </span>
               </label>
+            </div>
+
+            <div className="border-t border-border/60 px-4 py-3 sm:px-5">
+              <ProviderAccentColorPicker
+                displayName={displayName}
+                value={accentColor}
+                onCommit={updateAccentColor}
+              />
             </div>
 
             {driverOption?.fields.map((field) => (

@@ -134,12 +134,29 @@ describe("ProviderCommandReactor", () => {
         typeof input.threadId === "string"
           ? ThreadId.make(input.threadId)
           : ThreadId.make(`thread-${sessionIndex}`);
+      const inputModelSelection =
+        typeof input === "object" && input !== null && "modelSelection" in input
+          ? (input.modelSelection as ModelSelection | undefined)
+          : undefined;
+      const providerInstanceId =
+        typeof input === "object" && input !== null && "providerInstanceId" in input
+          ? (input.providerInstanceId as ProviderInstanceId | undefined)
+          : inputModelSelection?.instanceId;
+      const provider =
+        typeof input === "object" &&
+        input !== null &&
+        "provider" in input &&
+        typeof input.provider === "string"
+          ? (input.provider as ProviderSession["provider"])
+          : ((inputModelSelection?.instanceId ??
+              modelSelection.instanceId) as ProviderSession["provider"]);
       const session: ProviderSession = {
         // Test fixture only ever sets built-in providers; cast back to
         // the closed `ProviderKind` to satisfy the wire schema (which
         // still uses the closed union for `ProviderSession.provider`
         // pending slice 2c).
-        provider: modelSelection.instanceId as ProviderSession["provider"],
+        provider,
+        ...(providerInstanceId ? { providerInstanceId } : {}),
         status: "ready" as const,
         runtimeMode:
           typeof input === "object" &&
@@ -154,7 +171,9 @@ describe("ProviderCommandReactor", () => {
         typeof input.cwd === "string"
           ? { cwd: input.cwd }
           : {}),
-        ...(modelSelection.model !== undefined ? { model: modelSelection.model } : {}),
+        ...((inputModelSelection?.model ?? modelSelection.model)
+          ? { model: inputModelSelection?.model ?? modelSelection.model }
+          : {}),
         threadId,
         resumeCursor: resumeCursor ?? { opaque: `resume-${sessionIndex}` },
         createdAt: now,
@@ -246,6 +265,24 @@ describe("ProviderCommandReactor", () => {
         Effect.succeed({
           sessionModelSwitch: input?.sessionModelSwitch ?? "in-session",
         }),
+      getInstanceInfo: (instanceId) => {
+        const raw = String(instanceId);
+        const driverId = ProviderDriverId.make(
+          raw.startsWith("claude") ? "claudeAgent" : raw.startsWith("codex") ? "codex" : raw,
+        );
+        return Effect.succeed({
+          instanceId,
+          driverId,
+          displayName: undefined,
+          continuationIdentity: {
+            driverId,
+            continuationKey:
+              driverId === ProviderDriverId.make("codex")
+                ? "codex:home:/shared-codex"
+                : `${driverId}:instance:${instanceId}`,
+          },
+        });
+      },
       rollbackConversation: () => unsupported(),
       get streamEvents() {
         return Stream.fromPubSub(runtimeEventPubSub);
@@ -788,7 +825,7 @@ describe("ProviderCommandReactor", () => {
     });
   });
 
-  it("rejects a first turn when requested provider conflicts with the thread model", async () => {
+  it("starts a first turn on the requested provider instance even when it differs from the thread model", async () => {
     const harness = await createHarness({
       threadModelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5-codex" },
     });
@@ -815,29 +852,25 @@ describe("ProviderCommandReactor", () => {
       }),
     );
 
-    await waitFor(async () => {
-      const readModel = await Effect.runPromise(harness.engine.getReadModel());
-      const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
-      return (
-        thread?.activities.some((activity) => activity.kind === "provider.turn.start.failed") ??
-        false
-      );
-    });
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
 
-    expect(harness.startSession).not.toHaveBeenCalled();
-    expect(harness.sendTurn).not.toHaveBeenCalled();
+    expect(harness.startSession).toHaveBeenCalledTimes(1);
+    expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
+      provider: "claudeAgent",
+      providerInstanceId: ProviderInstanceId.make("claudeAgent"),
+      modelSelection: {
+        instanceId: ProviderInstanceId.make("claudeAgent"),
+        model: "claude-opus-4-6",
+      },
+    });
 
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
-    expect(thread?.session).toBeNull();
+    expect(thread?.session?.providerName).toBe("claudeAgent");
+    expect(thread?.session?.providerInstanceId).toBe(ProviderInstanceId.make("claudeAgent"));
     expect(
       thread?.activities.find((activity) => activity.kind === "provider.turn.start.failed"),
-    ).toMatchObject({
-      summary: "Provider turn start failed",
-      payload: {
-        detail: expect.stringContaining("cannot switch to 'claudeAgent'"),
-      },
-    });
+    ).toBeUndefined();
   });
 
   it("reuses the same provider session when runtime mode is unchanged", async () => {
@@ -884,6 +917,68 @@ describe("ProviderCommandReactor", () => {
     await waitFor(() => harness.sendTurn.mock.calls.length === 2);
     expect(harness.startSession.mock.calls.length).toBe(1);
     expect(harness.stopSession.mock.calls.length).toBe(0);
+  });
+
+  it("restarts an existing Codex thread on a compatible requested instance", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-turn-start-compatible-codex-1"),
+        threadId: ThreadId.make("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-compatible-codex-1"),
+          role: "user",
+          text: "first",
+          attachments: [],
+        },
+        modelSelection: {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5-codex",
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-turn-start-compatible-codex-2"),
+        threadId: ThreadId.make("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-compatible-codex-2"),
+          role: "user",
+          text: "second",
+          attachments: [],
+        },
+        modelSelection: {
+          instanceId: ProviderInstanceId.make("codex_work"),
+          model: "gpt-5-codex",
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: new Date().toISOString(),
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 2);
+
+    expect(harness.startSession).toHaveBeenCalledTimes(2);
+    expect(harness.startSession.mock.calls[1]?.[1]).toMatchObject({
+      provider: "codex",
+      providerInstanceId: ProviderInstanceId.make("codex_work"),
+      resumeCursor: { opaque: "resume-1" },
+    });
+
+    const readModel = await Effect.runPromise(harness.engine.getReadModel());
+    const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
+    expect(thread?.session?.providerInstanceId).toBe(ProviderInstanceId.make("codex_work"));
   });
 
   it("restarts the provider session when the thread workspace changes", async () => {

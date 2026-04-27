@@ -930,6 +930,7 @@ export function parseCursorAboutOutput(result: CommandResult): CursorAboutResult
       status: "ready",
       auth: {
         status: "authenticated",
+        email: userEmail,
         ...authMetadata,
       },
     };
@@ -985,7 +986,7 @@ export function parseCursorAboutOutput(result: CommandResult): CursorAboutResult
   }
 
   // Any non-empty email value means authenticated.
-  return { version, status: "ready", auth: { status: "authenticated" } };
+  return { version, status: "ready", auth: { status: "authenticated", email: userEmail } };
 }
 
 const runCursorCommand = (cursorSettings: CursorSettings, args: ReadonlyArray<string>) =>

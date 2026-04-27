@@ -54,6 +54,13 @@ export const DRIVER_OPTIONS: readonly DriverOption[] = [
         placeholder: "~/.codex",
         description: "Custom Codex home and config directory.",
       },
+      {
+        key: "shadowHomePath",
+        label: "Shadow home path",
+        placeholder: "~/.codex-t3/personal",
+        description:
+          "Account-specific Codex home. Keeps auth.json separate while sharing state from CODEX_HOME.",
+      },
     ],
   },
   {

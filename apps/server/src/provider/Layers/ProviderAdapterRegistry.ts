@@ -49,6 +49,25 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
       ),
     );
 
+  const getInstanceInfo: ProviderAdapterRegistryShape["getInstanceInfo"] = (instanceId) =>
+    registry.getInstance(instanceId).pipe(
+      Effect.flatMap((instance) =>
+        instance === undefined
+          ? Effect.fail(
+              new ProviderUnsupportedError({
+                provider: instanceId as unknown as ProviderKind,
+              }),
+            )
+          : Effect.succeed({
+              instanceId: instance.instanceId,
+              driverId: instance.driverId,
+              displayName: instance.displayName,
+              accentColor: instance.accentColor,
+              continuationIdentity: instance.continuationIdentity,
+            }),
+      ),
+    );
+
   const listInstances: ProviderAdapterRegistryShape["listInstances"] = () =>
     registry.listInstances.pipe(
       Effect.map((instances) => instances.map((instance) => instance.instanceId)),
@@ -86,6 +105,7 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
 
   return {
     getByInstance,
+    getInstanceInfo,
     listInstances,
     getByProvider,
     listProviders,

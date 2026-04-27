@@ -76,8 +76,15 @@ export function applyServerSettingsPatch(
 ): ServerSettings {
   const selectionPatch = patch.textGenerationModelSelection;
   const next = deepMerge(current, patch);
+  const nextWithReplacements =
+    patch.providerInstances !== undefined
+      ? {
+          ...next,
+          providerInstances: patch.providerInstances,
+        }
+      : next;
   if (!selectionPatch) {
-    return next;
+    return nextWithReplacements;
   }
 
   const instanceId = selectionPatch.instanceId ?? current.textGenerationModelSelection.instanceId;
@@ -90,7 +97,7 @@ export function applyServerSettingsPatch(
       });
 
   return {
-    ...next,
+    ...nextWithReplacements,
     textGenerationModelSelection: createModelSelection(instanceId, model, options),
   };
 }

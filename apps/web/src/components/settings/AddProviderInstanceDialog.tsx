@@ -11,6 +11,7 @@ import {
 
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
+import { normalizeProviderAccentColor } from "../../providerInstances";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -25,6 +26,15 @@ import { Input } from "../ui/input";
 import { RadioGroup } from "../ui/radio-group";
 import { toastManager } from "../ui/toast";
 import { DRIVER_OPTION_BY_VALUE, DRIVER_OPTIONS } from "./providerDriverMeta";
+
+const PROVIDER_ACCENT_SWATCHES = [
+  "#2563eb",
+  "#16a34a",
+  "#ea580c",
+  "#dc2626",
+  "#7c3aed",
+  "#0891b2",
+] as const;
 
 /**
  * Normalize a user-provided label into a slug suffix for the instance id.
@@ -75,6 +85,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
 
   const [driver, setDriver] = useState<ProviderKind>("codex");
   const [label, setLabel] = useState("");
+  const [accentColor, setAccentColor] = useState<string>("");
   const [instanceId, setInstanceId] = useState("");
   const [instanceIdDirty, setInstanceIdDirty] = useState(false);
   // Driver-specific field values keyed by `${driver}:${fieldKey}` so toggling
@@ -96,6 +107,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
     if (!open) return;
     setDriver("codex");
     setLabel("");
+    setAccentColor("");
     setInstanceId("");
     setInstanceIdDirty(false);
     setFieldValues({});
@@ -142,6 +154,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
       driver: driver as ProviderDriverId,
       enabled: true,
       ...(label.trim().length > 0 ? { displayName: label.trim() } : {}),
+      ...(normalizeProviderAccentColor(accentColor) ? { accentColor } : {}),
       ...(hasConfig ? { config } : {}),
     };
     // `ProviderInstanceId.make` revalidates the slug; we've already checked
@@ -175,6 +188,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
     instanceId,
     instanceIdError,
     label,
+    accentColor,
     onOpenChange,
     settings.providerInstances,
     updateSettings,
@@ -257,6 +271,53 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
               </span>
             )}
           </label>
+
+          <div className="grid gap-2">
+            <span className="text-xs font-medium text-foreground">Accent color</span>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <input
+                type="color"
+                value={normalizeProviderAccentColor(accentColor) ?? PROVIDER_ACCENT_SWATCHES[0]}
+                onChange={(event) => setAccentColor(event.target.value)}
+                aria-label="Provider instance accent color"
+                className="h-8 w-10 cursor-pointer rounded border border-input bg-background p-0.5"
+              />
+              <div className="flex flex-wrap gap-1.5">
+                {PROVIDER_ACCENT_SWATCHES.map((swatch) => {
+                  const selected = accentColor.toLowerCase() === swatch;
+                  return (
+                    <button
+                      key={swatch}
+                      type="button"
+                      className={cn(
+                        "size-6 cursor-pointer rounded-full border transition",
+                        selected
+                          ? "border-foreground ring-2 ring-ring ring-offset-1 ring-offset-background"
+                          : "border-black/10 hover:scale-105 dark:border-white/20",
+                      )}
+                      style={{ backgroundColor: swatch }}
+                      onClick={() => setAccentColor(swatch)}
+                      aria-label={`Use ${swatch} accent`}
+                    />
+                  );
+                })}
+              </div>
+              {accentColor ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs text-muted-foreground"
+                  onClick={() => setAccentColor("")}
+                >
+                  Clear
+                </Button>
+              ) : null}
+            </div>
+            <span className="text-[11px] text-muted-foreground">
+              Optional marker shown in the picker.
+            </span>
+          </div>
 
           {driverOption.fields.length > 0 ? (
             <div className="space-y-4 border-t border-border/60 pt-4">

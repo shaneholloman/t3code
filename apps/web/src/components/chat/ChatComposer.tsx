@@ -695,8 +695,9 @@ export const ChatComposer = memo(
       [providerStatuses, selectedProvider],
     );
     const selectedModelSelection = useMemo<ModelSelection>(
-      () => createModelSelection(selectedProvider, selectedModel, selectedModelOptionsForDispatch),
-      [selectedModel, selectedModelOptionsForDispatch, selectedProvider],
+      () =>
+        createModelSelection(selectedInstanceId, selectedModel, selectedModelOptionsForDispatch),
+      [selectedInstanceId, selectedModel, selectedModelOptionsForDispatch],
     );
     const selectedModelForPicker = selectedModel;
     // Instance-keyed option list so the picker can show each configured

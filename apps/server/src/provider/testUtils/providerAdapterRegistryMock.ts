@@ -63,6 +63,25 @@ export const makeAdapterRegistryMock = (adapters: KindAdapterMap): ProviderAdapt
 
   return {
     getByInstance,
+    getInstanceInfo: (instanceId) => {
+      const adapter = byInstanceId.get(instanceId);
+      if (!adapter) {
+        return Effect.fail(
+          new ProviderUnsupportedError({
+            provider: instanceId as unknown as ProviderKind,
+          }),
+        );
+      }
+      return Effect.succeed({
+        instanceId,
+        driverId: ProviderDriverId.make(adapter.provider),
+        displayName: undefined,
+        continuationIdentity: {
+          driverId: ProviderDriverId.make(adapter.provider),
+          continuationKey: `${adapter.provider}:instance:${instanceId}`,
+        },
+      });
+    },
     listInstances: () => Effect.succeed(Array.from(byInstanceId.keys())),
     getByProvider,
     listProviders: () =>

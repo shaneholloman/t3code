@@ -1,5 +1,11 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { ProjectId, ThreadId, TurnId, ProviderInstanceId } from "@t3tools/contracts";
+import {
+  ProjectId,
+  ThreadId,
+  TurnId,
+  ProviderDriverId,
+  ProviderInstanceId,
+} from "@t3tools/contracts";
 import { Effect, Exit, Layer, ManagedRuntime, Option, Scope, Stream } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -140,6 +146,18 @@ describe("ProviderSessionReaper", () => {
       stopSession,
       listSessions: () => Effect.succeed([]),
       getCapabilities: () => Effect.succeed({ sessionModelSwitch: "in-session" }),
+      getInstanceInfo: (instanceId) => {
+        const driverId = ProviderDriverId.make(String(instanceId));
+        return Effect.succeed({
+          instanceId,
+          driverId,
+          displayName: undefined,
+          continuationIdentity: {
+            driverId,
+            continuationKey: `${driverId}:instance:${instanceId}`,
+          },
+        });
+      },
       rollbackConversation: () => unsupported(),
       streamEvents: Stream.empty,
     };

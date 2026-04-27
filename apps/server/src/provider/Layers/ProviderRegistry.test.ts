@@ -218,6 +218,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
           assert.strictEqual(status.auth.status, "authenticated");
           assert.strictEqual(status.auth.type, "chatgpt");
           assert.strictEqual(status.auth.label, "ChatGPT Pro 20x Subscription");
+          assert.strictEqual(status.auth.email, "test@example.com");
           assert.deepStrictEqual(status.models, [
             {
               slug: "gpt-live-codex",
@@ -867,6 +868,29 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
         ),
       );
 
+      it.effect("returns claude auth email from auth status JSON", () =>
+        Effect.gen(function* () {
+          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
+          assert.strictEqual(status.auth.status, "authenticated");
+          assert.strictEqual(status.auth.email, "claude@example.com");
+        }).pipe(
+          Effect.provide(
+            mockSpawnerLayer((args) => {
+              const joined = args.join(" ");
+              if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+              if (joined === "auth status")
+                return {
+                  stdout:
+                    '{"loggedIn":true,"authMethod":"claude.ai","account":{"email":"claude@example.com"}}\n',
+                  stderr: "",
+                  code: 0,
+                };
+              throw new Error(`Unexpected args: ${joined}`);
+            }),
+          ),
+        ),
+      );
+
       it.effect("includes probed claude slash commands in the provider snapshot", () =>
         Effect.gen(function* () {
           const status = yield* checkClaudeProviderStatus(
@@ -1089,12 +1113,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it("JSON with loggedIn=true is authenticated", () => {
         const parsed = parseClaudeAuthStatusFromOutput({
-          stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
+          stdout: '{"loggedIn":true,"authMethod":"claude.ai","email":"claude@example.com"}\n',
           stderr: "",
           code: 0,
         });
         assert.strictEqual(parsed.status, "ready");
         assert.strictEqual(parsed.auth.status, "authenticated");
+        assert.strictEqual(parsed.auth.email, "claude@example.com");
       });
 
       it("JSON with loggedIn=false is unauthenticated", () => {

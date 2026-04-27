@@ -27,7 +27,11 @@ import {
 import { ProviderEventLoggers } from "../Layers/ProviderEventLoggers.ts";
 import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
 import { OpenCodeRuntime } from "../opencodeRuntime.ts";
-import type { ProviderDriver, ProviderInstance } from "../ProviderDriver.ts";
+import {
+  defaultProviderContinuationIdentity,
+  type ProviderDriver,
+  type ProviderInstance,
+} from "../ProviderDriver.ts";
 
 const DRIVER_ID = ProviderDriverId.make("opencode");
 const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
@@ -41,11 +45,17 @@ export type OpenCodeDriverEnv =
   | ServerConfig;
 
 const withInstanceIdentity =
-  (instanceId: ProviderInstance["instanceId"]) =>
+  (input: {
+    readonly instanceId: ProviderInstance["instanceId"];
+    readonly displayName: string | undefined;
+    readonly accentColor: string | undefined;
+  }) =>
   (snapshot: ServerProvider): ServerProvider => ({
     ...snapshot,
-    instanceId,
+    instanceId: input.instanceId,
     driver: DRIVER_ID,
+    ...(input.displayName ? { displayName: input.displayName } : {}),
+    ...(input.accentColor ? { accentColor: input.accentColor } : {}),
   });
 
 export const OpenCodeDriver: ProviderDriver<OpenCodeSettings, OpenCodeDriverEnv> = {
@@ -56,25 +66,26 @@ export const OpenCodeDriver: ProviderDriver<OpenCodeSettings, OpenCodeDriverEnv>
   },
   configSchema: OpenCodeSettings,
   defaultConfig: (): OpenCodeSettings => Schema.decodeSync(OpenCodeSettings)({}),
-  create: ({ instanceId, displayName, enabled, config }) =>
+  create: ({ instanceId, displayName, accentColor, enabled, config }) =>
     Effect.gen(function* () {
       const openCodeRuntime = yield* OpenCodeRuntime;
       const serverConfig = yield* ServerConfig;
       const eventLoggers = yield* ProviderEventLoggers;
-      const stampIdentity = withInstanceIdentity(instanceId);
+      const stampIdentity = withInstanceIdentity({ instanceId, displayName, accentColor });
+      const effectiveConfig = { ...config, enabled } satisfies OpenCodeSettings;
 
-      const adapter = yield* makeOpenCodeAdapter(config, {
+      const adapter = yield* makeOpenCodeAdapter(effectiveConfig, {
         ...(eventLoggers.native ? { nativeEventLogger: eventLoggers.native } : {}),
       });
-      const textGeneration = yield* makeOpenCodeTextGeneration(config);
+      const textGeneration = yield* makeOpenCodeTextGeneration(effectiveConfig);
 
-      const checkProvider = checkOpenCodeProviderStatus(config, serverConfig.cwd).pipe(
+      const checkProvider = checkOpenCodeProviderStatus(effectiveConfig, serverConfig.cwd).pipe(
         Effect.map(stampIdentity),
         Effect.provideService(OpenCodeRuntime, openCodeRuntime),
       );
 
       const snapshot = yield* makeManagedServerProvider<OpenCodeSettings>({
-        getSettings: Effect.succeed(config),
+        getSettings: Effect.succeed(effectiveConfig),
         streamSettings: Stream.never,
         haveSettingsChanged: () => false,
         initialSnapshot: (settings) => stampIdentity(makePendingOpenCodeProvider(settings)),
@@ -95,7 +106,12 @@ export const OpenCodeDriver: ProviderDriver<OpenCodeSettings, OpenCodeDriverEnv>
       return {
         instanceId,
         driverId: DRIVER_ID,
+        continuationIdentity: defaultProviderContinuationIdentity({
+          driverId: DRIVER_ID,
+          instanceId,
+        }),
         displayName,
+        accentColor,
         enabled,
         snapshot,
         adapter,

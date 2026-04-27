@@ -1,6 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   DEFAULT_SERVER_SETTINGS,
+  ProviderDriverId,
   ProviderInstanceId,
   ServerSettings,
   ServerSettingsPatch,
@@ -112,6 +113,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         enabled: true,
         binaryPath: "/opt/homebrew/bin/codex",
         homePath: "/Users/julius/.codex",
+        shadowHomePath: "",
         customModels: [],
       });
       assert.deepEqual(next.providers.claudeAgent, {
@@ -197,6 +199,43 @@ it.layer(NodeServices.layer)("server settings", (it) => {
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
 
+  it.effect("replaces provider instance maps when clearing optional fields", () =>
+    Effect.gen(function* () {
+      const serverSettings = yield* ServerSettingsService;
+      const codexId = ProviderInstanceId.make("codex");
+
+      yield* serverSettings.updateSettings({
+        providerInstances: {
+          [codexId]: {
+            driver: ProviderDriverId.make("codex"),
+            displayName: "Codex Work",
+            accentColor: "#7c3aed",
+            enabled: true,
+            config: { homePath: "~/.codex" },
+          },
+        },
+      });
+
+      const next = yield* serverSettings.updateSettings({
+        providerInstances: {
+          [codexId]: {
+            driver: ProviderDriverId.make("codex"),
+            displayName: "Codex Work",
+            enabled: true,
+            config: { homePath: "~/.codex" },
+          },
+        },
+      });
+
+      assert.deepEqual(next.providerInstances[codexId], {
+        driver: ProviderDriverId.make("codex"),
+        displayName: "Codex Work",
+        enabled: true,
+        config: { homePath: "~/.codex" },
+      });
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
   it.effect("trims provider path settings when updates are applied", () =>
     Effect.gen(function* () {
       const serverSettings = yield* ServerSettingsService;
@@ -222,6 +261,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         enabled: true,
         binaryPath: "/opt/homebrew/bin/codex",
         homePath: "",
+        shadowHomePath: "",
         customModels: [],
       });
       assert.deepEqual(next.providers.claudeAgent, {

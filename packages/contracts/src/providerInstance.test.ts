@@ -99,10 +99,12 @@ describe("ProviderInstanceConfig", () => {
     const decoded = decodeProviderInstanceConfig({
       driver: "codex",
       displayName: "Codex (personal)",
+      accentColor: "#dc2626",
       enabled: true,
       config: opaqueConfig,
     });
     expect(decoded.displayName).toBe("Codex (personal)");
+    expect(decoded.accentColor).toBe("#dc2626");
     expect(decoded.enabled).toBe(true);
     expect(decoded.config).toEqual(opaqueConfig);
   });

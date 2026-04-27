@@ -1,4 +1,4 @@
-import { DEFAULT_SERVER_SETTINGS, ProviderInstanceId } from "@t3tools/contracts";
+import { DEFAULT_SERVER_SETTINGS, ProviderDriverId, ProviderInstanceId } from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
 import { createModelSelection } from "./model.ts";
 import {
@@ -142,6 +142,40 @@ describe("serverSettings helpers", () => {
         { id: "variant", value: "prod" },
         { id: "agent", value: "build" },
       ],
+    });
+  });
+
+  it("replaces providerInstances maps so omitted instance fields are cleared", () => {
+    const codexId = ProviderInstanceId.make("codex");
+    const current = {
+      ...DEFAULT_SERVER_SETTINGS,
+      providerInstances: {
+        [codexId]: {
+          driver: ProviderDriverId.make("codex"),
+          displayName: "Codex Work",
+          accentColor: "#7c3aed",
+          enabled: true,
+          config: { homePath: "~/.codex" },
+        },
+      },
+    };
+
+    expect(
+      applyServerSettingsPatch(current, {
+        providerInstances: {
+          [codexId]: {
+            driver: ProviderDriverId.make("codex"),
+            displayName: "Codex Work",
+            enabled: true,
+            config: { homePath: "~/.codex" },
+          },
+        },
+      }).providerInstances[codexId],
+    ).toEqual({
+      driver: ProviderDriverId.make("codex"),
+      displayName: "Codex Work",
+      enabled: true,
+      config: { homePath: "~/.codex" },
     });
   });
 });

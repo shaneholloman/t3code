@@ -77,6 +77,11 @@ function codexAccountAuthLabel(account: CodexSchema.V2GetAccountResponse["accoun
   }
 }
 
+function codexAccountEmail(account: CodexSchema.V2GetAccountResponse["account"]) {
+  if (!account || account.type !== "chatgpt") return undefined;
+  return account.email;
+}
+
 function mapCodexModelCapabilities(
   model: CodexSchema.V2ModelListResponse__Model,
 ): ModelCapabilities {
@@ -361,10 +366,12 @@ function accountProbeStatus(account: CodexAppServerProviderSnapshot["account"]):
   readonly message?: string;
 } {
   const authLabel = codexAccountAuthLabel(account.account);
+  const authEmail = codexAccountEmail(account.account);
   const auth = {
     status: account.account ? ("authenticated" as const) : ("unknown" as const),
     ...(account.account?.type ? { type: account.account?.type } : {}),
     ...(authLabel ? { label: authLabel } : {}),
+    ...(authEmail ? { email: authEmail } : {}),
   } satisfies ServerProvider["auth"];
 
   if (account.account) {

@@ -241,6 +241,7 @@ function buildOpenCodeProvider(models: ServerProvider["models"]): ServerProvider
 
 async function mountPicker(props: {
   provider: ProviderKind;
+  activeInstanceId?: ProviderInstanceId;
   model: string;
   lockedProvider: ProviderKind | null;
   providers?: ReadonlyArray<ServerProvider>;
@@ -253,7 +254,8 @@ async function mountPicker(props: {
   const instanceEntries = sortProviderInstanceEntries(deriveProviderInstanceEntries(providers));
   // The legacy test shape passes a driver kind; translate to the default
   // instance id for that kind (they're the same string by design).
-  const activeInstanceId = props.provider as unknown as ProviderInstanceId;
+  const activeInstanceId =
+    props.activeInstanceId ?? (props.provider as unknown as ProviderInstanceId);
   const modelOptionsByInstance = getCustomModelOptionsByInstance(
     DEFAULT_UNIFIED_SETTINGS,
     providers,
@@ -457,6 +459,70 @@ describe("ProviderModelPicker", () => {
       });
     } finally {
       localStorage.removeItem("t3code:client-settings:v1");
+      await mounted.cleanup();
+    }
+  });
+
+  it("keeps an instance sidebar in locked mode when that provider has multiple instances", async () => {
+    const defaultCodexModels: ServerProvider["models"] = [
+      {
+        slug: "gpt-work",
+        name: "GPT Work",
+        isCustom: false,
+        capabilities: createModelCapabilities({ optionDescriptors: [] }),
+      },
+    ];
+    const personalCodexModels: ServerProvider["models"] = [
+      {
+        slug: "gpt-personal",
+        name: "GPT Personal",
+        isCustom: false,
+        capabilities: createModelCapabilities({ optionDescriptors: [] }),
+      },
+    ];
+    const providers: ReadonlyArray<ServerProvider> = [
+      {
+        ...buildCodexProvider(defaultCodexModels),
+        instanceId: "codex" as ProviderInstanceId,
+        displayName: "Codex Work",
+        accentColor: "#2563eb",
+      },
+      {
+        ...buildCodexProvider(personalCodexModels),
+        instanceId: "codex_personal" as ProviderInstanceId,
+        displayName: "Codex Personal",
+        accentColor: "#dc2626",
+      },
+      TEST_PROVIDERS[1]!,
+    ];
+    const mounted = await mountPicker({
+      provider: "codex",
+      activeInstanceId: "codex" as ProviderInstanceId,
+      model: "gpt-work",
+      lockedProvider: "codex",
+      providers,
+    });
+
+    try {
+      await page.getByRole("button").click();
+
+      await vi.waitFor(() => {
+        expect(getSidebarProviderOrder()).toEqual(["codex", "codex_personal"]);
+        expect(
+          document.querySelector<HTMLElement>('[data-model-picker-provider="codex_personal"]')
+            ?.dataset.providerAccentColor,
+        ).toBe("#dc2626");
+        expect(getModelPickerListText()).toContain("Codex Work");
+        expect(getVisibleModelNames()).toEqual(["GPT Work"]);
+      });
+
+      await page.getByRole("button", { name: "Codex Personal" }).click();
+
+      await vi.waitFor(() => {
+        expect(getModelPickerListText()).toContain("Codex Personal");
+        expect(getVisibleModelNames()).toEqual(["GPT Personal"]);
+      });
+    } finally {
       await mounted.cleanup();
     }
   });

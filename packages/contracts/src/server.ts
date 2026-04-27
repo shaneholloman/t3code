@@ -47,6 +47,7 @@ export const ServerProviderAuth = Schema.Struct({
   status: ServerProviderAuthStatus,
   type: Schema.optional(TrimmedNonEmptyString),
   label: Schema.optional(TrimmedNonEmptyString),
+  email: Schema.optional(TrimmedNonEmptyString),
 });
 export type ServerProviderAuth = typeof ServerProviderAuth.Type;
 
@@ -120,6 +121,7 @@ export const ServerProvider = Schema.Struct({
   // should prefer `driver`.
   driver: Schema.optional(ProviderDriverId),
   displayName: Schema.optional(TrimmedNonEmptyString),
+  accentColor: Schema.optional(TrimmedNonEmptyString),
   badgeLabel: Schema.optional(TrimmedNonEmptyString),
   showInteractionModeToggle: Schema.optional(Schema.Boolean),
   enabled: Schema.Boolean,

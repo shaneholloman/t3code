@@ -5,6 +5,7 @@ import {
   type ModelSelection,
   type OrchestrationEvent,
   ProviderKind,
+  type ProviderInstanceId,
   type OrchestrationSession,
   ThreadId,
   type ProviderSession,
@@ -271,38 +272,62 @@ const make = Effect.gen(function* () {
     }
 
     const desiredRuntimeMode = thread.runtimeMode;
-    const currentProvider: ProviderKind | undefined = Schema.is(ProviderKind)(
-      thread.session?.providerName,
-    )
-      ? thread.session.providerName
-      : undefined;
     const requestedModelSelection = options?.modelSelection;
-    // The thread's model selection is keyed by `instanceId` (an open slug);
-    // for built-in drivers the default instance id equals the driver id, so
-    // narrow back to the closed `ProviderKind` here. Threads persisted
-    // against a fork/unknown driver are surfaced via a structured error
-    // rather than silently routed to the wrong provider.
-    const threadProviderCandidate: string = currentProvider ?? thread.modelSelection.instanceId;
-    if (!Schema.is(ProviderKind)(threadProviderCandidate)) {
+    const currentInstanceId = (thread.session?.providerInstanceId ??
+      thread.modelSelection.instanceId) as ProviderInstanceId;
+    const desiredModelSelection = requestedModelSelection ?? thread.modelSelection;
+    const desiredInstanceId = desiredModelSelection.instanceId;
+    const currentInfo = yield* providerService.getInstanceInfo(currentInstanceId).pipe(
+      Effect.mapError(
+        () =>
+          new ProviderAdapterRequestError({
+            provider: "codex",
+            method: "thread.turn.start",
+            detail: `Thread '${threadId}' references unknown provider instance '${currentInstanceId}'. The instance is not configured in this build.`,
+          }),
+      ),
+    );
+    const desiredInfo = yield* providerService.getInstanceInfo(desiredInstanceId).pipe(
+      Effect.mapError(
+        () =>
+          new ProviderAdapterRequestError({
+            provider: "codex",
+            method: "thread.turn.start",
+            detail: `Requested provider instance '${desiredInstanceId}' is not configured in this build.`,
+          }),
+      ),
+    );
+    if (!Schema.is(ProviderKind)(desiredInfo.driverId)) {
       return yield* new ProviderAdapterRequestError({
         provider: "codex",
         method: "thread.turn.start",
-        detail: `Thread '${threadId}' references unknown provider driver '${threadProviderCandidate}'. The driver is not installed in this build (rolled-back / fork mismatch).`,
+        detail: `Requested provider instance '${desiredInstanceId}' uses unknown provider driver '${desiredInfo.driverId}'. The driver is not installed in this build.`,
       });
     }
-    const threadProvider: ProviderKind = threadProviderCandidate;
+    const preferredProvider: ProviderKind = desiredInfo.driverId;
     if (
+      thread.session !== null &&
       requestedModelSelection !== undefined &&
-      requestedModelSelection.instanceId !== threadProvider
+      requestedModelSelection.instanceId !== currentInstanceId
     ) {
-      return yield* new ProviderAdapterRequestError({
-        provider: threadProvider,
-        method: "thread.turn.start",
-        detail: `Thread '${threadId}' is bound to provider '${threadProvider}' and cannot switch to '${requestedModelSelection.instanceId}'.`,
-      });
+      if (currentInfo.driverId !== desiredInfo.driverId) {
+        return yield* new ProviderAdapterRequestError({
+          provider: preferredProvider,
+          method: "thread.turn.start",
+          detail: `Thread '${threadId}' is bound to driver '${currentInfo.driverId}' and cannot switch to '${desiredInfo.driverId}'.`,
+        });
+      }
+      if (
+        currentInfo.continuationIdentity.continuationKey !==
+        desiredInfo.continuationIdentity.continuationKey
+      ) {
+        return yield* new ProviderAdapterRequestError({
+          provider: preferredProvider,
+          method: "thread.turn.start",
+          detail: `Thread '${threadId}' cannot switch from instance '${currentInstanceId}' to '${desiredInstanceId}' because their provider resume state is incompatible.`,
+        });
+      }
     }
-    const preferredProvider: ProviderKind = threadProvider;
-    const desiredModelSelection = requestedModelSelection ?? thread.modelSelection;
     const effectiveCwd = resolveThreadWorkspaceCwd({
       thread,
       projects: readModel.projects,
@@ -320,6 +345,7 @@ const make = Effect.gen(function* () {
       providerService.startSession(threadId, {
         threadId,
         ...(preferredProvider ? { provider: preferredProvider } : {}),
+        providerInstanceId: desiredInstanceId,
         ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
         modelSelection: desiredModelSelection,
         ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
@@ -333,6 +359,7 @@ const make = Effect.gen(function* () {
           threadId,
           status: mapProviderSessionStatusToOrchestrationStatus(session.status),
           providerName: session.provider,
+          providerInstanceId: session.providerInstanceId ?? desiredInstanceId,
           runtimeMode: desiredRuntimeMode,
           // Provider turn ids are not orchestration turn ids.
           activeTurnId: null,
@@ -348,23 +375,25 @@ const make = Effect.gen(function* () {
     if (existingSessionThreadId) {
       const runtimeModeChanged = thread.runtimeMode !== thread.session?.runtimeMode;
       const cwdChanged = effectiveCwd !== activeSession?.cwd;
-      const sessionModelSwitch =
-        currentProvider === undefined
-          ? "in-session"
-          : (yield* providerService.getCapabilities(currentProvider)).sessionModelSwitch;
+      const sessionModelSwitch = (yield* providerService.getCapabilities(preferredProvider))
+        .sessionModelSwitch;
       const modelChanged =
         requestedModelSelection !== undefined &&
         requestedModelSelection.model !== activeSession?.model;
+      const instanceChanged =
+        requestedModelSelection !== undefined &&
+        activeSession?.providerInstanceId !== requestedModelSelection.instanceId;
       const shouldRestartForModelChange = modelChanged && sessionModelSwitch === "unsupported";
       const previousModelSelection = threadModelSelections.get(threadId);
       const shouldRestartForModelSelectionChange =
-        currentProvider === "claudeAgent" &&
+        preferredProvider === "claudeAgent" &&
         requestedModelSelection !== undefined &&
         !Equal.equals(previousModelSelection, requestedModelSelection);
 
       if (
         !runtimeModeChanged &&
         !cwdChanged &&
+        !instanceChanged &&
         !shouldRestartForModelChange &&
         !shouldRestartForModelSelectionChange
       ) {
@@ -377,7 +406,9 @@ const make = Effect.gen(function* () {
       yield* Effect.logInfo("provider command reactor restarting provider session", {
         threadId,
         existingSessionThreadId,
-        currentProvider,
+        currentProvider: activeSession?.provider,
+        currentInstanceId,
+        desiredInstanceId,
         desiredProvider: desiredModelSelection.instanceId,
         currentRuntimeMode: thread.session?.runtimeMode,
         desiredRuntimeMode: thread.runtimeMode,
@@ -386,6 +417,7 @@ const make = Effect.gen(function* () {
         desiredCwd: effectiveCwd,
         cwdChanged,
         modelChanged,
+        instanceChanged,
         shouldRestartForModelChange,
         shouldRestartForModelSelectionChange,
         hasResumeCursor: resumeCursor !== undefined,

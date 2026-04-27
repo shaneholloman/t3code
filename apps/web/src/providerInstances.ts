@@ -35,6 +35,7 @@ export interface ProviderInstanceEntry {
   readonly instanceId: ProviderInstanceId;
   readonly driverKind: ProviderKind;
   readonly displayName: string;
+  readonly accentColor?: string | undefined;
   readonly enabled: boolean;
   readonly installed: boolean;
   readonly status: ServerProviderState;
@@ -98,6 +99,12 @@ function driverKindLabel(driverKind: ProviderKind): string {
   return PROVIDER_DISPLAY_NAMES[driverKind] ?? formatProviderKindLabel(driverKind);
 }
 
+export function normalizeProviderAccentColor(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return /^#[0-9a-fA-F]{6}$/u.test(trimmed) ? trimmed : undefined;
+}
+
 /**
  * Resolve an entry's displayName with a tiered priority:
  *
@@ -154,6 +161,7 @@ export function deriveProviderInstanceEntries(
       instanceId,
       driverKind,
       displayName,
+      accentColor: normalizeProviderAccentColor(snapshot.accentColor),
       enabled: snapshot.enabled,
       installed: snapshot.installed,
       status: snapshot.status,

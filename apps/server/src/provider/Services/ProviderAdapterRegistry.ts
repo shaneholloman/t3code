@@ -21,12 +21,21 @@
  *
  * @module ProviderAdapterRegistry
  */
-import type { ProviderInstanceId, ProviderKind } from "@t3tools/contracts";
+import type { ProviderDriverId, ProviderInstanceId, ProviderKind } from "@t3tools/contracts";
 import { Context } from "effect";
 import type { Effect, Stream } from "effect";
 
 import type { ProviderAdapterError, ProviderUnsupportedError } from "../Errors.ts";
 import type { ProviderAdapterShape } from "./ProviderAdapter.ts";
+import type { ProviderContinuationIdentity } from "../ProviderDriver.ts";
+
+export interface ProviderInstanceRoutingInfo {
+  readonly instanceId: ProviderInstanceId;
+  readonly driverId: ProviderDriverId;
+  readonly displayName: string | undefined;
+  readonly accentColor?: string | undefined;
+  readonly continuationIdentity: ProviderContinuationIdentity;
+}
 
 /**
  * ProviderAdapterRegistryShape - Service API for adapter lookup.
@@ -42,6 +51,10 @@ export interface ProviderAdapterRegistryShape {
   readonly getByInstance: (
     instanceId: ProviderInstanceId,
   ) => Effect.Effect<ProviderAdapterShape<ProviderAdapterError>, ProviderUnsupportedError>;
+
+  readonly getInstanceInfo: (
+    instanceId: ProviderInstanceId,
+  ) => Effect.Effect<ProviderInstanceRoutingInfo, ProviderUnsupportedError>;
 
   /**
    * List all live instance ids. Excludes unavailable/shadow instances —

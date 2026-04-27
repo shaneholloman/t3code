@@ -84,6 +84,14 @@ interface RegistryState {
 const entryEqual = (a: ProviderInstanceConfig, b: ProviderInstanceConfig): boolean =>
   Equal.equals(a, b);
 
+const decodedConfigEnabled = (config: unknown): boolean | undefined => {
+  if (!config || typeof config !== "object" || globalThis.Array.isArray(config)) {
+    return undefined;
+  }
+  const enabled = (config as { readonly enabled?: unknown }).enabled;
+  return typeof enabled === "boolean" ? enabled : undefined;
+};
+
 /**
  * Build one live entry from a raw config envelope. Returns either a
  * `LiveEntry` plus undefined unavailable shadow, or a shadow snapshot and
@@ -111,6 +119,7 @@ const buildEntry = <R>(input: {
           driverId: entry.driver,
           instanceId,
           displayName: entry.displayName,
+          accentColor: entry.accentColor,
           reason: `Driver '${entry.driver}' is not registered in this build.`,
         }),
       };
@@ -132,6 +141,7 @@ const buildEntry = <R>(input: {
           driverId: entry.driver,
           instanceId,
           displayName: entry.displayName,
+          accentColor: entry.accentColor,
           reason: `Invalid config for instance '${rawInstanceId}': ${detail}`,
         }),
       };
@@ -150,7 +160,8 @@ const buildEntry = <R>(input: {
       .create({
         instanceId,
         displayName: entry.displayName,
-        enabled: entry.enabled ?? true,
+        accentColor: entry.accentColor,
+        enabled: entry.enabled ?? decodedConfigEnabled(typedConfig) ?? true,
         config: typedConfig,
       })
       .pipe(Effect.provideService(Scope.Scope, childScope), Effect.result);
@@ -167,6 +178,7 @@ const buildEntry = <R>(input: {
           driverId: entry.driver,
           instanceId,
           displayName: entry.displayName,
+          accentColor: entry.accentColor,
           reason: `Driver '${entry.driver}' failed to create instance: ${createResult.failure.detail}`,
         }),
       };

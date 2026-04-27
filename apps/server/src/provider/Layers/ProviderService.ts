@@ -228,8 +228,8 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     new Map<ProviderInstanceId, ProviderAdapterShape<ProviderAdapterError>>(),
   );
 
-  const getAdapters = Ref.get(subscribedAdapters).pipe(
-    Effect.map((map) => Array.from(map.values())),
+  const getAdapterEntries = Ref.get(subscribedAdapters).pipe(
+    Effect.map((map) => Array.from(map.entries())),
   );
 
   // Rebuild the map of id → adapter from the registry and fork a new event
@@ -287,7 +287,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           (session) => session.threadId === input.binding.threadId,
         );
         if (existing) {
-          yield* upsertSessionBinding(existing, input.binding.threadId);
+          yield* upsertSessionBinding(
+            { ...existing, providerInstanceId: bindingInstanceId },
+            input.binding.threadId,
+          );
           yield* analytics.record("provider.session.recovered", {
             provider: existing.provider,
             strategy: "adopt-existing",
@@ -310,6 +313,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       const resumed = yield* adapter.startSession({
         threadId: input.binding.threadId,
         provider: input.binding.provider,
+        providerInstanceId: bindingInstanceId,
         ...(persistedCwd ? { cwd: persistedCwd } : {}),
         ...(persistedModelSelection ? { modelSelection: persistedModelSelection } : {}),
         ...(hasResumeCursor ? { resumeCursor: input.binding.resumeCursor } : {}),
@@ -322,7 +326,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         );
       }
 
-      yield* upsertSessionBinding(resumed, input.binding.threadId);
+      yield* upsertSessionBinding(
+        { ...resumed, providerInstanceId: bindingInstanceId },
+        input.binding.threadId,
+      );
       yield* analytics.record("provider.session.recovered", {
         provider: resumed.provider,
         strategy: "resume-thread",
@@ -352,30 +359,36 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         `Cannot route thread '${input.threadId}' because no persisted provider binding exists.`,
       );
     }
-    const adapter = yield* registry.getByInstance(resolveBindingInstanceId(binding));
+    const instanceId = resolveBindingInstanceId(binding);
+    const adapter = yield* registry.getByInstance(instanceId);
 
     const hasRequestedSession = yield* adapter.hasSession(input.threadId);
     if (hasRequestedSession) {
-      return { adapter, threadId: input.threadId, isActive: true } as const;
+      return { adapter, instanceId, threadId: input.threadId, isActive: true } as const;
     }
 
     if (!input.allowRecovery) {
-      return { adapter, threadId: input.threadId, isActive: false } as const;
+      return { adapter, instanceId, threadId: input.threadId, isActive: false } as const;
     }
 
     const recovered = yield* recoverSessionForThread({ binding, operation: input.operation });
-    return { adapter: recovered.adapter, threadId: input.threadId, isActive: true } as const;
+    return {
+      adapter: recovered.adapter,
+      instanceId,
+      threadId: input.threadId,
+      isActive: true,
+    } as const;
   });
 
   const stopStaleSessionsForThread = Effect.fn("stopStaleSessionsForThread")(function* (input: {
     readonly threadId: ThreadId;
-    readonly currentProvider: ProviderSession["provider"];
+    readonly currentInstanceId: ProviderInstanceId;
   }) {
-    const currentAdapters = yield* getAdapters;
+    const currentAdapters = yield* getAdapterEntries;
     yield* Effect.forEach(
       currentAdapters,
-      (adapter) =>
-        adapter.provider === input.currentProvider
+      ([instanceId, adapter]) =>
+        instanceId === input.currentInstanceId
           ? Effect.void
           : Effect.gen(function* () {
               const hasSession = yield* adapter.hasSession(input.threadId);
@@ -436,10 +449,17 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
             ),
           ),
         );
-        if (!settings.providers[input.provider].enabled) {
+        const instanceInfo = yield* registry.getInstanceInfo(resolvedInstanceId);
+        if (!settings.providers[input.provider].enabled && resolvedInstanceId === input.provider) {
           return yield* toValidationError(
             "ProviderService.startSession",
             `Provider '${input.provider}' is disabled in T3 Code settings.`,
+          );
+        }
+        if (instanceInfo.driverId !== ProviderDriverId.make(input.provider)) {
+          return yield* toValidationError(
+            "ProviderService.startSession",
+            `Provider instance '${resolvedInstanceId}' belongs to driver '${instanceInfo.driverId}', not '${input.provider}'.`,
           );
         }
         const persistedBinding = Option.getOrUndefined(yield* directory.getBinding(threadId));
@@ -472,6 +492,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         const adapter = yield* registry.getByInstance(resolvedInstanceId);
         const session = yield* adapter.startSession({
           ...input,
+          providerInstanceId: resolvedInstanceId,
           ...(effectiveCwd !== undefined ? { cwd: effectiveCwd } : {}),
           ...(effectiveResumeCursor !== undefined ? { resumeCursor: effectiveResumeCursor } : {}),
         });
@@ -482,25 +503,26 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
             `Adapter/provider mismatch: requested '${adapter.provider}', received '${session.provider}'.`,
           );
         }
+        const sessionWithInstance = { ...session, providerInstanceId: resolvedInstanceId };
 
         yield* stopStaleSessionsForThread({
           threadId,
-          currentProvider: adapter.provider,
+          currentInstanceId: resolvedInstanceId,
         });
-        yield* upsertSessionBinding(session, threadId, {
+        yield* upsertSessionBinding(sessionWithInstance, threadId, {
           modelSelection: input.modelSelection,
         });
         yield* analytics.record("provider.session.started", {
-          provider: session.provider,
+          provider: sessionWithInstance.provider,
           runtimeMode: input.runtimeMode,
-          hasResumeCursor: session.resumeCursor !== undefined,
+          hasResumeCursor: sessionWithInstance.resumeCursor !== undefined,
           hasCwd: typeof effectiveCwd === "string" && effectiveCwd.trim().length > 0,
           hasModel:
             typeof input.modelSelection?.model === "string" &&
             input.modelSelection.model.trim().length > 0,
         });
 
-        return session;
+        return sessionWithInstance;
       }).pipe(
         withMetrics({
           counter: providerSessionsTotal,
@@ -553,6 +575,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       yield* directory.upsert({
         threadId: input.threadId,
         provider: routed.adapter.provider,
+        providerInstanceId: routed.instanceId,
         status: "running",
         ...(turn.resumeCursor !== undefined ? { resumeCursor: turn.resumeCursor } : {}),
         runtimePayload: {
@@ -721,6 +744,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         yield* directory.upsert({
           threadId: input.threadId,
           provider: routed.adapter.provider,
+          providerInstanceId: routed.instanceId,
           status: "stopped",
           runtimePayload: {
             activeTurnId: null,
@@ -743,9 +767,15 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
   const listSessions: ProviderServiceShape["listSessions"] = Effect.fn("listSessions")(
     function* () {
-      const currentAdapters = yield* getAdapters;
-      const sessionsByProvider = yield* Effect.forEach(currentAdapters, (adapter) =>
-        adapter.listSessions(),
+      const currentAdapters = yield* getAdapterEntries;
+      const sessionsByProvider = yield* Effect.forEach(currentAdapters, ([instanceId, adapter]) =>
+        adapter
+          .listSessions()
+          .pipe(
+            Effect.map((sessions) =>
+              sessions.map((session) => ({ ...session, providerInstanceId: instanceId })),
+            ),
+          ),
       );
       const activeSessions = sessionsByProvider.flatMap((sessions) => sessions);
       const persistedBindings = yield* directory.listThreadIds().pipe(
@@ -778,7 +808,9 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         const overrides: {
           resumeCursor?: ProviderSession["resumeCursor"];
           runtimeMode?: ProviderSession["runtimeMode"];
+          providerInstanceId?: ProviderSession["providerInstanceId"];
         } = {};
+        overrides.providerInstanceId = resolveBindingInstanceId(binding);
         if (session.resumeCursor === undefined && binding.resumeCursor !== undefined) {
           overrides.resumeCursor = binding.resumeCursor;
         }
@@ -792,6 +824,9 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
   const getCapabilities: ProviderServiceShape["getCapabilities"] = (provider) =>
     registry.getByProvider(provider).pipe(Effect.map((adapter) => adapter.capabilities));
+
+  const getInstanceInfo: ProviderServiceShape["getInstanceInfo"] = (instanceId) =>
+    registry.getInstanceInfo(instanceId);
 
   const rollbackConversation: ProviderServiceShape["rollbackConversation"] = Effect.fn(
     "rollbackConversation",
@@ -836,9 +871,15 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
   const runStopAll = Effect.fn("runStopAll")(function* () {
     const threadIds = yield* directory.listThreadIds();
-    const currentAdapters = yield* getAdapters;
-    const activeSessions = yield* Effect.forEach(currentAdapters, (adapter) =>
-      adapter.listSessions(),
+    const currentAdapters = yield* getAdapterEntries;
+    const activeSessions = yield* Effect.forEach(currentAdapters, ([instanceId, adapter]) =>
+      adapter
+        .listSessions()
+        .pipe(
+          Effect.map((sessions) =>
+            sessions.map((session) => ({ ...session, providerInstanceId: instanceId })),
+          ),
+        ),
     ).pipe(Effect.map((sessionsByAdapter) => sessionsByAdapter.flatMap((sessions) => sessions)));
     yield* Effect.forEach(activeSessions, (session) =>
       upsertSessionBinding(session, session.threadId, {
@@ -846,7 +887,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         lastRuntimeEventAt: new Date().toISOString(),
       }),
     ).pipe(Effect.asVoid);
-    yield* Effect.forEach(currentAdapters, (adapter) => adapter.stopAll()).pipe(Effect.asVoid);
+    yield* Effect.forEach(currentAdapters, ([, adapter]) => adapter.stopAll()).pipe(Effect.asVoid);
     yield* Effect.forEach(threadIds, (threadId) =>
       directory.getProvider(threadId).pipe(
         Effect.flatMap((provider) =>
@@ -884,6 +925,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     stopSession,
     listSessions,
     getCapabilities,
+    getInstanceInfo,
     rollbackConversation,
     // Each access creates a fresh PubSub subscription so that multiple
     // consumers (ProviderRuntimeIngestion, CheckpointReactor, etc.) each

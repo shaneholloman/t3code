@@ -8,6 +8,7 @@ import {
   ProviderRuntimeEvent,
   ProviderSession,
   ProviderInstanceId,
+  ProviderDriverId,
 } from "@t3tools/contracts";
 import {
   CommandId,
@@ -102,6 +103,16 @@ function createProviderServiceHarness(
     stopSession: () => unsupported(),
     listSessions,
     getCapabilities: () => Effect.succeed({ sessionModelSwitch: "in-session" }),
+    getInstanceInfo: (instanceId) =>
+      Effect.succeed({
+        instanceId,
+        driverId: ProviderDriverId.make(providerName),
+        displayName: undefined,
+        continuationIdentity: {
+          driverId: ProviderDriverId.make(providerName),
+          continuationKey: `${providerName}:instance:${instanceId}`,
+        },
+      }),
     rollbackConversation,
     get streamEvents() {
       return Stream.fromPubSub(runtimeEventPubSub);

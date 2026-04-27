@@ -530,6 +530,7 @@ describe("parseCursorAboutOutput", () => {
       status: "ready",
       auth: {
         status: "authenticated",
+        email: "jmarminge@gmail.com",
         type: "Team",
         label: "Cursor Team Subscription",
       },

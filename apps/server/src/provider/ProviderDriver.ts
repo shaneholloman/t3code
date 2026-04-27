@@ -58,11 +58,28 @@ export interface ProviderDriverMetadata {
 export interface ProviderInstance {
   readonly instanceId: ProviderInstanceId;
   readonly driverId: ProviderDriverId;
+  readonly continuationIdentity: ProviderContinuationIdentity;
   readonly displayName: string | undefined;
+  readonly accentColor?: string | undefined;
   readonly enabled: boolean;
   readonly snapshot: ServerProviderShape;
   readonly adapter: ProviderAdapterShape<ProviderAdapterError>;
   readonly textGeneration: TextGenerationShape;
+}
+
+export interface ProviderContinuationIdentity {
+  readonly driverId: ProviderDriverId;
+  readonly continuationKey: string;
+}
+
+export function defaultProviderContinuationIdentity(input: {
+  readonly driverId: ProviderDriverId;
+  readonly instanceId: ProviderInstanceId;
+}): ProviderContinuationIdentity {
+  return {
+    driverId: input.driverId,
+    continuationKey: `${input.driverId}:instance:${input.instanceId}`,
+  };
 }
 
 /**
@@ -74,6 +91,7 @@ export interface ProviderInstance {
 export interface ProviderDriverCreateInput<Config> {
   readonly instanceId: ProviderInstanceId;
   readonly displayName: string | undefined;
+  readonly accentColor?: string | undefined;
   readonly enabled: boolean;
   readonly config: Config;
 }

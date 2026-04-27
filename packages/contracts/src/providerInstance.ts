@@ -138,6 +138,7 @@ export type ProviderInstanceRef = typeof ProviderInstanceRef.Type;
 export const ProviderInstanceConfig = Schema.Struct({
   driver: ProviderDriverId,
   displayName: Schema.optional(TrimmedNonEmptyString),
+  accentColor: Schema.optional(TrimmedNonEmptyString),
   enabled: Schema.optionalKey(Schema.Boolean),
   config: Schema.optionalKey(Schema.Unknown),
 });

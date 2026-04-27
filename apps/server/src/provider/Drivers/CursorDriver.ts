@@ -27,7 +27,11 @@ import {
 } from "../Layers/CursorProvider.ts";
 import { ProviderEventLoggers } from "../Layers/ProviderEventLoggers.ts";
 import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
-import type { ProviderDriver, ProviderInstance } from "../ProviderDriver.ts";
+import {
+  defaultProviderContinuationIdentity,
+  type ProviderDriver,
+  type ProviderInstance,
+} from "../ProviderDriver.ts";
 
 const DRIVER_ID = ProviderDriverId.make("cursor");
 const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
@@ -40,11 +44,17 @@ export type CursorDriverEnv =
   | ServerConfig;
 
 const withInstanceIdentity =
-  (instanceId: ProviderInstance["instanceId"]) =>
+  (input: {
+    readonly instanceId: ProviderInstance["instanceId"];
+    readonly displayName: string | undefined;
+    readonly accentColor: string | undefined;
+  }) =>
   (snapshot: ServerProvider): ServerProvider => ({
     ...snapshot,
-    instanceId,
+    instanceId: input.instanceId,
     driver: DRIVER_ID,
+    ...(input.displayName ? { displayName: input.displayName } : {}),
+    ...(input.accentColor ? { accentColor: input.accentColor } : {}),
   });
 
 export const CursorDriver: ProviderDriver<CursorSettings, CursorDriverEnv> = {
@@ -55,25 +65,26 @@ export const CursorDriver: ProviderDriver<CursorSettings, CursorDriverEnv> = {
   },
   configSchema: CursorSettings,
   defaultConfig: (): CursorSettings => Schema.decodeSync(CursorSettings)({}),
-  create: ({ instanceId, displayName, enabled, config }) =>
+  create: ({ instanceId, displayName, accentColor, enabled, config }) =>
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const eventLoggers = yield* ProviderEventLoggers;
-      const stampIdentity = withInstanceIdentity(instanceId);
+      const stampIdentity = withInstanceIdentity({ instanceId, displayName, accentColor });
+      const effectiveConfig = { ...config, enabled } satisfies CursorSettings;
 
-      const adapter = yield* makeCursorAdapter(config, {
+      const adapter = yield* makeCursorAdapter(effectiveConfig, {
         ...(eventLoggers.native ? { nativeEventLogger: eventLoggers.native } : {}),
         instanceId,
       });
-      const textGeneration = yield* makeCursorTextGeneration(config);
+      const textGeneration = yield* makeCursorTextGeneration(effectiveConfig);
 
-      const checkProvider = checkCursorProviderStatus(config).pipe(
+      const checkProvider = checkCursorProviderStatus(effectiveConfig).pipe(
         Effect.map(stampIdentity),
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
       );
 
       const snapshot = yield* makeManagedServerProvider<CursorSettings>({
-        getSettings: Effect.succeed(config),
+        getSettings: Effect.succeed(effectiveConfig),
         streamSettings: Stream.never,
         haveSettingsChanged: () => false,
         initialSnapshot: (settings) => stampIdentity(buildInitialCursorProviderSnapshot(settings)),
@@ -105,7 +116,12 @@ export const CursorDriver: ProviderDriver<CursorSettings, CursorDriverEnv> = {
       return {
         instanceId,
         driverId: DRIVER_ID,
+        continuationIdentity: defaultProviderContinuationIdentity({
+          driverId: DRIVER_ID,
+          instanceId,
+        }),
         displayName,
+        accentColor,
         enabled,
         snapshot,
         adapter,

@@ -34,6 +34,7 @@ export interface UnavailableProviderSnapshotInput {
   readonly driverId: ProviderDriverId | string;
   readonly instanceId: ProviderInstanceId;
   readonly displayName?: string | undefined;
+  readonly accentColor?: string | undefined;
   readonly reason: string;
   /**
    * Optional override for `checkedAt`. Defaulted to `new Date()` so callers
@@ -73,6 +74,7 @@ export function buildUnavailableProviderSnapshot(
   return {
     ...base,
     instanceId: input.instanceId,
+    ...(input.accentColor ? { accentColor: input.accentColor } : {}),
     driver:
       typeof input.driverId === "string" ? ProviderDriverId.make(input.driverId) : input.driverId,
     availability: "unavailable",

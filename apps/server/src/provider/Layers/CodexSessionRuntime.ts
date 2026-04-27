@@ -5,6 +5,7 @@ import {
   DEFAULT_MODEL_BY_PROVIDER,
   EventId,
   ProviderItemId,
+  type ProviderInstanceId,
   type ProviderApprovalDecision,
   type ProviderEvent,
   type ProviderInteractionMode,
@@ -76,6 +77,7 @@ type CodexThreadItem =
 
 export interface CodexSessionRuntimeOptions {
   readonly threadId: ThreadId;
+  readonly providerInstanceId?: ProviderInstanceId;
   readonly binaryPath: string;
   readonly homePath?: string;
   readonly cwd: string;
@@ -714,6 +716,7 @@ export const makeCodexSessionRuntime = (
 
     const initialSession = {
       provider: PROVIDER,
+      ...(options.providerInstanceId ? { providerInstanceId: options.providerInstanceId } : {}),
       status: "connecting",
       runtimeMode: options.runtimeMode,
       cwd: options.cwd,
@@ -730,6 +733,7 @@ export const makeCodexSessionRuntime = (
       offerEvent({
         id: EventId.make(randomUUID()),
         provider: PROVIDER,
+        ...(options.providerInstanceId ? { providerInstanceId: options.providerInstanceId } : {}),
         createdAt: new Date().toISOString(),
         ...event,
       });
