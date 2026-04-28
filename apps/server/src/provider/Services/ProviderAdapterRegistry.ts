@@ -34,6 +34,7 @@ export interface ProviderInstanceRoutingInfo {
   readonly driverId: ProviderDriverId;
   readonly displayName: string | undefined;
   readonly accentColor?: string | undefined;
+  readonly enabled: boolean;
   readonly continuationIdentity: ProviderContinuationIdentity;
 }
 

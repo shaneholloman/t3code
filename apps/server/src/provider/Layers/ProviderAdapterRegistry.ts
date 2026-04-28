@@ -63,6 +63,7 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
               driverId: instance.driverId,
               displayName: instance.displayName,
               accentColor: instance.accentColor,
+              enabled: instance.enabled,
               continuationIdentity: instance.continuationIdentity,
             }),
       ),

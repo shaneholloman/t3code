@@ -302,6 +302,7 @@ describe("ProviderCommandReactor", () => {
           instanceId,
           driverId,
           displayName: undefined,
+          enabled: true,
           continuationIdentity: {
             driverId,
             continuationKey:

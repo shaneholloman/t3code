@@ -1,16 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, it, assert, live } from "@effect/vitest";
-import {
-  Effect,
-  Exit,
-  Layer,
-  PubSub,
-  Ref,
-  Schema,
-  Scope,
-  Sink,
-  Stream,
-} from "effect";
+import { Effect, Exit, Layer, PubSub, Ref, Schema, Scope, Sink, Stream } from "effect";
 import * as CodexErrors from "effect-codex-app-server/errors";
 import {
   ClaudeSettings,
@@ -26,16 +16,10 @@ import { ChildProcessSpawner } from "effect/unstable/process";
 import { deepMerge } from "@t3tools/shared/Struct";
 import { createModelCapabilities } from "@t3tools/shared/model";
 
-import {
-  checkCodexProviderStatus,
-  type CodexAppServerProviderSnapshot,
-} from "./CodexProvider.ts";
+import { checkCodexProviderStatus, type CodexAppServerProviderSnapshot } from "./CodexProvider.ts";
 import { checkClaudeProviderStatus } from "./ClaudeProvider.ts";
 import { OpenCodeRuntimeLive } from "../opencodeRuntime.ts";
-import {
-  NoOpProviderEventLoggers,
-  ProviderEventLoggers,
-} from "./ProviderEventLoggers.ts";
+import { NoOpProviderEventLoggers, ProviderEventLoggers } from "./ProviderEventLoggers.ts";
 import { ProviderInstanceRegistryHydrationLive } from "./ProviderInstanceRegistryHydration.ts";
 import {
   haveProvidersChanged,
@@ -43,21 +27,12 @@ import {
   ProviderRegistryLive,
 } from "./ProviderRegistry.ts";
 import { ServerConfig } from "../../config.ts";
-import {
-  ServerSettingsService,
-  type ServerSettingsShape,
-} from "../../serverSettings.ts";
+import { ServerSettingsService, type ServerSettingsShape } from "../../serverSettings.ts";
 import { ProviderRegistry } from "../Services/ProviderRegistry.ts";
 
-const defaultClaudeSettings: ClaudeSettings = Schema.decodeSync(ClaudeSettings)(
-  {},
-);
-const defaultCodexSettings: CodexSettings = Schema.decodeSync(CodexSettings)(
-  {},
-);
-const disabledClaudeSettings: ClaudeSettings = Schema.decodeSync(
-  ClaudeSettings,
-)({
+const defaultClaudeSettings: ClaudeSettings = Schema.decodeSync(ClaudeSettings)({});
+const defaultCodexSettings: CodexSettings = Schema.decodeSync(CodexSettings)({});
+const disabledClaudeSettings: ClaudeSettings = Schema.decodeSync(ClaudeSettings)({
   enabled: false,
 });
 const disabledCodexSettings: CodexSettings = Schema.decodeSync(CodexSettings)({
@@ -258,9 +233,7 @@ function makeMutableServerSettingsService(
       updateSettings: (patch) =>
         Effect.gen(function* () {
           const current = yield* Ref.get(settingsRef);
-          const next = Schema.decodeSync(ServerSettings)(
-            deepMerge(current, patch),
-          );
+          const next = Schema.decodeSync(ServerSettings)(deepMerge(current, patch));
           yield* Ref.set(settingsRef, next);
           yield* PubSub.publish(changes, next);
           return next;
@@ -276,100 +249,87 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
   "ProviderRegistry",
   (it) => {
     describe("checkCodexProviderStatus", () => {
-      it.effect(
-        "uses the app-server account and model list for provider status",
-        () =>
-          Effect.gen(function* () {
-            const status = yield* checkCodexProviderStatus(
-              defaultCodexSettings,
-              () =>
-                Effect.succeed(
-                  makeCodexProbeSnapshot({
-                    skills: [
-                      {
-                        name: "github:gh-fix-ci",
-                        path: "/Users/test/.codex/skills/gh-fix-ci/SKILL.md",
-                        enabled: true,
-                        displayName: "CI Debug",
-                        shortDescription: "Debug failing GitHub Actions checks",
-                      },
-                    ],
-                  }),
-                ),
-            );
+      it.effect("uses the app-server account and model list for provider status", () =>
+        Effect.gen(function* () {
+          const status = yield* checkCodexProviderStatus(defaultCodexSettings, () =>
+            Effect.succeed(
+              makeCodexProbeSnapshot({
+                skills: [
+                  {
+                    name: "github:gh-fix-ci",
+                    path: "/Users/test/.codex/skills/gh-fix-ci/SKILL.md",
+                    enabled: true,
+                    displayName: "CI Debug",
+                    shortDescription: "Debug failing GitHub Actions checks",
+                  },
+                ],
+              }),
+            ),
+          );
 
-            assert.strictEqual(status.provider, "codex");
-            assert.strictEqual(status.status, "ready");
-            assert.strictEqual(status.installed, true);
-            assert.strictEqual(status.version, "1.0.0");
-            assert.strictEqual(status.auth.status, "authenticated");
-            assert.strictEqual(status.auth.type, "chatgpt");
-            assert.strictEqual(
-              status.auth.label,
-              "ChatGPT Pro 20x Subscription",
-            );
-            assert.strictEqual(status.auth.email, "test@example.com");
-            assert.deepStrictEqual(status.models, [
-              {
-                slug: "gpt-live-codex",
-                name: "GPT Live Codex",
-                isCustom: false,
-                capabilities: codexModelCapabilities,
-              },
-            ]);
-            assert.deepStrictEqual(status.skills, [
-              {
-                name: "github:gh-fix-ci",
-                path: "/Users/test/.codex/skills/gh-fix-ci/SKILL.md",
-                enabled: true,
-                displayName: "CI Debug",
-                shortDescription: "Debug failing GitHub Actions checks",
-              },
-            ]);
-          }),
+          assert.strictEqual(status.provider, "codex");
+          assert.strictEqual(status.status, "ready");
+          assert.strictEqual(status.installed, true);
+          assert.strictEqual(status.version, "1.0.0");
+          assert.strictEqual(status.auth.status, "authenticated");
+          assert.strictEqual(status.auth.type, "chatgpt");
+          assert.strictEqual(status.auth.label, "ChatGPT Pro 20x Subscription");
+          assert.strictEqual(status.auth.email, "test@example.com");
+          assert.deepStrictEqual(status.models, [
+            {
+              slug: "gpt-live-codex",
+              name: "GPT Live Codex",
+              isCustom: false,
+              capabilities: codexModelCapabilities,
+            },
+          ]);
+          assert.deepStrictEqual(status.skills, [
+            {
+              name: "github:gh-fix-ci",
+              path: "/Users/test/.codex/skills/gh-fix-ci/SKILL.md",
+              enabled: true,
+              displayName: "CI Debug",
+              shortDescription: "Debug failing GitHub Actions checks",
+            },
+          ]);
+        }),
       );
 
-      it.effect(
-        "returns unauthenticated when app-server requires OpenAI auth",
-        () =>
-          Effect.gen(function* () {
-            const status = yield* checkCodexProviderStatus(
-              defaultCodexSettings,
-              () =>
-                Effect.succeed(
-                  makeCodexProbeSnapshot({
-                    account: {
-                      account: null,
-                      requiresOpenaiAuth: true,
-                    },
-                  }),
-                ),
-            );
+      it.effect("returns unauthenticated when app-server requires OpenAI auth", () =>
+        Effect.gen(function* () {
+          const status = yield* checkCodexProviderStatus(defaultCodexSettings, () =>
+            Effect.succeed(
+              makeCodexProbeSnapshot({
+                account: {
+                  account: null,
+                  requiresOpenaiAuth: true,
+                },
+              }),
+            ),
+          );
 
-            assert.strictEqual(status.status, "error");
-            assert.strictEqual(status.auth.status, "unauthenticated");
-            assert.strictEqual(
-              status.message,
-              "Codex CLI is not authenticated. Run `codex login` and try again.",
-            );
-          }),
+          assert.strictEqual(status.status, "error");
+          assert.strictEqual(status.auth.status, "unauthenticated");
+          assert.strictEqual(
+            status.message,
+            "Codex CLI is not authenticated. Run `codex login` and try again.",
+          );
+        }),
       );
 
       it.effect(
         "returns ready with unknown auth when app-server does not require OpenAI auth",
         () =>
           Effect.gen(function* () {
-            const status = yield* checkCodexProviderStatus(
-              defaultCodexSettings,
-              () =>
-                Effect.succeed(
-                  makeCodexProbeSnapshot({
-                    account: {
-                      account: null,
-                      requiresOpenaiAuth: false,
-                    },
-                  }),
-                ),
+            const status = yield* checkCodexProviderStatus(defaultCodexSettings, () =>
+              Effect.succeed(
+                makeCodexProbeSnapshot({
+                  account: {
+                    account: null,
+                    requiresOpenaiAuth: false,
+                  },
+                }),
+              ),
             );
 
             assert.strictEqual(status.status, "ready");
@@ -379,17 +339,15 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("returns an api key label for codex api key auth", () =>
         Effect.gen(function* () {
-          const status = yield* checkCodexProviderStatus(
-            defaultCodexSettings,
-            () =>
-              Effect.succeed(
-                makeCodexProbeSnapshot({
-                  account: {
-                    account: { type: "apiKey" },
-                    requiresOpenaiAuth: false,
-                  },
-                }),
-              ),
+          const status = yield* checkCodexProviderStatus(defaultCodexSettings, () =>
+            Effect.succeed(
+              makeCodexProbeSnapshot({
+                account: {
+                  account: { type: "apiKey" },
+                  requiresOpenaiAuth: false,
+                },
+              }),
+            ),
           );
 
           assert.strictEqual(status.status, "ready");
@@ -401,15 +359,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("returns unavailable when codex is missing", () =>
         Effect.gen(function* () {
-          const status = yield* checkCodexProviderStatus(
-            defaultCodexSettings,
-            () =>
-              Effect.fail(
-                new CodexErrors.CodexAppServerSpawnError({
-                  command: "codex app-server",
-                  cause: new Error("spawn codex ENOENT"),
-                }),
-              ),
+          const status = yield* checkCodexProviderStatus(defaultCodexSettings, () =>
+            Effect.fail(
+              new CodexErrors.CodexAppServerSpawnError({
+                command: "codex app-server",
+                cause: new Error("spawn codex ENOENT"),
+              }),
+            ),
           );
           assert.strictEqual(status.provider, "codex");
           assert.strictEqual(status.status, "error");
@@ -452,10 +408,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
           },
         ] as const satisfies ReadonlyArray<ServerProvider>;
 
-        assert.strictEqual(
-          haveProvidersChanged(providers, [...providers]),
-          false,
-        );
+        assert.strictEqual(haveProvidersChanged(providers, [...providers]), false);
       });
 
       it("preserves previously discovered provider models when a refresh returns none", () => {
@@ -492,10 +445,9 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
           models: [],
         } satisfies ServerProvider;
 
-        assert.deepStrictEqual(
-          mergeProviderSnapshot(previousProvider, refreshedProvider).models,
-          [...previousProvider.models],
-        );
+        assert.deepStrictEqual(mergeProviderSnapshot(previousProvider, refreshedProvider).models, [
+          ...previousProvider.models,
+        ]);
       });
 
       it("fills missing capabilities from the previous provider snapshot", () => {
@@ -541,10 +493,9 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
           ],
         } satisfies ServerProvider;
 
-        assert.deepStrictEqual(
-          mergeProviderSnapshot(previousProvider, refreshedProvider).models,
-          [...previousProvider.models],
-        );
+        assert.deepStrictEqual(mergeProviderSnapshot(previousProvider, refreshedProvider).models, [
+          ...previousProvider.models,
+        ]);
       });
 
       // This test intentionally avoids `mockCommandSpawnerLayer` so the real
@@ -558,98 +509,92 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
       // breaks — the `codex_personal`-never-probes bug we are guarding
       // against — that snapshot never lands in `getProviders` and the
       // assertions below fail.
-      it.effect(
-        "propagates real Codex probe failures to the aggregator at boot",
-        () =>
-          Effect.gen(function* () {
-            const missingBinary = `t3code_codex_missing_${process.pid}_${Date.now()}`;
-            const serverSettings = yield* makeMutableServerSettingsService(
-              Schema.decodeSync(ServerSettings)(
-                deepMerge(DEFAULT_SERVER_SETTINGS, {
-                  providers: {
-                    // Disable every built-in probe that would otherwise spawn
-                    // on the CI host. `enabled: false` short-circuits each
-                    // driver's probe *before* it touches the spawner, so the
-                    // test environment stays isolated from the dev
-                    // machine's PATH.
-                    codex: { enabled: false },
-                    claudeAgent: { enabled: false },
-                    cursor: { enabled: false },
-                    opencode: { enabled: false },
-                  },
-                  // `providerInstances` keys are branded `ProviderInstanceId`;
-                  // the branded index signature rejects plain string literals
-                  // at the TS level even though the runtime schema happily
-                  // accepts + decodes them. Cast the patch to `unknown` so
-                  // the `Schema.decodeSync` below does the real validation.
-                  providerInstances: {
-                    // Matches the shape the user had in `.t3/dev/settings.json`
-                    // when the bug was reported: a custom enabled Codex instance
-                    // pointing at a binary the server has to actually spawn.
-                    codex_personal: {
-                      driver: "codex",
-                      displayName: "Codex Personal",
-                      enabled: true,
-                      config: {
-                        binaryPath: missingBinary,
-                        homePath: `/tmp/${missingBinary}_home`,
-                      },
+      it.effect("propagates real Codex probe failures to the aggregator at boot", () =>
+        Effect.gen(function* () {
+          const missingBinary = `t3code_codex_missing_${process.pid}_${Date.now()}`;
+          const serverSettings = yield* makeMutableServerSettingsService(
+            Schema.decodeSync(ServerSettings)(
+              deepMerge(DEFAULT_SERVER_SETTINGS, {
+                providers: {
+                  // Disable every built-in probe that would otherwise spawn
+                  // on the CI host. `enabled: false` short-circuits each
+                  // driver's probe *before* it touches the spawner, so the
+                  // test environment stays isolated from the dev
+                  // machine's PATH.
+                  codex: { enabled: false },
+                  claudeAgent: { enabled: false },
+                  cursor: { enabled: false },
+                  opencode: { enabled: false },
+                },
+                // `providerInstances` keys are branded `ProviderInstanceId`;
+                // the branded index signature rejects plain string literals
+                // at the TS level even though the runtime schema happily
+                // accepts + decodes them. Cast the patch to `unknown` so
+                // the `Schema.decodeSync` below does the real validation.
+                providerInstances: {
+                  // Matches the shape the user had in `.t3/dev/settings.json`
+                  // when the bug was reported: a custom enabled Codex instance
+                  // pointing at a binary the server has to actually spawn.
+                  codex_personal: {
+                    driver: "codex",
+                    displayName: "Codex Personal",
+                    enabled: true,
+                    config: {
+                      binaryPath: missingBinary,
+                      homePath: `/tmp/${missingBinary}_home`,
                     },
-                  } as unknown as ContractServerSettings["providerInstances"],
-                }),
-              ),
-            );
-            const scope = yield* Scope.make();
-            yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
-            const providerRegistryLayer = ProviderRegistryLive.pipe(
-              Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
-              Layer.provideMerge(
-                Layer.succeed(ServerSettingsService, serverSettings),
-              ),
-              Layer.provideMerge(
-                ServerConfig.layerTest(process.cwd(), {
-                  prefix: "t3-provider-registry-",
-                }),
-              ),
-              Layer.provideMerge(
-                Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers),
-              ),
-              Layer.provideMerge(OpenCodeRuntimeLive),
-              // NO spawner mock — `ChildProcessSpawner` is supplied by the
-              // outer `NodeServices.layer` on `it.layer(...)` and will
-              // genuinely spawn a subprocess. The missing-binary ENOENT is
-              // what exercises the same failure mode as a misconfigured
-              // production `binaryPath`.
-            );
-            const runtimeServices = yield* Layer.build(
-              providerRegistryLayer,
-            ).pipe(Scope.provide(scope));
+                  },
+                } as unknown as ContractServerSettings["providerInstances"],
+              }),
+            ),
+          );
+          const scope = yield* Scope.make();
+          yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+          const providerRegistryLayer = ProviderRegistryLive.pipe(
+            Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
+            Layer.provideMerge(Layer.succeed(ServerSettingsService, serverSettings)),
+            Layer.provideMerge(
+              ServerConfig.layerTest(process.cwd(), {
+                prefix: "t3-provider-registry-",
+              }),
+            ),
+            Layer.provideMerge(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
+            Layer.provideMerge(OpenCodeRuntimeLive),
+            // NO spawner mock — `ChildProcessSpawner` is supplied by the
+            // outer `NodeServices.layer` on `it.layer(...)` and will
+            // genuinely spawn a subprocess. The missing-binary ENOENT is
+            // what exercises the same failure mode as a misconfigured
+            // production `binaryPath`.
+          );
+          const runtimeServices = yield* Layer.build(providerRegistryLayer).pipe(
+            Scope.provide(scope),
+          );
 
-            yield* Effect.gen(function* () {
-              const registry = yield* ProviderRegistry;
-              const providers = yield* registry.getProviders;
-              const codexPersonal = providers.find(
-                (provider) => provider.instanceId === "codex_personal",
-              );
-              assert.notStrictEqual(
-                codexPersonal,
-                undefined,
-                `Expected the aggregator to know about codex_personal; instead saw: ${providers
-                  .map((provider) => provider.instanceId ?? provider.provider)
-                  .join(", ")}`,
-              );
-              assert.strictEqual(
-                codexPersonal?.status,
-                "error",
-                "Real Codex probe against a missing binary should surface as 'error' in the aggregator",
-              );
-              assert.strictEqual(codexPersonal?.installed, false);
-              assert.strictEqual(
-                codexPersonal?.message,
-                "Codex CLI (`codex`) is not installed or not on PATH.",
-              );
-            }).pipe(Effect.provide(runtimeServices));
-          }),
+          yield* Effect.gen(function* () {
+            const registry = yield* ProviderRegistry;
+            const providers = yield* registry.getProviders;
+            const codexPersonal = providers.find(
+              (provider) => provider.instanceId === "codex_personal",
+            );
+            assert.notStrictEqual(
+              codexPersonal,
+              undefined,
+              `Expected the aggregator to know about codex_personal; instead saw: ${providers
+                .map((provider) => provider.instanceId ?? provider.provider)
+                .join(", ")}`,
+            );
+            assert.strictEqual(
+              codexPersonal?.status,
+              "error",
+              "Real Codex probe against a missing binary should surface as 'error' in the aggregator",
+            );
+            assert.strictEqual(codexPersonal?.installed, false);
+            assert.strictEqual(
+              codexPersonal?.message,
+              "Codex CLI (`codex`) is not installed or not on PATH.",
+            );
+          }).pipe(Effect.provide(runtimeServices));
+        }),
       );
 
       // Guards the second half of the reported bug: changing
@@ -691,17 +636,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
           const providerRegistryLayer = ProviderRegistryLive.pipe(
             Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
-            Layer.provideMerge(
-              Layer.succeed(ServerSettingsService, serverSettings),
-            ),
+            Layer.provideMerge(Layer.succeed(ServerSettingsService, serverSettings)),
             Layer.provideMerge(
               ServerConfig.layerTest(process.cwd(), {
                 prefix: "t3-provider-registry-",
               }),
             ),
-            Layer.provideMerge(
-              Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers),
-            ),
+            Layer.provideMerge(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
             Layer.provideMerge(OpenCodeRuntimeLive),
             // `it.live` does not inherit layers from the outer `it.layer`
             // wrapper, so provide `NodeServices.layer` inline. This is the
@@ -709,9 +650,9 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             // services that production uses.
             Layer.provideMerge(NodeServices.layer),
           );
-          const runtimeServices = yield* Layer.build(
-            providerRegistryLayer,
-          ).pipe(Scope.provide(scope));
+          const runtimeServices = yield* Layer.build(providerRegistryLayer).pipe(
+            Scope.provide(scope),
+          );
 
           yield* Effect.gen(function* () {
             const registry = yield* ProviderRegistry;
@@ -752,13 +693,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             const refreshed = yield* Effect.gen(function* () {
               for (let attempts = 0; attempts < 60; attempts += 1) {
                 const providers = yield* registry.getProviders;
-                const codex = providers.find(
-                  (provider) => provider.instanceId === "codex",
-                );
-                if (
-                  codex !== undefined &&
-                  codex.checkedAt !== initialCheckedAt
-                ) {
+                const codex = providers.find((provider) => provider.instanceId === "codex");
+                if (codex !== undefined && codex.checkedAt !== initialCheckedAt) {
                   return providers;
                 }
                 yield* Effect.sleep("50 millis");
@@ -766,9 +702,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
               return yield* registry.getProviders;
             });
 
-            const reprobedCodex = refreshed.find(
-              (provider) => provider.instanceId === "codex",
-            );
+            const reprobedCodex = refreshed.find((provider) => provider.instanceId === "codex");
             assert.notStrictEqual(
               reprobedCodex?.checkedAt,
               initialCheckedAt,
@@ -803,17 +737,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
             const providerRegistryLayer = ProviderRegistryLive.pipe(
               Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
-              Layer.provideMerge(
-                Layer.succeed(ServerSettingsService, serverSettings),
-              ),
+              Layer.provideMerge(Layer.succeed(ServerSettingsService, serverSettings)),
               Layer.provideMerge(
                 ServerConfig.layerTest(process.cwd(), {
                   prefix: "t3-provider-registry-",
                 }),
               ),
-              Layer.provideMerge(
-                Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers),
-              ),
+              Layer.provideMerge(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
               Layer.provideMerge(OpenCodeRuntimeLive),
               Layer.provideMerge(
                 mockCommandSpawnerLayer((command, args) => {
@@ -849,9 +779,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             yield* Effect.gen(function* () {
               const registry = yield* ProviderRegistry;
               const providers = yield* registry.getProviders;
-              const cursorProvider = providers.find(
-                (provider) => provider.provider === "cursor",
-              );
+              const cursorProvider = providers.find((provider) => provider.provider === "cursor");
 
               assert.deepStrictEqual(
                 providers.map((provider) => provider.provider),
@@ -868,56 +796,48 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
           }),
       );
 
-      it.effect(
-        "skips codex probes entirely when the provider is disabled",
-        () =>
-          Effect.gen(function* () {
-            const status = yield* checkCodexProviderStatus(
-              disabledCodexSettings,
-            ).pipe(Effect.provide(failingSpawnerLayer("spawn codex ENOENT")));
-            assert.strictEqual(status.provider, "codex");
-            assert.strictEqual(status.enabled, false);
-            assert.strictEqual(status.status, "disabled");
-            assert.strictEqual(status.installed, false);
-            assert.strictEqual(
-              status.message,
-              "Codex is disabled in T3 Code settings.",
-            );
-          }),
+      it.effect("skips codex probes entirely when the provider is disabled", () =>
+        Effect.gen(function* () {
+          const status = yield* checkCodexProviderStatus(disabledCodexSettings).pipe(
+            Effect.provide(failingSpawnerLayer("spawn codex ENOENT")),
+          );
+          assert.strictEqual(status.provider, "codex");
+          assert.strictEqual(status.enabled, false);
+          assert.strictEqual(status.status, "disabled");
+          assert.strictEqual(status.installed, false);
+          assert.strictEqual(status.message, "Codex is disabled in T3 Code settings.");
+        }),
       );
     });
 
     // ── checkClaudeProviderStatus tests ──────────────────────────
 
     describe("checkClaudeProviderStatus", () => {
-      it.effect(
-        "returns ready when claude is installed and authenticated",
-        () =>
-          Effect.gen(function* () {
-            const status = yield* checkClaudeProviderStatus(
-              defaultClaudeSettings,
-              claudeCapabilities(),
-            );
-            assert.strictEqual(status.provider, "claudeAgent");
-            assert.strictEqual(status.status, "ready");
-            assert.strictEqual(status.installed, true);
-            assert.strictEqual(status.auth.status, "authenticated");
-          }).pipe(
-            Effect.provide(
-              mockSpawnerLayer((args) => {
-                const joined = args.join(" ");
-                if (joined === "--version")
-                  return { stdout: "1.0.0\n", stderr: "", code: 0 };
-                if (joined === "auth status")
-                  return {
-                    stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
-                    stderr: "",
-                    code: 0,
-                  };
-                throw new Error(`Unexpected args: ${joined}`);
-              }),
-            ),
+      it.effect("returns ready when claude is installed and authenticated", () =>
+        Effect.gen(function* () {
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            claudeCapabilities(),
+          );
+          assert.strictEqual(status.provider, "claudeAgent");
+          assert.strictEqual(status.status, "ready");
+          assert.strictEqual(status.installed, true);
+          assert.strictEqual(status.auth.status, "authenticated");
+        }).pipe(
+          Effect.provide(
+            mockSpawnerLayer((args) => {
+              const joined = args.join(" ");
+              if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+              if (joined === "auth status")
+                return {
+                  stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
+                  stderr: "",
+                  code: 0,
+                };
+              throw new Error(`Unexpected args: ${joined}`);
+            }),
           ),
+        ),
       );
 
       it.effect(
@@ -928,24 +848,18 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
               defaultClaudeSettings,
               claudeCapabilities(),
             );
-            const opus47 = status.models.find(
-              (model) => model.slug === "claude-opus-4-7",
-            );
+            const opus47 = status.models.find((model) => model.slug === "claude-opus-4-7");
             if (!opus47) {
-              assert.fail(
-                "Expected Claude Opus 4.7 to be present for Claude Code v2.1.111.",
-              );
+              assert.fail("Expected Claude Opus 4.7 to be present for Claude Code v2.1.111.");
             }
             if (!opus47.capabilities) {
               assert.fail(
                 "Expected Claude Opus 4.7 capabilities to be present for Claude Code v2.1.111.",
               );
             }
-            const effortDescriptor =
-              opus47.capabilities.optionDescriptors?.find(
-                (descriptor) =>
-                  descriptor.type === "select" && descriptor.id === "effort",
-              );
+            const effortDescriptor = opus47.capabilities.optionDescriptors?.find(
+              (descriptor) => descriptor.type === "select" && descriptor.id === "effort",
+            );
             assert.deepStrictEqual(
               effortDescriptor?.type === "select"
                 ? effortDescriptor.options.find((option) => option.isDefault)
@@ -956,8 +870,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             Effect.provide(
               mockSpawnerLayer((args) => {
                 const joined = args.join(" ");
-                if (joined === "--version")
-                  return { stdout: "2.1.111\n", stderr: "", code: 0 };
+                if (joined === "--version") return { stdout: "2.1.111\n", stderr: "", code: 0 };
                 if (joined === "auth status")
                   return {
                     stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
@@ -988,8 +901,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
           Effect.provide(
             mockSpawnerLayer((args) => {
               const joined = args.join(" ");
-              if (joined === "--version")
-                return { stdout: "2.1.110\n", stderr: "", code: 0 };
+              if (joined === "--version") return { stdout: "2.1.110\n", stderr: "", code: 0 };
               if (joined === "auth status")
                 return {
                   stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
@@ -1017,8 +929,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
           Effect.provide(
             mockSpawnerLayer((args) => {
               const joined = args.join(" ");
-              if (joined === "--version")
-                return { stdout: "1.0.0\n", stderr: "", code: 0 };
+              if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
               if (joined === "auth status")
                 return {
                   stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
@@ -1046,37 +957,33 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
           Effect.provide(
             mockSpawnerLayer((args) => {
               const joined = args.join(" ");
-              if (joined === "--version")
-                return { stdout: "1.0.0\n", stderr: "", code: 0 };
+              if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
               throw new Error(`Unexpected args: ${joined}`);
             }),
           ),
         ),
       );
 
-      it.effect(
-        "does not duplicate Claude in provider-prefixed subscription names",
-        () =>
-          Effect.gen(function* () {
-            const status = yield* checkClaudeProviderStatus(
-              defaultClaudeSettings,
-              claudeCapabilities({
-                subscriptionType: "Claude Max",
-              }),
-            );
-            assert.strictEqual(status.auth.status, "authenticated");
-            assert.strictEqual(status.auth.type, "Claude Max");
-            assert.strictEqual(status.auth.label, "Claude Max Subscription");
-          }).pipe(
-            Effect.provide(
-              mockSpawnerLayer((args) => {
-                const joined = args.join(" ");
-                if (joined === "--version")
-                  return { stdout: "1.0.0\n", stderr: "", code: 0 };
-                throw new Error(`Unexpected args: ${joined}`);
-              }),
-            ),
+      it.effect("does not duplicate Claude in provider-prefixed subscription names", () =>
+        Effect.gen(function* () {
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            claudeCapabilities({
+              subscriptionType: "Claude Max",
+            }),
+          );
+          assert.strictEqual(status.auth.status, "authenticated");
+          assert.strictEqual(status.auth.type, "Claude Max");
+          assert.strictEqual(status.auth.label, "Claude Max Subscription");
+        }).pipe(
+          Effect.provide(
+            mockSpawnerLayer((args) => {
+              const joined = args.join(" ");
+              if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+              throw new Error(`Unexpected args: ${joined}`);
+            }),
           ),
+        ),
       );
 
       it.effect("returns claude auth email from initialization result", () =>
@@ -1091,8 +998,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
           Effect.provide(
             mockSpawnerLayer((args) => {
               const joined = args.join(" ");
-              if (joined === "--version")
-                return { stdout: "1.0.0\n", stderr: "", code: 0 };
+              if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
               if (joined === "auth status")
                 return {
                   stdout:
@@ -1106,81 +1012,74 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
         ),
       );
 
-      it.effect(
-        "runs Claude status probes with the configured Claude HOME",
-        () => {
-          const claudeHome = "/tmp/t3code-claude-home";
-          const recorded = recordingMockSpawnerLayer((args) => {
-            const joined = args.join(" ");
-            if (joined === "--version")
-              return { stdout: "1.0.0\n", stderr: "", code: 0 };
-            if (joined === "auth status")
-              return {
-                stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
-                stderr: "",
-                code: 0,
-              };
-            throw new Error(`Unexpected args: ${joined}`);
-          });
+      it.effect("runs Claude status probes with the configured Claude HOME", () => {
+        const claudeHome = "/tmp/t3code-claude-home";
+        const recorded = recordingMockSpawnerLayer((args) => {
+          const joined = args.join(" ");
+          if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+          if (joined === "auth status")
+            return {
+              stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
+              stderr: "",
+              code: 0,
+            };
+          throw new Error(`Unexpected args: ${joined}`);
+        });
 
-          return Effect.gen(function* () {
-            const status = yield* checkClaudeProviderStatus(
-              {
-                ...defaultClaudeSettings,
-                homePath: claudeHome,
-              },
-              claudeCapabilities(),
-            );
-            assert.strictEqual(status.status, "ready");
-            assert.deepStrictEqual(
-              recorded.commands.map((command) => command.env?.HOME),
-              [claudeHome],
-            );
-          }).pipe(Effect.provide(recorded.layer));
-        },
-      );
+        return Effect.gen(function* () {
+          const status = yield* checkClaudeProviderStatus(
+            {
+              ...defaultClaudeSettings,
+              homePath: claudeHome,
+            },
+            claudeCapabilities(),
+          );
+          assert.strictEqual(status.status, "ready");
+          assert.deepStrictEqual(
+            recorded.commands.map((command) => command.env?.HOME),
+            [claudeHome],
+          );
+        }).pipe(Effect.provide(recorded.layer));
+      });
 
-      it.effect(
-        "includes probed claude slash commands in the provider snapshot",
-        () =>
-          Effect.gen(function* () {
-            const status = yield* checkClaudeProviderStatus(
-              defaultClaudeSettings,
-              claudeCapabilities({
-                subscriptionType: "maxplan",
-                slashCommands: [
-                  {
-                    name: "review",
-                    description: "Review a pull request",
-                    input: { hint: "pr-or-branch" },
-                  },
-                ],
-              }),
-            );
+      it.effect("includes probed claude slash commands in the provider snapshot", () =>
+        Effect.gen(function* () {
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            claudeCapabilities({
+              subscriptionType: "maxplan",
+              slashCommands: [
+                {
+                  name: "review",
+                  description: "Review a pull request",
+                  input: { hint: "pr-or-branch" },
+                },
+              ],
+            }),
+          );
 
-            assert.deepStrictEqual(status.slashCommands, [
-              {
-                name: "review",
-                description: "Review a pull request",
-                input: { hint: "pr-or-branch" },
-              },
-            ]);
-          }).pipe(
-            Effect.provide(
-              mockSpawnerLayer((args) => {
-                const joined = args.join(" ");
-                if (joined === "--version")
-                  return { stdout: "1.0.0\n", stderr: "", code: 0 };
-                if (joined === "auth status")
-                  return {
-                    stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
-                    stderr: "",
-                    code: 0,
-                  };
-                throw new Error(`Unexpected args: ${joined}`);
-              }),
-            ),
+          assert.deepStrictEqual(status.slashCommands, [
+            {
+              name: "review",
+              description: "Review a pull request",
+              input: { hint: "pr-or-branch" },
+            },
+          ]);
+        }).pipe(
+          Effect.provide(
+            mockSpawnerLayer((args) => {
+              const joined = args.join(" ");
+              if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+              if (joined === "auth status")
+                return {
+                  stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
+                  stderr: "",
+                  code: 0,
+                };
+              throw new Error(`Unexpected args: ${joined}`);
+            }),
           ),
+        ),
       );
 
       it.effect("deduplicates probed claude slash commands by name", () =>
@@ -1213,8 +1112,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
           Effect.provide(
             mockSpawnerLayer((args) => {
               const joined = args.join(" ");
-              if (joined === "--version")
-                return { stdout: "1.0.0\n", stderr: "", code: 0 };
+              if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
               if (joined === "auth status")
                 return {
                   stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
@@ -1242,8 +1140,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
           Effect.provide(
             mockSpawnerLayer((args) => {
               const joined = args.join(" ");
-              if (joined === "--version")
-                return { stdout: "1.0.0\n", stderr: "", code: 0 };
+              if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
               if (joined === "auth status")
                 return {
                   stdout: '{"loggedIn":true,"authMethod":"api-key"}\n',
@@ -1273,65 +1170,60 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
         }).pipe(Effect.provide(failingSpawnerLayer("spawn claude ENOENT"))),
       );
 
-      it.effect(
-        "returns error when version check fails with non-zero exit code",
-        () =>
-          Effect.gen(function* () {
-            const status = yield* checkClaudeProviderStatus(
-              defaultClaudeSettings,
-              claudeCapabilities(),
-            );
-            assert.strictEqual(status.provider, "claudeAgent");
-            assert.strictEqual(status.status, "error");
-            assert.strictEqual(status.installed, true);
-          }).pipe(
-            Effect.provide(
-              mockSpawnerLayer((args) => {
-                const joined = args.join(" ");
-                if (joined === "--version")
-                  return {
-                    stdout: "",
-                    stderr: "Something went wrong",
-                    code: 1,
-                  };
-                throw new Error(`Unexpected args: ${joined}`);
-              }),
-            ),
+      it.effect("returns error when version check fails with non-zero exit code", () =>
+        Effect.gen(function* () {
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            claudeCapabilities(),
+          );
+          assert.strictEqual(status.provider, "claudeAgent");
+          assert.strictEqual(status.status, "error");
+          assert.strictEqual(status.installed, true);
+        }).pipe(
+          Effect.provide(
+            mockSpawnerLayer((args) => {
+              const joined = args.join(" ");
+              if (joined === "--version")
+                return {
+                  stdout: "",
+                  stderr: "Something went wrong",
+                  code: 1,
+                };
+              throw new Error(`Unexpected args: ${joined}`);
+            }),
           ),
+        ),
       );
 
-      it.effect(
-        "returns warning when the Claude initialization result is unavailable",
-        () =>
-          Effect.gen(function* () {
-            const status = yield* checkClaudeProviderStatus(
-              defaultClaudeSettings,
-              noClaudeCapabilities,
-            );
-            assert.strictEqual(status.provider, "claudeAgent");
-            assert.strictEqual(status.status, "warning");
-            assert.strictEqual(status.installed, true);
-            assert.strictEqual(status.auth.status, "unknown");
-            assert.strictEqual(
-              status.message,
-              "Could not verify Claude authentication status from initialization result.",
-            );
-          }).pipe(
-            Effect.provide(
-              mockSpawnerLayer((args) => {
-                const joined = args.join(" ");
-                if (joined === "--version")
-                  return { stdout: "1.0.0\n", stderr: "", code: 0 };
-                if (joined === "auth status")
-                  return {
-                    stdout: '{"loggedIn":false}\n',
-                    stderr: "",
-                    code: 1,
-                  };
-                throw new Error(`Unexpected args: ${joined}`);
-              }),
-            ),
+      it.effect("returns warning when the Claude initialization result is unavailable", () =>
+        Effect.gen(function* () {
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            noClaudeCapabilities,
+          );
+          assert.strictEqual(status.provider, "claudeAgent");
+          assert.strictEqual(status.status, "warning");
+          assert.strictEqual(status.installed, true);
+          assert.strictEqual(status.auth.status, "unknown");
+          assert.strictEqual(
+            status.message,
+            "Could not verify Claude authentication status from initialization result.",
+          );
+        }).pipe(
+          Effect.provide(
+            mockSpawnerLayer((args) => {
+              const joined = args.join(" ");
+              if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+              if (joined === "auth status")
+                return {
+                  stdout: '{"loggedIn":false}\n',
+                  stderr: "",
+                  code: 1,
+                };
+              throw new Error(`Unexpected args: ${joined}`);
+            }),
           ),
+        ),
       );
     });
   },

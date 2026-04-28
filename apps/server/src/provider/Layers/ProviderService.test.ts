@@ -12,6 +12,8 @@ import type {
 import {
   ApprovalRequestId,
   EventId,
+  ProviderDriverId,
+  ProviderInstanceId,
   type ProviderKind,
   ProviderSessionStartInput,
   ThreadId,
@@ -25,11 +27,15 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import {
   ProviderAdapterSessionNotFoundError,
+  ProviderUnsupportedError,
   ProviderValidationError,
   type ProviderAdapterError,
 } from "../Errors.ts";
 import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
-import { ProviderAdapterRegistry } from "../Services/ProviderAdapterRegistry.ts";
+import {
+  ProviderAdapterRegistry,
+  type ProviderAdapterRegistryShape,
+} from "../Services/ProviderAdapterRegistry.ts";
 import { ProviderService } from "../Services/ProviderService.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
 import { makeProviderServiceLive } from "./ProviderService.ts";
@@ -326,6 +332,72 @@ it.effect("ProviderServiceLive rejects new sessions for disabled providers", () 
     assert.instanceOf(failure, ProviderValidationError);
     assert.include(failure.issue, "Provider 'claudeAgent' is disabled in T3 Code settings.");
     assert.equal(claude.startSession.mock.calls.length, 0);
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+it.effect("ProviderServiceLive rejects new sessions for disabled custom instances", () =>
+  Effect.gen(function* () {
+    const instanceId = ProviderInstanceId.make("codex_personal");
+    const driverId = ProviderDriverId.make("codex");
+    const codex = makeFakeCodexAdapter();
+    const unsupported = () =>
+      new ProviderUnsupportedError({
+        provider: "codex",
+      });
+    const registry: ProviderAdapterRegistryShape = {
+      getByInstance: (requestedInstanceId) =>
+        requestedInstanceId === instanceId
+          ? Effect.succeed(codex.adapter)
+          : Effect.fail(unsupported()),
+      getInstanceInfo: (requestedInstanceId) =>
+        requestedInstanceId === instanceId
+          ? Effect.succeed({
+              instanceId,
+              driverId,
+              displayName: "Codex Personal",
+              enabled: false,
+              continuationIdentity: {
+                driverId,
+                continuationKey: "codex:/Users/example/.codex",
+              },
+            })
+          : Effect.fail(unsupported()),
+      listInstances: () => Effect.succeed([instanceId]),
+      getByProvider: () => Effect.succeed(codex.adapter),
+      listProviders: () => Effect.succeed(["codex"] as const),
+      streamChanges: Stream.empty,
+      subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), (pubsub) =>
+        PubSub.subscribe(pubsub),
+      ),
+    };
+    const providerAdapterLayer = Layer.succeed(ProviderAdapterRegistry, registry);
+    const runtimeRepositoryLayer = ProviderSessionRuntimeRepositoryLive.pipe(
+      Layer.provide(SqlitePersistenceMemory),
+    );
+    const directoryLayer = ProviderSessionDirectoryLive.pipe(Layer.provide(runtimeRepositoryLayer));
+    const providerLayer = makeProviderServiceLive().pipe(
+      Layer.provide(providerAdapterLayer),
+      Layer.provide(directoryLayer),
+      Layer.provide(defaultServerSettingsLayer),
+      Layer.provide(AnalyticsService.layerTest),
+      Layer.provide(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
+    );
+
+    const failure = yield* Effect.flip(
+      Effect.gen(function* () {
+        const provider = yield* ProviderService;
+        return yield* provider.startSession(asThreadId("thread-disabled-instance"), {
+          provider: "codex",
+          providerInstanceId: instanceId,
+          threadId: asThreadId("thread-disabled-instance"),
+          runtimeMode: "full-access",
+        });
+      }).pipe(Effect.provide(providerLayer)),
+    );
+
+    assert.instanceOf(failure, ProviderValidationError);
+    assert.include(failure.issue, "Provider instance 'codex_personal' is disabled");
+    assert.equal(codex.startSession.mock.calls.length, 0);
   }).pipe(Effect.provide(NodeServices.layer)),
 );
 

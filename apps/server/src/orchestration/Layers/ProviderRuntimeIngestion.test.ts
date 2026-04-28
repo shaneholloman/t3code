@@ -106,6 +106,7 @@ function createProviderServiceHarness() {
         instanceId,
         driverId,
         displayName: undefined,
+        enabled: true,
         continuationIdentity: {
           driverId,
           continuationKey: `${driverId}:instance:${instanceId}`,

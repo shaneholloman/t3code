@@ -458,6 +458,12 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
             `Provider '${input.provider}' is disabled in T3 Code settings.`,
           );
         }
+        if (!instanceInfo.enabled) {
+          return yield* toValidationError(
+            "ProviderService.startSession",
+            `Provider instance '${resolvedInstanceId}' is disabled in T3 Code settings.`,
+          );
+        }
         if (instanceInfo.driverId !== ProviderDriverId.make(input.provider)) {
           return yield* toValidationError(
             "ProviderService.startSession",
