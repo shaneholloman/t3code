@@ -47,28 +47,6 @@ export const MODEL_PICKER_KEYBINDING_COMMANDS = [
 ] as const;
 export type ModelPickerKeybindingCommand = (typeof MODEL_PICKER_KEYBINDING_COMMANDS)[number];
 
-export const WORKSPACE_KEYBINDING_COMMANDS = [
-  "workspace.terminal.splitRight",
-  "workspace.terminal.splitDown",
-  "workspace.terminal.newTab",
-  "workspace.pane.splitRight",
-  "workspace.pane.splitDown",
-  "workspace.focus.left",
-  "workspace.focus.right",
-  "workspace.focus.up",
-  "workspace.focus.down",
-  "workspace.pane.close",
-  "workspace.pane.moveLeft",
-  "workspace.pane.moveRight",
-  "workspace.pane.moveUp",
-  "workspace.pane.moveDown",
-  "workspace.tab.moveLeft",
-  "workspace.tab.moveRight",
-  "workspace.tab.moveUp",
-  "workspace.tab.moveDown",
-] as const;
-export type WorkspaceKeybindingCommand = (typeof WORKSPACE_KEYBINDING_COMMANDS)[number];
-
 const STATIC_KEYBINDING_COMMANDS = [
   "terminal.toggle",
   "terminal.split",
@@ -81,7 +59,6 @@ const STATIC_KEYBINDING_COMMANDS = [
   "editor.openFavorite",
   ...MODEL_PICKER_KEYBINDING_COMMANDS,
   ...THREAD_KEYBINDING_COMMANDS,
-  ...WORKSPACE_KEYBINDING_COMMANDS,
 ] as const;
 
 export const SCRIPT_RUN_COMMAND_PATTERN = Schema.TemplateLiteral([

@@ -11,7 +11,6 @@ import { getLocalStorageItem, setLocalStorageItem } from "./hooks/useLocalStorag
 
 export const CLIENT_SETTINGS_STORAGE_KEY = "t3code:client-settings:v1";
 export const SAVED_ENVIRONMENT_REGISTRY_STORAGE_KEY = "t3code:saved-environment-registry:v1";
-export const WORKSPACE_DOCUMENT_STORAGE_KEY = "t3code:workspace-document:v1";
 
 const BrowserSavedEnvironmentRecordSchema = Schema.Struct({
   environmentId: EnvironmentId,
@@ -66,27 +65,6 @@ export function writeBrowserClientSettings(settings: ClientSettings): void {
   }
 
   setLocalStorageItem(CLIENT_SETTINGS_STORAGE_KEY, settings, ClientSettingsSchema);
-}
-
-export function readBrowserWorkspaceDocument<T>(): T | null {
-  if (!hasWindow()) {
-    return null;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(WORKSPACE_DOCUMENT_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function writeBrowserWorkspaceDocument<T>(document: T): void {
-  if (!hasWindow()) {
-    return;
-  }
-
-  window.localStorage.setItem(WORKSPACE_DOCUMENT_STORAGE_KEY, JSON.stringify(document));
 }
 
 function readBrowserSavedEnvironmentRegistryDocument(): BrowserSavedEnvironmentRegistryDocument {
