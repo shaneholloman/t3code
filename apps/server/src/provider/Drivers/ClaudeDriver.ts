@@ -97,7 +97,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
 
       // Per-instance capabilities cache: keyed on binary + resolved HOME so
       // account-specific probes never share auth metadata across instances.
-      const subscriptionProbeCache = yield* Cache.make({
+      const capabilitiesProbeCache = yield* Cache.make({
         capacity: 1,
         timeToLive: CAPABILITIES_PROBE_TTL,
         lookup: () => probeClaudeCapabilities(effectiveConfig, processEnv),
@@ -106,18 +106,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
 
       const checkProvider = checkClaudeProviderStatus(
         effectiveConfig,
-        () =>
-          Cache.get(subscriptionProbeCache, capabilitiesCacheKey).pipe(
-            Effect.map((probe) => probe?.subscriptionType),
-          ),
-        () =>
-          Cache.get(subscriptionProbeCache, capabilitiesCacheKey).pipe(
-            Effect.map((probe) => probe?.slashCommands),
-          ),
-        () =>
-          Cache.get(subscriptionProbeCache, capabilitiesCacheKey).pipe(
-            Effect.map((probe) => probe?.email),
-          ),
+        () => Cache.get(capabilitiesProbeCache, capabilitiesCacheKey),
         processEnv,
       ).pipe(
         Effect.map(stampIdentity),

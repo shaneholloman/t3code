@@ -8,6 +8,7 @@ import {
   DEFAULT_SERVER_SETTINGS,
   ServerSettings,
   type ServerProvider,
+  type ServerProviderSlashCommand,
   type ServerSettings as ContractServerSettings,
 } from "@t3tools/contracts";
 import * as PlatformError from "effect/PlatformError";
@@ -67,6 +68,27 @@ function booleanDescriptor(id: string, label: string) {
     type: "boolean" as const,
   };
 }
+
+type TestClaudeCapabilities = {
+  readonly email: string | undefined;
+  readonly subscriptionType: string | undefined;
+  readonly tokenSource: string | undefined;
+  readonly slashCommands: ReadonlyArray<ServerProviderSlashCommand>;
+};
+
+function claudeCapabilities(overrides: Partial<TestClaudeCapabilities> = {}) {
+  return () =>
+    Effect.succeed({
+      email: undefined,
+      subscriptionType: undefined,
+      tokenSource: undefined,
+      slashCommands: [],
+      ...overrides,
+    });
+}
+
+const noClaudeCapabilities = () =>
+  Effect.sync(() => undefined as TestClaudeCapabilities | undefined);
 
 function mockHandle(result: { stdout: string; stderr: string; code: number }) {
   return ChildProcessSpawner.makeHandle({
@@ -774,7 +796,10 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
     describe("checkClaudeProviderStatus", () => {
       it.effect("returns ready when claude is installed and authenticated", () =>
         Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            claudeCapabilities(),
+          );
           assert.strictEqual(status.provider, "claudeAgent");
           assert.strictEqual(status.status, "ready");
           assert.strictEqual(status.installed, true);
@@ -800,7 +825,10 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
         "includes Claude Opus 4.7 with xhigh as the default effort on supported versions",
         () =>
           Effect.gen(function* () {
-            const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
+            const status = yield* checkClaudeProviderStatus(
+              defaultClaudeSettings,
+              claudeCapabilities(),
+            );
             const opus47 = status.models.find((model) => model.slug === "claude-opus-4-7");
             if (!opus47) {
               assert.fail("Expected Claude Opus 4.7 to be present for Claude Code v2.1.111.");
@@ -838,7 +866,10 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("hides Claude Opus 4.7 on older Claude Code versions", () =>
         Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            claudeCapabilities(),
+          );
           assert.strictEqual(
             status.models.some((model) => model.slug === "claude-opus-4-7"),
             false,
@@ -866,8 +897,9 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("returns a display label for claude subscription types", () =>
         Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings, () =>
-            Effect.succeed("maxplan"),
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            claudeCapabilities({ subscriptionType: "maxplan" }),
           );
           assert.strictEqual(status.provider, "claudeAgent");
           assert.strictEqual(status.status, "ready");
@@ -891,9 +923,56 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
         ),
       );
 
-      it.effect("returns claude auth email from auth status JSON", () =>
+      it.effect("does not duplicate Claude in full subscription labels", () =>
         Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            claudeCapabilities({
+              subscriptionType: "Claude Max Subscription",
+            }),
+          );
+          assert.strictEqual(status.auth.status, "authenticated");
+          assert.strictEqual(status.auth.type, "Claude Max Subscription");
+          assert.strictEqual(status.auth.label, "Claude Max Subscription");
+        }).pipe(
+          Effect.provide(
+            mockSpawnerLayer((args) => {
+              const joined = args.join(" ");
+              if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+              throw new Error(`Unexpected args: ${joined}`);
+            }),
+          ),
+        ),
+      );
+
+      it.effect("does not duplicate Claude in provider-prefixed subscription names", () =>
+        Effect.gen(function* () {
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            claudeCapabilities({
+              subscriptionType: "Claude Max",
+            }),
+          );
+          assert.strictEqual(status.auth.status, "authenticated");
+          assert.strictEqual(status.auth.type, "Claude Max");
+          assert.strictEqual(status.auth.label, "Claude Max Subscription");
+        }).pipe(
+          Effect.provide(
+            mockSpawnerLayer((args) => {
+              const joined = args.join(" ");
+              if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+              throw new Error(`Unexpected args: ${joined}`);
+            }),
+          ),
+        ),
+      );
+
+      it.effect("returns claude auth email from initialization result", () =>
+        Effect.gen(function* () {
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            claudeCapabilities({ email: "claude@example.com" }),
+          );
           assert.strictEqual(status.auth.status, "authenticated");
           assert.strictEqual(status.auth.email, "claude@example.com");
         }).pipe(
@@ -929,14 +1008,17 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
         });
 
         return Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus({
-            ...defaultClaudeSettings,
-            homePath: claudeHome,
-          });
+          const status = yield* checkClaudeProviderStatus(
+            {
+              ...defaultClaudeSettings,
+              homePath: claudeHome,
+            },
+            claudeCapabilities(),
+          );
           assert.strictEqual(status.status, "ready");
           assert.deepStrictEqual(
             recorded.commands.map((command) => command.env?.HOME),
-            [claudeHome, claudeHome],
+            [claudeHome],
           );
         }).pipe(Effect.provide(recorded.layer));
       });
@@ -945,15 +1027,16 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
         Effect.gen(function* () {
           const status = yield* checkClaudeProviderStatus(
             defaultClaudeSettings,
-            () => Effect.succeed("maxplan"),
-            () =>
-              Effect.succeed([
+            claudeCapabilities({
+              subscriptionType: "maxplan",
+              slashCommands: [
                 {
                   name: "review",
                   description: "Review a pull request",
                   input: { hint: "pr-or-branch" },
                 },
-              ]),
+              ],
+            }),
           );
 
           assert.deepStrictEqual(status.slashCommands, [
@@ -984,9 +1067,9 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
         Effect.gen(function* () {
           const status = yield* checkClaudeProviderStatus(
             defaultClaudeSettings,
-            () => Effect.succeed("maxplan"),
-            () =>
-              Effect.succeed([
+            claudeCapabilities({
+              subscriptionType: "maxplan",
+              slashCommands: [
                 {
                   name: "ui",
                   description: "Explore and refine UI",
@@ -995,7 +1078,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
                   name: "ui",
                   input: { hint: "component-or-screen" },
                 },
-              ]),
+              ],
+            }),
           );
 
           assert.deepStrictEqual(status.slashCommands, [
@@ -1024,7 +1108,10 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("returns an api key label for claude api key auth", () =>
         Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            claudeCapabilities({ tokenSource: "ANTHROPIC_AUTH_TOKEN" }),
+          );
           assert.strictEqual(status.provider, "claudeAgent");
           assert.strictEqual(status.status, "ready");
           assert.strictEqual(status.auth.status, "authenticated");
@@ -1049,7 +1136,10 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("returns unavailable when claude is missing", () =>
         Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            claudeCapabilities(),
+          );
           assert.strictEqual(status.provider, "claudeAgent");
           assert.strictEqual(status.status, "error");
           assert.strictEqual(status.installed, false);
@@ -1063,7 +1153,10 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
 
       it.effect("returns error when version check fails with non-zero exit code", () =>
         Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            claudeCapabilities(),
+          );
           assert.strictEqual(status.provider, "claudeAgent");
           assert.strictEqual(status.status, "error");
           assert.strictEqual(status.installed, true);
@@ -1079,16 +1172,19 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
         ),
       );
 
-      it.effect("returns unauthenticated when auth status reports not logged in", () =>
+      it.effect("returns warning when the Claude initialization result is unavailable", () =>
         Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            noClaudeCapabilities,
+          );
           assert.strictEqual(status.provider, "claudeAgent");
-          assert.strictEqual(status.status, "error");
+          assert.strictEqual(status.status, "warning");
           assert.strictEqual(status.installed, true);
-          assert.strictEqual(status.auth.status, "unauthenticated");
+          assert.strictEqual(status.auth.status, "unknown");
           assert.strictEqual(
             status.message,
-            "Claude is not authenticated. Run `claude auth login` and try again.",
+            "Could not verify Claude authentication status from initialization result.",
           );
         }).pipe(
           Effect.provide(
@@ -1101,50 +1197,6 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
                   stderr: "",
                   code: 1,
                 };
-              throw new Error(`Unexpected args: ${joined}`);
-            }),
-          ),
-        ),
-      );
-
-      it.effect("returns unauthenticated when output includes 'not logged in'", () =>
-        Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
-          assert.strictEqual(status.provider, "claudeAgent");
-          assert.strictEqual(status.status, "error");
-          assert.strictEqual(status.installed, true);
-          assert.strictEqual(status.auth.status, "unauthenticated");
-        }).pipe(
-          Effect.provide(
-            mockSpawnerLayer((args) => {
-              const joined = args.join(" ");
-              if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
-              if (joined === "auth status")
-                return { stdout: "Not logged in\n", stderr: "", code: 1 };
-              throw new Error(`Unexpected args: ${joined}`);
-            }),
-          ),
-        ),
-      );
-
-      it.effect("returns warning when auth status command is unsupported", () =>
-        Effect.gen(function* () {
-          const status = yield* checkClaudeProviderStatus(defaultClaudeSettings);
-          assert.strictEqual(status.provider, "claudeAgent");
-          assert.strictEqual(status.status, "warning");
-          assert.strictEqual(status.installed, true);
-          assert.strictEqual(status.auth.status, "unknown");
-          assert.strictEqual(
-            status.message,
-            "Claude Agent authentication status command is unavailable in this version of Claude.",
-          );
-        }).pipe(
-          Effect.provide(
-            mockSpawnerLayer((args) => {
-              const joined = args.join(" ");
-              if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
-              if (joined === "auth status")
-                return { stdout: "", stderr: "error: unknown command 'auth'", code: 2 };
               throw new Error(`Unexpected args: ${joined}`);
             }),
           ),

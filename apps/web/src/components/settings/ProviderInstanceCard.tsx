@@ -22,6 +22,7 @@ import { Switch } from "../ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import type { DriverOption } from "./providerDriverMeta";
 import { ProviderModelsSection } from "./ProviderModelsSection";
+import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import {
   PROVIDER_STATUS_STYLES,
   getProviderSummary,
@@ -489,7 +490,7 @@ export function ProviderInstanceCard({
     : null;
   const summary = rawSummary;
   const versionLabel = getProviderVersionLabel(liveProvider?.version);
-  const IconComponent = driverOption?.icon;
+  const FallbackIconComponent = driverOption?.icon;
   const displayName =
     instance.displayName?.trim() || driverOption?.label || String(instance.driver);
   const accentColor = normalizeProviderAccentColor(instance.accentColor);
@@ -571,17 +572,31 @@ export function ProviderInstanceCard({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex min-h-5 items-center gap-1.5">
-              <span className={cn("size-2 shrink-0 rounded-full", statusStyle.dot)} />
-              {accentColor ? (
-                <span
-                  className="size-2.5 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/20"
-                  style={{ backgroundColor: accentColor }}
-                  aria-hidden
+              {driverKind ? (
+                <ProviderInstanceIcon
+                  driverKind={driverKind}
+                  displayName={displayName}
+                  accentColor={accentColor}
+                  showBadge={Boolean(accentColor)}
+                  statusDotClassName={statusStyle.dot}
+                  className="size-5"
+                  iconClassName="size-4 text-foreground/80"
+                  badgeClassName="right-[-0.125rem] bottom-[-0.125rem] h-3 min-w-3 text-[7px]"
                 />
-              ) : null}
-              {IconComponent ? (
-                <IconComponent className="size-4 shrink-0 text-foreground/80" aria-hidden />
-              ) : null}
+              ) : FallbackIconComponent ? (
+                <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+                  <FallbackIconComponent className="size-4 text-foreground/80" aria-hidden />
+                  <span
+                    className={cn(
+                      "pointer-events-none absolute -left-0.5 -top-0.5 size-2 rounded-full ring-2 ring-background",
+                      statusStyle.dot,
+                    )}
+                    aria-hidden
+                  />
+                </span>
+              ) : (
+                <span className={cn("size-2 shrink-0 rounded-full", statusStyle.dot)} />
+              )}
               <h3 className="truncate text-sm font-medium text-foreground">{displayName}</h3>
               {String(instanceId) !== String(instance.driver) ? (
                 // Hide the id chip on a default slot whose id === the
