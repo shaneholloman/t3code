@@ -161,8 +161,16 @@ export function PairingRouteSurface({
   );
 }
 
+let cachedHostedPairingRequest: ReturnType<typeof readHostedPairingRequest> | undefined;
+function readHostedPairingRequestOnce() {
+  if (cachedHostedPairingRequest === undefined) {
+    cachedHostedPairingRequest = readHostedPairingRequest();
+  }
+  return cachedHostedPairingRequest;
+}
+
 export function HostedPairingRouteSurface() {
-  const hostedPairingRequestRef = useRef(readHostedPairingRequest());
+  const hostedPairingRequestRef = useRef(readHostedPairingRequestOnce());
   const [status, setStatus] = useState<"pairing" | "paired" | "error">("pairing");
   const [message, setMessage] = useState("Connecting to this backend.");
   const submitAttemptedRef = useRef(false);
