@@ -50,7 +50,11 @@ const isUsableLanIpv4Address = (address: string): boolean =>
   !address.startsWith("127.") && !address.startsWith("169.254.");
 
 function isHttpsEndpointUrl(value: string): boolean {
-  return new URL(value).protocol === "https:";
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 export function resolveLanAdvertisedHost(
