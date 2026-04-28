@@ -309,17 +309,24 @@ export const makeServerLayer = Layer.unwrap(
     );
     const tailscaleServeLayer = config.tailscaleServeEnabled
       ? Layer.effectDiscard(
-          ensureTailscaleServe({
-            localPort: config.port,
-            servePort: config.tailscaleServePort,
-            localHost: "127.0.0.1",
+          Effect.gen(function* () {
+            const server = yield* HttpServer.HttpServer;
+            const address = server.address;
+            const localPort =
+              typeof address !== "string" && "port" in address ? address.port : config.port;
+            yield* ensureTailscaleServe({
+              localPort,
+              servePort: config.tailscaleServePort,
+              localHost: "127.0.0.1",
+            }).pipe(
+              Effect.tap(() =>
+                Effect.logInfo("Tailscale Serve configured", {
+                  localPort,
+                  servePort: config.tailscaleServePort,
+                }),
+              ),
+            );
           }).pipe(
-            Effect.tap(() =>
-              Effect.logInfo("Tailscale Serve configured", {
-                localPort: config.port,
-                servePort: config.tailscaleServePort,
-              }),
-            ),
             Effect.catch((cause) =>
               Effect.logWarning("Failed to configure Tailscale Serve", {
                 cause,
