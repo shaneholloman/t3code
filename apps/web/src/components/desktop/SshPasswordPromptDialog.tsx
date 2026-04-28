@@ -20,6 +20,7 @@ function describeSshTarget(request: DesktopSshPasswordPromptRequest): string {
 export function SshPasswordPromptDialog() {
   const [queue, setQueue] = useState<readonly DesktopSshPasswordPromptRequest[]>([]);
   const [password, setPassword] = useState("");
+  const [isResponding, setIsResponding] = useState(false);
   const currentRequest = queue[0] ?? null;
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -50,17 +51,20 @@ export function SshPasswordPromptDialog() {
   }, [currentRequest]);
 
   const respond = async (nextPassword: string | null) => {
-    if (!currentRequest) {
+    if (!currentRequest || isResponding) {
       return;
     }
 
     const requestId = currentRequest.requestId;
+    setIsResponding(true);
     setQueue((currentQueue) => currentQueue.slice(1));
     setPassword("");
     try {
       await window.desktopBridge?.resolveSshPasswordPrompt(requestId, nextPassword);
     } catch (error) {
       console.error("Failed to resolve SSH password prompt.", error);
+    } finally {
+      setIsResponding(false);
     }
   };
 
@@ -101,10 +105,10 @@ export function SshPasswordPromptDialog() {
           </p>
         </DialogPanel>
         <DialogFooter>
-          <Button variant="outline" onClick={() => void respond(null)}>
+          <Button disabled={isResponding} variant="outline" onClick={() => void respond(null)}>
             Cancel
           </Button>
-          <Button onClick={() => void respond(password)} type="button">
+          <Button disabled={isResponding} onClick={() => void respond(password)} type="button">
             Continue
           </Button>
         </DialogFooter>

@@ -402,13 +402,14 @@ async function applyDesktopServerExposureMode(
   return getDesktopServerExposureState();
 }
 
-async function applyDesktopTailscaleServeEnabled(input: {
-  readonly enabled: boolean;
-  readonly port?: number;
-}): Promise<DesktopServerExposureState> {
-  desktopSettings = setDesktopTailscaleServePreference(desktopSettings, input);
+async function applyDesktopTailscaleServeEnabled(
+  resolvedSettings: typeof desktopSettings,
+): Promise<DesktopServerExposureState> {
+  desktopSettings = resolvedSettings;
   writeDesktopSettings(DESKTOP_SETTINGS_PATH, desktopSettings);
-  relaunchDesktopApp(input.enabled ? "tailscale-serve-enabled" : "tailscale-serve-disabled");
+  relaunchDesktopApp(
+    desktopSettings.tailscaleServeEnabled ? "tailscale-serve-enabled" : "tailscale-serve-disabled",
+  );
   return getDesktopServerExposureState();
 }
 
@@ -1751,10 +1752,7 @@ function registerIpcHandlers(): void {
     if (nextSettings === desktopSettings) {
       return getDesktopServerExposureState();
     }
-    return applyDesktopTailscaleServeEnabled({
-      enabled: input.enabled,
-      port: nextSettings.tailscaleServePort,
-    });
+    return applyDesktopTailscaleServeEnabled(nextSettings);
   });
 
   ipcMain.removeHandler(GET_ADVERTISED_ENDPOINTS_CHANNEL);

@@ -166,6 +166,7 @@ export function HostedPairingRouteSurface() {
   const [status, setStatus] = useState<"pairing" | "paired" | "error">("pairing");
   const [message, setMessage] = useState("Connecting to this backend.");
   const submitAttemptedRef = useRef(false);
+  const tokenSubmittedRef = useRef(false);
 
   const submitHostedPairingRequest = useCallback(async () => {
     const request = hostedPairingRequestRef.current;
@@ -176,9 +177,18 @@ export function HostedPairingRouteSurface() {
       return;
     }
 
+    if (tokenSubmittedRef.current) {
+      setStatus("error");
+      setMessage(
+        "The pairing token may have already been used. Please request a new pairing link.",
+      );
+      return;
+    }
+
     setStatus("pairing");
     setMessage("Connecting to this backend.");
 
+    tokenSubmittedRef.current = true;
     try {
       const record = await addSavedEnvironment({
         label: request.label,
