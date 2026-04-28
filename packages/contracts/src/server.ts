@@ -112,11 +112,11 @@ export type ServerProviderContinuation = typeof ServerProviderContinuation.Type;
 export const ServerProvider = Schema.Struct({
   provider: ProviderKind,
   // Routing key for the configured instance this snapshot represents.
-  // Optional during the migration: once `ProviderInstanceRegistry` is the
-  // sole producer (post-slice-4) every snapshot will carry it and routing
-  // by `provider` is removed. Multiple snapshots may share the same
-  // `provider` (multiple instances of the same driver) and disambiguate
-  // by `instanceId`.
+  // Optional only while decoding legacy cache/internal pre-registry
+  // snapshots. Public provider snapshots are stamped by
+  // `ProviderInstanceRegistry` before they are sent over the wire.
+  // Multiple snapshots may share the same `provider` (multiple instances
+  // of the same driver) and disambiguate by `instanceId`.
   instanceId: Schema.optional(ProviderInstanceId),
   // Open driver-id slug. Always present on instance-aware snapshots; for
   // built-in drivers it equals `provider`. For unavailable snapshots

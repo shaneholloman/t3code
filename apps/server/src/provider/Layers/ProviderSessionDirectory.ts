@@ -1,4 +1,9 @@
-import { ProviderKind, type ThreadId } from "@t3tools/contracts";
+import {
+  defaultInstanceIdForDriver,
+  ProviderDriverId,
+  ProviderKind,
+  type ThreadId,
+} from "@t3tools/contracts";
 import { Effect, Layer, Option, Schema } from "effect";
 
 import type { ProviderSessionRuntime } from "../../persistence/Services/ProviderSessionRuntime.ts";
@@ -63,12 +68,13 @@ function toRuntimeBinding(
         ({
           threadId: runtime.threadId,
           provider,
-          // `providerInstanceId` is nullable at the DB layer for legacy
-          // rows — readers downstream fall back to the default instance
-          // of `provider` when this field is omitted.
-          ...(runtime.providerInstanceId !== null
-            ? { providerInstanceId: runtime.providerInstanceId }
-            : {}),
+          // Migration boundary only: rows written before the instance split
+          // have a null provider_instance_id. Promote them as they leave
+          // persistence so hot routing code never has to infer an instance
+          // from a driver kind.
+          providerInstanceId:
+            runtime.providerInstanceId ??
+            defaultInstanceIdForDriver(ProviderDriverId.make(provider)),
           adapterKey: runtime.adapterKey,
           runtimeMode: runtime.runtimeMode,
           status: runtime.status,
@@ -114,12 +120,19 @@ const makeProviderSessionDirectory = Effect.gen(function* () {
     const now = new Date().toISOString();
     const providerChanged =
       existingRuntime !== undefined && existingRuntime.providerName !== binding.provider;
+    const providerInstanceId =
+      binding.providerInstanceId ?? (!providerChanged ? existingRuntime?.providerInstanceId : null);
+    if (providerInstanceId === null || providerInstanceId === undefined) {
+      return yield* new ProviderValidationError({
+        operation: "ProviderSessionDirectory.upsert",
+        issue: "providerInstanceId is required for provider session runtime bindings.",
+      });
+    }
     yield* repository
       .upsert({
         threadId: resolvedThreadId,
         providerName: binding.provider,
-        providerInstanceId:
-          binding.providerInstanceId ?? existingRuntime?.providerInstanceId ?? null,
+        providerInstanceId,
         adapterKey:
           binding.adapterKey ??
           (providerChanged ? binding.provider : (existingRuntime?.adapterKey ?? binding.provider)),

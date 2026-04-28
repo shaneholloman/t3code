@@ -14,9 +14,7 @@ import type {
   TurnId,
 } from "@t3tools/contracts";
 import {
-  defaultInstanceIdForDriver,
   ProviderInstanceId,
-  ProviderDriverId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
 } from "@t3tools/contracts";
@@ -660,7 +658,9 @@ export const ChatComposer = memo(
       return (
         anyEnabled?.instanceId ??
         providerInstanceEntries[0]?.instanceId ??
-        defaultInstanceIdForDriver(ProviderDriverId.make(selectedProvider))
+        activeThreadModelSelection?.instanceId ??
+        activeProjectDefaultModelSelection?.instanceId ??
+        ProviderInstanceId.make("codex")
       );
     }, [
       activeProjectDefaultModelSelection?.instanceId,

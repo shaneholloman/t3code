@@ -13,7 +13,6 @@
  */
 import type {
   ProviderInterruptTurnInput,
-  ProviderKind,
   ProviderInstanceId,
   ProviderRespondToRequestInput,
   ProviderRespondToUserInputInput,
@@ -87,10 +86,10 @@ export interface ProviderServiceShape {
   readonly listSessions: () => Effect.Effect<ReadonlyArray<ProviderSession>>;
 
   /**
-   * Read static capabilities for a provider adapter.
+   * Read capabilities for the adapter bound to a configured provider instance.
    */
   readonly getCapabilities: (
-    provider: ProviderKind,
+    instanceId: ProviderInstanceId,
   ) => Effect.Effect<ProviderAdapterCapabilities, ProviderServiceError>;
 
   readonly getInstanceInfo: (

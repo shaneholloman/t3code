@@ -14,7 +14,6 @@
  */
 import {
   defaultInstanceIdForDriver,
-  isBuiltInDriverId,
   PROVIDER_DISPLAY_NAMES,
   ProviderDriverId,
   type ProviderInstanceId,
@@ -52,18 +51,6 @@ export interface ProviderInstanceEntry {
   readonly snapshot: ServerProvider;
   readonly models: ReadonlyArray<ServerProviderModel>;
 }
-
-const toInstanceId = (snapshot: ServerProvider): ProviderInstanceId => {
-  // Every driver we ship stamps `instanceId` via `withInstanceIdentity`;
-  // fall back to the driver-as-instance-id convention so legacy snapshots
-  // (and any third-party producer that forgets the stamp) still resolve
-  // sensibly to the default instance for their kind.
-  if (snapshot.instanceId !== undefined) {
-    return snapshot.instanceId;
-  }
-  const driverId = snapshot.driver ?? ProviderDriverId.make(snapshot.provider);
-  return defaultInstanceIdForDriver(driverId);
-};
 
 /**
  * Turn an instance id slug into a human-readable label. Splits on `_` / `-`
@@ -152,7 +139,10 @@ export function deriveProviderInstanceEntries(
   providers: ReadonlyArray<ServerProvider>,
 ): ReadonlyArray<ProviderInstanceEntry> {
   return providers.map((snapshot) => {
-    const instanceId = toInstanceId(snapshot);
+    const instanceId = snapshot.instanceId;
+    if (instanceId === undefined) {
+      throw new Error(`Provider snapshot '${snapshot.provider}' is missing instanceId.`);
+    }
     const driverKind = snapshot.provider;
     const defaultId = defaultInstanceIdForDriver(
       snapshot.driver ?? ProviderDriverId.make(driverKind),
@@ -209,10 +199,8 @@ export function sortProviderInstanceEntries(
 }
 
 /**
- * Look up a single instance entry. Matches first on `instanceId`; if no
- * match, falls back to the default instance for the given kind. The kind
- * fallback keeps legacy call sites (which passed a kind where they now
- * pass an instance id) working through the migration.
+ * Look up a single instance entry by exact `instanceId`. Missing snapshots
+ * are not inferred from driver kind in UI routing code.
  */
 export function getProviderInstanceEntry(
   providers: ReadonlyArray<ServerProvider>,
@@ -273,14 +261,6 @@ export function resolveProviderKindForInstanceSelection(
   const matchedEntry = entries.find((entry) => entry.instanceId === selection);
   if (matchedEntry) {
     return matchedEntry.driverKind;
-  }
-  const requested =
-    typeof selection === "string" && isBuiltInDriverId(selection) ? selection : null;
-  if (requested) {
-    const provider = providers.find((snapshot) => snapshot.provider === requested);
-    if (provider?.enabled) {
-      return provider.provider;
-    }
   }
   return undefined;
 }

@@ -60,6 +60,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
 import { ProviderInstanceCard } from "./ProviderInstanceCard";
 import { getDriverOption } from "./providerDriverMeta";
+import { buildProviderInstanceUpdatePatch } from "./SettingsPanels.logic";
 import {
   SettingResetButton,
   SettingsPageContainer,
@@ -692,13 +693,25 @@ export function GeneralSettingsPanel() {
     }
   }
 
-  const updateProviderInstance = (id: ProviderInstanceId, next: ProviderInstanceConfig) => {
-    updateSettings({
-      providerInstances: {
-        ...settings.providerInstances,
-        [id]: next,
-      },
-    });
+  const updateProviderInstance = (
+    row: InstanceRow,
+    next: ProviderInstanceConfig,
+    options?: {
+      readonly textGenerationModelSelection?: Parameters<
+        typeof buildProviderInstanceUpdatePatch
+      >[0]["textGenerationModelSelection"];
+    },
+  ) => {
+    updateSettings(
+      buildProviderInstanceUpdatePatch({
+        settings,
+        instanceId: row.instanceId,
+        instance: next,
+        driver: row.driver,
+        isDefault: row.isDefault,
+        textGenerationModelSelection: options?.textGenerationModelSelection,
+      }),
+    );
   };
 
   const deleteProviderInstance = (id: ProviderInstanceId) => {
@@ -1161,16 +1174,12 @@ export function GeneralSettingsPanel() {
                 const isDisabling = next.enabled === false && wasEnabled;
                 const shouldClearTextGen = isDisabling && textGenInstanceId === row.instanceId;
                 if (shouldClearTextGen) {
-                  updateSettings({
-                    providerInstances: {
-                      ...settings.providerInstances,
-                      [row.instanceId]: next,
-                    },
+                  updateProviderInstance(row, next, {
                     textGenerationModelSelection:
                       DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
                   });
                 } else {
-                  updateProviderInstance(row.instanceId, next);
+                  updateProviderInstance(row, next);
                 }
               }}
               onDelete={row.isDefault ? undefined : () => deleteProviderInstance(row.instanceId)}

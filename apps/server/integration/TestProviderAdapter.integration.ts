@@ -257,6 +257,9 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
 
         const session: ProviderSession = {
           provider,
+          ...(input.providerInstanceId !== undefined
+            ? { providerInstanceId: input.providerInstanceId }
+            : {}),
           status: "ready",
           runtimeMode: input.runtimeMode,
           threadId,

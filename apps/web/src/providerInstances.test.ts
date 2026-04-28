@@ -33,6 +33,26 @@ function provider(input: {
   };
 }
 
+describe("deriveProviderInstanceEntries", () => {
+  it("rejects snapshots without instance ids instead of inferring from driver kind", () => {
+    const legacySnapshot: ServerProvider = {
+      provider: "codex",
+      driver: ProviderDriverId.make("codex"),
+      enabled: true,
+      installed: true,
+      version: null,
+      status: "ready",
+      auth: { status: "authenticated" },
+      checkedAt: "2026-01-01T00:00:00.000Z",
+      models: [],
+      slashCommands: [],
+      skills: [],
+    };
+
+    expect(() => deriveProviderInstanceEntries([legacySnapshot])).toThrow("missing instanceId");
+  });
+});
+
 describe("resolveProviderKindForInstanceSelection", () => {
   it("maps custom provider instance ids back to their driver kind", () => {
     const providers = [

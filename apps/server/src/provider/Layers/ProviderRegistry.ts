@@ -17,7 +17,8 @@
  * Cache paths on disk are now keyed by `instanceId`. Because
  * `defaultInstanceIdForDriver(kind) === kind` for built-in kinds, existing
  * `<kind>.json` files remain the on-disk location for that driver's default
- * instance — no migration step required.
+ * instance. Identity-less legacy cache contents are ignored and replaced by
+ * the first live refresh.
  *
  * @module ProviderRegistryLive
  */
@@ -35,6 +36,7 @@ import { ProviderInstanceRegistry } from "../Services/ProviderInstanceRegistry.t
 import { ProviderRegistry, type ProviderRegistryShape } from "../Services/ProviderRegistry.ts";
 import {
   hydrateCachedProvider,
+  isCachedProviderCorrelated,
   orderProviderSnapshots,
   readProviderStatusCache,
   resolveProviderStatusCachePath,
@@ -46,9 +48,16 @@ import type { ProviderSnapshotSource } from "../builtInProviderCatalog.ts";
 const loadProviders = (
   providerSources: ReadonlyArray<ProviderSnapshotSource>,
 ): Effect.Effect<ReadonlyArray<ServerProvider>> =>
-  Effect.forEach(providerSources, (providerSource) => providerSource.getSnapshot, {
-    concurrency: "unbounded",
-  });
+  Effect.forEach(
+    providerSources,
+    (providerSource) =>
+      providerSource.getSnapshot.pipe(
+        Effect.flatMap((snapshot) => correlateSnapshotWithSource(providerSource, snapshot)),
+      ),
+    {
+      concurrency: "unbounded",
+    },
+  );
 
 const hasModelCapabilities = (model: ServerProvider["models"][number]): boolean =>
   (model.capabilities?.optionDescriptors?.length ?? 0) > 0;
@@ -92,6 +101,43 @@ export const haveProvidersChanged = (
   nextProviders: ReadonlyArray<ServerProvider>,
 ): boolean => !Equal.equals(previousProviders, nextProviders);
 
+const correlateSnapshotWithSource = (
+  source: ProviderSnapshotSource,
+  snapshot: ServerProvider,
+): Effect.Effect<ServerProvider> => {
+  if (snapshot.instanceId !== undefined && snapshot.instanceId !== source.instanceId) {
+    return Effect.die(
+      new Error(
+        `Provider snapshot instance mismatch: source '${source.instanceId}' emitted '${snapshot.instanceId}'.`,
+      ),
+    );
+  }
+  if (snapshot.driver !== undefined && snapshot.driver !== source.driverId) {
+    return Effect.die(
+      new Error(
+        `Provider snapshot driver mismatch for instance '${source.instanceId}': source '${source.driverId}' emitted '${snapshot.driver}'.`,
+      ),
+    );
+  }
+  return Effect.succeed({
+    ...snapshot,
+    instanceId: source.instanceId,
+    driver: source.driverId,
+  });
+};
+
+/**
+ * Key a snapshot for aggregation and persistence. Snapshot sources
+ * must be correlated by instance id before reaching this map; missing
+ * identities are defects, not runtime routing fallbacks.
+ */
+const snapshotInstanceKey = (provider: ServerProvider): ProviderInstanceId => {
+  if (provider.instanceId !== undefined) {
+    return provider.instanceId;
+  }
+  throw new Error(`Provider snapshot for '${provider.provider}' is missing instanceId.`);
+};
+
 export const ProviderRegistryLive = Layer.effect(
   ProviderRegistry,
   Effect.gen(function* () {
@@ -134,11 +180,13 @@ export const ProviderRegistryLive = Layer.effect(
     const bootSources = bootInstances.map(buildSnapshotSource);
     const fallbackProviders = yield* loadProviders(bootSources);
     const fallbackByInstance = new Map<ProviderInstanceId, ServerProvider>();
-    for (const provider of fallbackProviders) {
-      const key =
-        provider.instanceId ??
-        defaultInstanceIdForDriver(provider.driver ?? (provider.provider as never));
-      fallbackByInstance.set(key, provider);
+    for (let index = 0; index < fallbackProviders.length; index++) {
+      const provider = fallbackProviders[index];
+      const source = bootSources[index];
+      if (provider === undefined || source === undefined) {
+        continue;
+      }
+      fallbackByInstance.set(source.instanceId, provider);
     }
 
     const cachedProviders = yield* Effect.forEach(
@@ -146,26 +194,39 @@ export const ProviderRegistryLive = Layer.effect(
       (source) => {
         // One cache file per configured instance. For the default
         // instance of a built-in kind the path equals `<kind>.json` —
-        // identical to the legacy filename — so any pre-Slice-D
-        // snapshots on disk remain readable without a rename step.
+        // identical to the legacy filename. We still require the cache
+        // payload to carry matching instance + driver identity; old
+        // identity-less payloads are discarded and the awaited refresh
+        // below repopulates the cache.
         const filePath = resolveProviderStatusCachePath({
           cacheDir: config.providerStatusCacheDir,
           instanceId: source.instanceId,
         });
         const fallbackProvider = fallbackByInstance.get(source.instanceId);
         if (fallbackProvider === undefined) {
-          return Effect.sync(() => undefined as ServerProvider | undefined);
+          return Effect.void.pipe(Effect.as(undefined as ServerProvider | undefined));
         }
         return readProviderStatusCache(filePath).pipe(
           Effect.provideService(FileSystem.FileSystem, fileSystem),
-          Effect.map((cachedProvider) =>
-            cachedProvider === undefined
-              ? undefined
-              : hydrateCachedProvider({
-                  cachedProvider,
-                  fallbackProvider,
-                }),
-          ),
+          Effect.flatMap((cachedProvider) => {
+            if (cachedProvider === undefined) {
+              return Effect.void.pipe(Effect.as(undefined as ServerProvider | undefined));
+            }
+            const correlation = {
+              cachedProvider,
+              fallbackProvider,
+            } as const;
+            if (!isCachedProviderCorrelated(correlation)) {
+              return Effect.logWarning("provider status cache identity mismatch, ignoring", {
+                path: filePath,
+                instanceId: source.instanceId,
+                cachedInstanceId: cachedProvider.instanceId ?? null,
+                driver: source.driverId,
+                cachedDriver: cachedProvider.driver ?? null,
+              }).pipe(Effect.as(undefined as ServerProvider | undefined));
+            }
+            return Effect.succeed(hydrateCachedProvider(correlation));
+          }),
         );
       },
       { concurrency: "unbounded" },
@@ -192,20 +253,6 @@ export const ProviderRegistryLive = Layer.effect(
     const getLiveSources: Effect.Effect<ReadonlyArray<ProviderSnapshotSource>> = Ref.get(
       liveSubsRef,
     ).pipe(Effect.map((map) => Array.from(map.values(), buildSnapshotSource)));
-
-    /**
-     * Key a snapshot for aggregation and persistence. `instanceId` is
-     * optional on `ServerProvider` during the migration; legacy producers
-     * omit it and we fall back to the kind slug via
-     * `defaultInstanceIdForDriver`. That keeps all merge/refresh paths
-     * stable even when the snapshot originates from an older producer.
-     */
-    const snapshotInstanceKey = (provider: ServerProvider): ProviderInstanceId => {
-      if (provider.instanceId !== undefined) {
-        return provider.instanceId;
-      }
-      return defaultInstanceIdForDriver(provider.driver ?? (provider.provider as never));
-    };
 
     const persistProvider = (provider: ServerProvider) => {
       // Persist every instance — the file name is the instance id, so
@@ -276,7 +323,11 @@ export const ProviderRegistryLive = Layer.effect(
       providerSource: ProviderSnapshotSource,
     ) {
       return yield* providerSource.refresh.pipe(
-        Effect.flatMap((nextProvider) => syncProvider(nextProvider)),
+        Effect.flatMap((nextProvider) =>
+          correlateSnapshotWithSource(providerSource, nextProvider).pipe(
+            Effect.flatMap(syncProvider),
+          ),
+        ),
       );
     });
 
@@ -376,9 +427,9 @@ export const ProviderRegistryLive = Layer.effect(
         // in an active subscriber or the result is dropped.
         for (const [, instance] of newlyAdded) {
           const source = buildSnapshotSource(instance);
-          yield* Stream.runForEach(source.streamChanges, (provider) => syncProvider(provider)).pipe(
-            Effect.forkScoped,
-          );
+          yield* Stream.runForEach(source.streamChanges, (provider) =>
+            correlateSnapshotWithSource(source, provider).pipe(Effect.flatMap(syncProvider)),
+          ).pipe(Effect.forkScoped);
         }
 
         // Force-refresh every new/rebuilt instance in parallel and wait

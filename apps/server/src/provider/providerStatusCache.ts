@@ -46,10 +46,25 @@ export const orderProviderSnapshots = (
     (left, right) => providerOrderRank(left.provider) - providerOrderRank(right.provider),
   );
 
+export const isCachedProviderCorrelated = (input: {
+  readonly cachedProvider: ServerProvider;
+  readonly fallbackProvider: ServerProvider;
+}): boolean =>
+  input.cachedProvider.instanceId !== undefined &&
+  input.fallbackProvider.instanceId !== undefined &&
+  input.cachedProvider.instanceId === input.fallbackProvider.instanceId &&
+  input.cachedProvider.driver !== undefined &&
+  input.fallbackProvider.driver !== undefined &&
+  input.cachedProvider.driver === input.fallbackProvider.driver;
+
 export const hydrateCachedProvider = (input: {
   readonly cachedProvider: ServerProvider;
   readonly fallbackProvider: ServerProvider;
 }): ServerProvider => {
+  if (!isCachedProviderCorrelated(input)) {
+    return input.fallbackProvider;
+  }
+
   if (
     !input.fallbackProvider.enabled ||
     input.cachedProvider.enabled !== input.fallbackProvider.enabled
@@ -85,6 +100,9 @@ export const hydrateCachedProvider = (input: {
  *
  * Non-default instances (e.g. `codex_personal`) land in their own files and
  * never collide with other instances.
+ *
+ * Cache contents must still carry matching `instanceId` + `driver` identity
+ * before hydration. The filename alone is not trusted as a routing key.
  */
 export const resolveProviderStatusCachePath = (input: {
   readonly cacheDir: string;

@@ -10,10 +10,9 @@
  * @module ProviderServiceLive
  */
 import {
-  defaultInstanceIdForDriver,
+  isBuiltInDriverId,
   ModelSelection,
   NonNegativeInt,
-  ProviderDriverId,
   ThreadId,
   ProviderInterruptTurnInput,
   ProviderRespondToRequestInput,
@@ -151,6 +150,43 @@ function readPersistedCwd(
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+const dieOnMissingBindingInstanceId = (
+  operation: string,
+  payload: {
+    readonly providerInstanceId?: ProviderInstanceId | undefined;
+    readonly provider?: ProviderKind | undefined;
+  },
+): ProviderInstanceId => {
+  if (payload.providerInstanceId !== undefined) {
+    return payload.providerInstanceId;
+  }
+  throw new Error(
+    payload.provider
+      ? `${operation}: provider instance id is required for provider '${payload.provider}'.`
+      : `${operation}: provider instance id is required.`,
+  );
+};
+
+const correlateRuntimeEventWithInstance = (
+  source: {
+    readonly instanceId: ProviderInstanceId;
+    readonly provider: ProviderKind;
+  },
+  event: ProviderRuntimeEvent,
+): ProviderRuntimeEvent => {
+  if (event.provider !== source.provider) {
+    throw new Error(
+      `ProviderService.streamEvents: provider instance '${source.instanceId}' is backed by driver '${source.provider}' but emitted driver '${event.provider}'.`,
+    );
+  }
+  if (event.providerInstanceId !== undefined && event.providerInstanceId !== source.instanceId) {
+    throw new Error(
+      `ProviderService.streamEvents: provider instance '${source.instanceId}' emitted event for instance '${event.providerInstanceId}'.`,
+    );
+  }
+  return { ...event, providerInstanceId: source.instanceId };
+};
+
 const makeProviderService = Effect.fn("makeProviderService")(function* (
   options?: ProviderServiceLiveOptions,
 ) {
@@ -178,18 +214,23 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       Effect.asVoid,
     );
 
-  /**
-   * Pick the instance routing key for a session/binding. Producers started
-   * after the Slice-D migration populate `providerInstanceId` directly;
-   * legacy rows and adapters that haven't yet adopted the field fall back
-   * to the default instance for the driver kind.
-   */
-  const resolveBindingInstanceId = (payload: {
-    readonly providerInstanceId?: ProviderInstanceId | undefined;
-    readonly provider: ProviderKind;
-  }): ProviderInstanceId =>
-    payload.providerInstanceId ??
-    defaultInstanceIdForDriver(ProviderDriverId.make(payload.provider));
+  const requireBindingInstanceId = (
+    operation: string,
+    payload: {
+      readonly providerInstanceId?: ProviderInstanceId | undefined;
+      readonly provider?: ProviderKind | undefined;
+    },
+  ): Effect.Effect<ProviderInstanceId, ProviderValidationError> =>
+    payload.providerInstanceId !== undefined
+      ? Effect.succeed(payload.providerInstanceId)
+      : Effect.fail(
+          toValidationError(
+            operation,
+            payload.provider
+              ? `Provider instance id is required for provider '${payload.provider}'.`
+              : "Provider instance id is required.",
+          ),
+        );
 
   const upsertSessionBinding = (
     session: ProviderSession,
@@ -200,21 +241,37 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       readonly lastRuntimeEventAt?: string;
     },
   ) =>
-    directory.upsert({
-      threadId,
-      provider: session.provider,
-      providerInstanceId: resolveBindingInstanceId(session),
-      runtimeMode: session.runtimeMode,
-      status: toRuntimeStatus(session),
-      ...(session.resumeCursor !== undefined ? { resumeCursor: session.resumeCursor } : {}),
-      runtimePayload: toRuntimePayloadFromSession(session, extra),
+    Effect.gen(function* () {
+      const providerInstanceId = yield* requireBindingInstanceId(
+        "ProviderService.upsertSessionBinding",
+        session,
+      );
+      yield* directory.upsert({
+        threadId,
+        provider: session.provider,
+        providerInstanceId,
+        runtimeMode: session.runtimeMode,
+        status: toRuntimeStatus(session),
+        ...(session.resumeCursor !== undefined ? { resumeCursor: session.resumeCursor } : {}),
+        runtimePayload: toRuntimePayloadFromSession(session, extra),
+      });
     });
 
-  const processRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
-    increment(providerRuntimeEventsTotal, {
-      provider: event.provider,
-      eventType: event.type,
-    }).pipe(Effect.andThen(publishRuntimeEvent(event)));
+  const processRuntimeEvent = (
+    source: {
+      readonly instanceId: ProviderInstanceId;
+      readonly provider: ProviderKind;
+    },
+    event: ProviderRuntimeEvent,
+  ): Effect.Effect<void> =>
+    Effect.sync(() => correlateRuntimeEventWithInstance(source, event)).pipe(
+      Effect.flatMap((canonicalEvent) =>
+        increment(providerRuntimeEventsTotal, {
+          provider: canonicalEvent.provider,
+          eventType: canonicalEvent.type,
+        }).pipe(Effect.andThen(publishRuntimeEvent(canonicalEvent))),
+      ),
+    );
 
   // `subscribedAdapters` is our source-of-truth for "which instance adapters
   // are currently wired into the runtime event bus". It both tracks the set
@@ -250,7 +307,15 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       const adapter = adapterOption.value;
       next.set(id, adapter);
       if (previous.get(id) !== adapter) {
-        yield* Stream.runForEach(adapter.streamEvents, processRuntimeEvent).pipe(Effect.forkScoped);
+        yield* Stream.runForEach(adapter.streamEvents, (event) =>
+          processRuntimeEvent(
+            {
+              instanceId: id,
+              provider: adapter.provider,
+            },
+            event,
+          ),
+        ).pipe(Effect.forkScoped);
       }
     }
     yield* Ref.set(subscribedAdapters, next);
@@ -267,7 +332,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     readonly binding: ProviderRuntimeBinding;
     readonly operation: string;
   }) {
-    const bindingInstanceId = resolveBindingInstanceId(input.binding);
+    const bindingInstanceId = yield* requireBindingInstanceId(input.operation, input.binding);
     yield* Effect.annotateCurrentSpan({
       "provider.operation": "recover-session",
       "provider.kind": input.binding.provider,
@@ -275,10 +340,6 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       "provider.thread_id": input.binding.threadId,
     });
     return yield* Effect.gen(function* () {
-      // Prefer instance-keyed routing so multi-instance setups resolve to
-      // the correct configured instance; the registry shim maps unknown
-      // instances back to the default instance of the driver kind, which
-      // preserves the pre-Slice-D behaviour for legacy rows.
       const adapter = yield* registry.getByInstance(bindingInstanceId);
       const hasResumeCursor =
         input.binding.resumeCursor !== null && input.binding.resumeCursor !== undefined;
@@ -361,7 +422,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         `Cannot route thread '${input.threadId}' because no persisted provider binding exists.`,
       );
     }
-    const instanceId = resolveBindingInstanceId(binding);
+    const instanceId = yield* requireBindingInstanceId(input.operation, binding);
     const adapter = yield* registry.getByInstance(instanceId);
 
     const hasRequestedSession = yield* adapter.hasSession(input.threadId);
@@ -425,21 +486,16 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         payload: rawInput,
       });
 
-      const input = {
-        ...parsed,
-        threadId,
-        provider: parsed.provider ?? "codex",
-      };
-      // Resolve the routing key: callers that pass `providerInstanceId`
-      // pin the session to a specific configured instance; callers that
-      // pass only `provider` land on that driver's default instance.
-      const resolvedInstanceId = resolveBindingInstanceId(input);
+      const resolvedInstanceId = yield* requireBindingInstanceId(
+        "ProviderService.startSession",
+        parsed,
+      );
+      let metricProvider = parsed.provider ?? String(resolvedInstanceId);
       yield* Effect.annotateCurrentSpan({
         "provider.operation": "start-session",
-        "provider.kind": input.provider,
         "provider.instance_id": resolvedInstanceId,
         "provider.thread_id": threadId,
-        "provider.runtime_mode": input.runtimeMode,
+        "provider.runtime_mode": parsed.runtimeMode,
       });
       return yield* Effect.gen(function* () {
         const settings = yield* serverSettings.getSettings.pipe(
@@ -452,10 +508,29 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           ),
         );
         const instanceInfo = yield* registry.getInstanceInfo(resolvedInstanceId);
-        if (!settings.providers[input.provider].enabled && resolvedInstanceId === input.provider) {
+        if (!isBuiltInDriverId(instanceInfo.driverId)) {
           return yield* toValidationError(
             "ProviderService.startSession",
-            `Provider '${input.provider}' is disabled in T3 Code settings.`,
+            `Provider instance '${resolvedInstanceId}' uses unknown provider driver '${instanceInfo.driverId}'.`,
+          );
+        }
+        const resolvedProvider = instanceInfo.driverId as ProviderKind;
+        metricProvider = resolvedProvider;
+        if (parsed.provider !== undefined && parsed.provider !== resolvedProvider) {
+          return yield* toValidationError(
+            "ProviderService.startSession",
+            `Provider instance '${resolvedInstanceId}' belongs to driver '${resolvedProvider}', not '${parsed.provider}'.`,
+          );
+        }
+        const input = {
+          ...parsed,
+          threadId,
+          provider: resolvedProvider,
+        };
+        if (!settings.providers[resolvedProvider].enabled) {
+          return yield* toValidationError(
+            "ProviderService.startSession",
+            `Provider '${resolvedProvider}' is disabled in T3 Code settings.`,
           );
         }
         if (!instanceInfo.enabled) {
@@ -464,35 +539,32 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
             `Provider instance '${resolvedInstanceId}' is disabled in T3 Code settings.`,
           );
         }
-        if (instanceInfo.driverId !== ProviderDriverId.make(input.provider)) {
-          return yield* toValidationError(
-            "ProviderService.startSession",
-            `Provider instance '${resolvedInstanceId}' belongs to driver '${instanceInfo.driverId}', not '${input.provider}'.`,
-          );
-        }
         const persistedBinding = Option.getOrUndefined(yield* directory.getBinding(threadId));
         const effectiveResumeCursor =
           input.resumeCursor ??
-          (persistedBinding?.provider === input.provider
+          (persistedBinding?.providerInstanceId === resolvedInstanceId
             ? persistedBinding.resumeCursor
             : undefined);
         const effectiveCwd =
           input.cwd ??
-          (persistedBinding?.provider === input.provider
+          (persistedBinding?.providerInstanceId === resolvedInstanceId
             ? readPersistedCwd(persistedBinding.runtimePayload)
             : undefined);
         yield* Effect.annotateCurrentSpan({
+          "provider.kind": resolvedProvider,
           "provider.resume_cursor.source":
             input.resumeCursor !== undefined
               ? "request"
-              : effectiveResumeCursor !== undefined && persistedBinding?.provider === input.provider
+              : effectiveResumeCursor !== undefined &&
+                  persistedBinding?.providerInstanceId === resolvedInstanceId
                 ? "persisted"
                 : "none",
           "provider.resume_cursor.present": effectiveResumeCursor !== undefined,
           "provider.cwd.source":
             input.cwd !== undefined
               ? "request"
-              : effectiveCwd !== undefined && persistedBinding?.provider === input.provider
+              : effectiveCwd !== undefined &&
+                  persistedBinding?.providerInstanceId === resolvedInstanceId
                 ? "persisted"
                 : "none",
           "provider.cwd.effective": effectiveCwd ?? "",
@@ -534,9 +606,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       }).pipe(
         withMetrics({
           counter: providerSessionsTotal,
-          attributes: providerMetricAttributes(input.provider, {
-            operation: "start",
-          }),
+          attributes: () =>
+            providerMetricAttributes(metricProvider, {
+              operation: "start",
+            }),
         }),
       );
     },
@@ -807,10 +880,12 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         }
       }
 
-      return activeSessions.map((session) => {
+      const sessions: ProviderSession[] = [];
+      for (const session of activeSessions) {
         const binding = bindingsByThreadId.get(session.threadId);
         if (!binding) {
-          return session;
+          sessions.push(session);
+          continue;
         }
 
         const overrides: {
@@ -818,20 +893,34 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           runtimeMode?: ProviderSession["runtimeMode"];
           providerInstanceId?: ProviderSession["providerInstanceId"];
         } = {};
-        overrides.providerInstanceId = resolveBindingInstanceId(binding);
+        overrides.providerInstanceId = dieOnMissingBindingInstanceId(
+          "ProviderService.listSessions",
+          binding,
+        );
+        if (binding.provider !== session.provider) {
+          throw new Error(
+            `ProviderService.listSessions: thread '${session.threadId}' is active on provider '${session.provider}' but persisted binding names provider '${binding.provider}'.`,
+          );
+        }
+        if (overrides.providerInstanceId !== session.providerInstanceId) {
+          throw new Error(
+            `ProviderService.listSessions: thread '${session.threadId}' is active on provider instance '${session.providerInstanceId}' but persisted binding names '${overrides.providerInstanceId}'.`,
+          );
+        }
         if (session.resumeCursor === undefined && binding.resumeCursor !== undefined) {
           overrides.resumeCursor = binding.resumeCursor;
         }
         if (binding.runtimeMode !== undefined) {
           overrides.runtimeMode = binding.runtimeMode;
         }
-        return Object.assign({}, session, overrides);
-      });
+        sessions.push(Object.assign({}, session, overrides));
+      }
+      return sessions;
     },
   );
 
-  const getCapabilities: ProviderServiceShape["getCapabilities"] = (provider) =>
-    registry.getByProvider(provider).pipe(Effect.map((adapter) => adapter.capabilities));
+  const getCapabilities: ProviderServiceShape["getCapabilities"] = (instanceId) =>
+    registry.getByInstance(instanceId).pipe(Effect.map((adapter) => adapter.capabilities));
 
   const getInstanceInfo: ProviderServiceShape["getInstanceInfo"] = (instanceId) =>
     registry.getInstanceInfo(instanceId);
@@ -896,22 +985,21 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       }),
     ).pipe(Effect.asVoid);
     yield* Effect.forEach(currentAdapters, ([, adapter]) => adapter.stopAll()).pipe(Effect.asVoid);
-    yield* Effect.forEach(threadIds, (threadId) =>
-      directory.getProvider(threadId).pipe(
-        Effect.flatMap((provider) =>
-          directory.upsert({
-            threadId,
-            provider,
-            status: "stopped",
-            runtimePayload: {
-              activeTurnId: null,
-              lastRuntimeEvent: "provider.stopAll",
-              lastRuntimeEventAt: new Date().toISOString(),
-            },
-          }),
-        ),
-      ),
-    ).pipe(Effect.asVoid);
+    const bindings = yield* directory.listBindings().pipe(Effect.orElseSucceed(() => []));
+    yield* Effect.forEach(bindings, (binding) => {
+      const providerInstanceId = dieOnMissingBindingInstanceId("ProviderService.stopAll", binding);
+      return directory.upsert({
+        threadId: binding.threadId,
+        provider: binding.provider,
+        providerInstanceId,
+        status: "stopped",
+        runtimePayload: {
+          activeTurnId: null,
+          lastRuntimeEvent: "provider.stopAll",
+          lastRuntimeEventAt: new Date().toISOString(),
+        },
+      });
+    }).pipe(Effect.asVoid);
     yield* analytics.record("provider.sessions.stopped_all", {
       sessionCount: threadIds.length,
     });

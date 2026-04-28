@@ -1368,7 +1368,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
 
         const runtimeInput: CodexSessionRuntimeOptions = {
           threadId: input.threadId,
-          ...(options?.instanceId ? { providerInstanceId: options.instanceId } : {}),
+          providerInstanceId: boundInstanceId,
           cwd: input.cwd ?? process.cwd(),
           binaryPath: codexConfig.binaryPath,
           ...(options?.environment ? { environment: options.environment } : {}),

@@ -345,14 +345,13 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
         return;
       }
       const entry = entryByInstanceId.get(instanceId);
+      if (!entry) {
+        return;
+      }
       // `resolveSelectableModel` uses the driver kind for normalization
       // (slug casing etc.). Custom instances share their driver's
       // normalization rules, so pass the driver kind here.
-      const resolvedModel = resolveSelectableModel(
-        entry?.driverKind ?? "codex",
-        modelSlug,
-        options,
-      );
+      const resolvedModel = resolveSelectableModel(entry.driverKind, modelSlug, options);
       if (resolvedModel) {
         onInstanceModelChange(instanceId, resolvedModel);
       }

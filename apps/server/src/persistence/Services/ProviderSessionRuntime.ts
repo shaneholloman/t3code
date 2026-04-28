@@ -22,10 +22,10 @@ export const ProviderSessionRuntime = Schema.Struct({
   providerName: Schema.String,
   /**
    * User-defined routing key for the configured provider instance that
-   * owns this session. Nullable for back-compat: rows persisted before the
-   * driver/instance split carry only `providerName` (the kind slug). Read
-   * paths fall back to `defaultInstanceIdForDriver(providerName)` when
-   * this is `null`.
+   * owns this session. Nullable only at the storage/migration boundary:
+   * rows persisted before the driver/instance split carry only
+   * `providerName`. Repository consumers must materialize a concrete
+   * instance id before routing.
    */
   providerInstanceId: Schema.NullOr(ProviderInstanceId),
   adapterKey: Schema.String,

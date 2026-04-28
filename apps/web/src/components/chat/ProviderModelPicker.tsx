@@ -46,36 +46,16 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   const [uncontrolledIsMenuOpen, setUncontrolledIsMenuOpen] = useState(false);
   const isMenuOpen = props.open ?? uncontrolledIsMenuOpen;
 
-  // Resolve the active instance entry. When `lockedProvider` is set, the
-  // composer already constrains selection to that driver kind, but the
-  // persisted selection may still reference an instance from a different
-  // kind after a configuration change — fall back to the first matching
-  // entry in that case so the trigger stays consistent.
+  // Resolve the active instance entry by exact routing key. The composer
+  // resolves fallbacks before rendering this component; if the selected
+  // instance disappears, do not infer a replacement from its driver kind.
   const activeEntry = useMemo(() => {
-    const direct = props.instanceEntries.find(
-      (entry) => entry.instanceId === props.activeInstanceId,
+    return (
+      props.instanceEntries.find((entry) => entry.instanceId === props.activeInstanceId) ?? null
     );
-    if (direct) return direct;
-    if (props.lockedProvider) {
-      return (
-        props.instanceEntries.find(
-          (entry) =>
-            entry.driverKind === props.lockedProvider &&
-            (!props.lockedContinuationGroupKey ||
-              entry.continuationGroupKey === props.lockedContinuationGroupKey),
-        ) ?? null
-      );
-    }
-    return props.instanceEntries[0] ?? null;
-  }, [
-    props.activeInstanceId,
-    props.instanceEntries,
-    props.lockedContinuationGroupKey,
-    props.lockedProvider,
-  ]);
+  }, [props.activeInstanceId, props.instanceEntries]);
 
-  const activeInstanceId = activeEntry?.instanceId ?? props.activeInstanceId;
-  const activeDriverKind = activeEntry?.driverKind ?? "codex";
+  const activeInstanceId = props.activeInstanceId;
   const selectedInstanceOptions = props.modelOptionsByInstance.get(activeInstanceId) ?? [];
   // If the current slug belongs to a different instance (for example after
   // a provider switch or disable), prefer the active instance's first
@@ -88,7 +68,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   const triggerSubtitle = selectedModel?.subProvider;
   const triggerLabel = selectedModel ? getTriggerDisplayModelLabel(selectedModel) : props.model;
   const duplicateDriverCount = props.instanceEntries.filter(
-    (entry) => entry.driverKind === activeDriverKind,
+    (entry) => activeEntry !== null && entry.driverKind === activeEntry.driverKind,
   ).length;
   const showInstanceBadge = Boolean(activeEntry?.accentColor) || duplicateDriverCount > 1;
 
@@ -144,15 +124,17 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             props.compact ? "max-w-36 sm:pl-1" : undefined,
           )}
         >
-          <ProviderInstanceIcon
-            driverKind={activeDriverKind}
-            displayName={activeEntry?.displayName ?? triggerLabel}
-            accentColor={activeEntry?.accentColor}
-            showBadge={showInstanceBadge}
-            className={showInstanceBadge ? "size-5" : "size-4"}
-            iconClassName={cn("size-4", props.activeProviderIconClassName)}
-            badgeClassName="right-[-0.125rem] bottom-[-0.125rem] h-3 min-w-3 text-[7px]"
-          />
+          {activeEntry ? (
+            <ProviderInstanceIcon
+              driverKind={activeEntry.driverKind}
+              displayName={activeEntry.displayName}
+              accentColor={activeEntry.accentColor}
+              showBadge={showInstanceBadge}
+              className={showInstanceBadge ? "size-5" : "size-4"}
+              iconClassName={cn("size-4", props.activeProviderIconClassName)}
+              badgeClassName="right-[-0.125rem] bottom-[-0.125rem] h-3 min-w-3 text-[7px]"
+            />
+          ) : null}
           <Tooltip>
             <TooltipTrigger
               render={

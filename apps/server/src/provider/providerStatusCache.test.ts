@@ -2,6 +2,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   defaultInstanceIdForDriver,
   ProviderDriverId,
+  ProviderInstanceId,
   type ServerProvider,
 } from "@t3tools/contracts";
 import { createModelCapabilities } from "@t3tools/shared/model";
@@ -10,6 +11,7 @@ import { Effect, FileSystem } from "effect";
 
 import {
   hydrateCachedProvider,
+  isCachedProviderCorrelated,
   readProviderStatusCache,
   resolveProviderStatusCachePath,
   writeProviderStatusCache,
@@ -22,6 +24,8 @@ const makeProvider = (
   overrides?: Partial<ServerProvider>,
 ): ServerProvider => ({
   provider,
+  instanceId: defaultInstanceIdForDriver(ProviderDriverId.make(provider)),
+  driver: ProviderDriverId.make(provider),
   enabled: true,
   installed: true,
   version: "1.0.0",
@@ -161,6 +165,70 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
         fallbackProvider: disabledFallback,
       }),
       disabledFallback,
+    );
+  });
+
+  it("rejects cached snapshots that are not correlated to the fallback instance", () => {
+    const fallbackCodex = makeProvider("codex", {
+      models: [
+        {
+          slug: "gpt-5.4",
+          name: "GPT-5.4",
+          isCustom: false,
+          capabilities: emptyCapabilities,
+        },
+      ],
+    });
+    const legacyCachedCodex: ServerProvider = {
+      provider: "codex",
+      enabled: true,
+      installed: true,
+      version: "1.0.0",
+      status: "ready",
+      auth: { status: "authenticated" },
+      checkedAt: "2026-04-10T12:00:00.000Z",
+      models: [
+        {
+          slug: "cached-legacy-model",
+          name: "Cached Legacy Model",
+          isCustom: false,
+          capabilities: emptyCapabilities,
+        },
+      ],
+      slashCommands: [],
+      skills: [],
+    };
+    const mismatchedCachedCodex = makeProvider("codex", {
+      instanceId: ProviderInstanceId.make("codex_personal"),
+    });
+
+    assert.strictEqual(
+      isCachedProviderCorrelated({
+        cachedProvider: legacyCachedCodex,
+        fallbackProvider: fallbackCodex,
+      }),
+      false,
+    );
+    assert.deepStrictEqual(
+      hydrateCachedProvider({
+        cachedProvider: legacyCachedCodex,
+        fallbackProvider: fallbackCodex,
+      }),
+      fallbackCodex,
+    );
+    assert.strictEqual(
+      isCachedProviderCorrelated({
+        cachedProvider: mismatchedCachedCodex,
+        fallbackProvider: fallbackCodex,
+      }),
+      false,
+    );
+    assert.deepStrictEqual(
+      hydrateCachedProvider({
+        cachedProvider: mismatchedCachedCodex,
+        fallbackProvider: fallbackCodex,
+      }),
+      fallbackCodex,
     );
   });
 });
