@@ -162,7 +162,6 @@ export function resolveDesktopCoreAdvertisedEndpoints(
         label: "Custom HTTPS",
         httpBaseUrl: customEndpointUrl,
         reachability: "public",
-        hostedHttpsCompatibility: "compatible",
         status: "unknown",
         description: "User-configured HTTPS endpoint for this desktop backend.",
       }),
