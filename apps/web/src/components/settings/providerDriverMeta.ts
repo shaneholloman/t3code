@@ -75,6 +75,13 @@ export const DRIVER_OPTIONS: readonly DriverOption[] = [
         description: "Path to the Claude binary used by this instance.",
       },
       {
+        key: "homePath",
+        label: "Claude HOME path",
+        placeholder: "~",
+        description:
+          "Custom HOME used when running this Claude instance. Keeps .claude.json and .claude separate.",
+      },
+      {
         key: "launchArgs",
         label: "Launch arguments",
         placeholder: "e.g. --chrome",

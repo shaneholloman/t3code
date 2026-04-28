@@ -33,7 +33,7 @@
  *
  * @module providerInstance
  */
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 const PROVIDER_SLUG_MAX_CHARS = 64;
@@ -46,6 +46,8 @@ const PROVIDER_SLUG_MAX_CHARS = 64;
  * fork authors retain reasonable freedom.
  */
 const PROVIDER_SLUG_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
+const ENVIRONMENT_VARIABLE_NAME_MAX_CHARS = 128;
+const ENVIRONMENT_VARIABLE_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
 const slugSchema = TrimmedNonEmptyString.check(
   Schema.isMaxLength(PROVIDER_SLUG_MAX_CHARS),
@@ -126,6 +128,24 @@ export const ProviderInstanceRef = Schema.Struct({
 });
 export type ProviderInstanceRef = typeof ProviderInstanceRef.Type;
 
+export const ProviderInstanceEnvironmentVariableName = TrimmedNonEmptyString.check(
+  Schema.isMaxLength(ENVIRONMENT_VARIABLE_NAME_MAX_CHARS),
+  Schema.isPattern(ENVIRONMENT_VARIABLE_NAME_PATTERN),
+);
+export type ProviderInstanceEnvironmentVariableName =
+  typeof ProviderInstanceEnvironmentVariableName.Type;
+
+export const ProviderInstanceEnvironmentVariable = Schema.Struct({
+  name: ProviderInstanceEnvironmentVariableName,
+  value: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  sensitive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  valueRedacted: Schema.optionalKey(Schema.Boolean),
+});
+export type ProviderInstanceEnvironmentVariable = typeof ProviderInstanceEnvironmentVariable.Type;
+
+export const ProviderInstanceEnvironment = Schema.Array(ProviderInstanceEnvironmentVariable);
+export type ProviderInstanceEnvironment = typeof ProviderInstanceEnvironment.Type;
+
 /**
  * Envelope shape for a provider instance configuration in `ServerSettings`.
  *
@@ -139,6 +159,7 @@ export const ProviderInstanceConfig = Schema.Struct({
   driver: ProviderDriverId,
   displayName: Schema.optional(TrimmedNonEmptyString),
   accentColor: Schema.optional(TrimmedNonEmptyString),
+  environment: Schema.optionalKey(ProviderInstanceEnvironment),
   enabled: Schema.optionalKey(Schema.Boolean),
   config: Schema.optionalKey(Schema.Unknown),
 });

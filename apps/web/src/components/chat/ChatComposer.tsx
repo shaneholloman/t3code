@@ -4,7 +4,6 @@ import type {
   ModelSelection,
   ProjectEntry,
   ProviderApprovalDecision,
-  ProviderInstanceId,
   ProviderInteractionMode,
   ProviderKind,
   ResolvedKeybindingsConfig,
@@ -16,6 +15,7 @@ import type {
 } from "@t3tools/contracts";
 import {
   defaultInstanceIdForDriver,
+  ProviderInstanceId,
   ProviderDriverId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
@@ -98,13 +98,10 @@ import {
   XIcon,
 } from "lucide-react";
 import { proposedPlanTitle } from "../../proposedPlan";
-import {
-  getProviderInteractionModeToggle,
-  getProviderModels,
-  resolveSelectableProvider,
-} from "../../providerModels";
+import { getProviderInteractionModeToggle } from "../../providerModels";
 import {
   deriveProviderInstanceEntries,
+  resolveProviderKindForInstanceSelection,
   sortProviderInstanceEntries,
   type ProviderInstanceEntry,
 } from "../../providerInstances";
@@ -575,18 +572,6 @@ export const ChatComposer = memo(
     // ------------------------------------------------------------------
     // Model state
     // ------------------------------------------------------------------
-    const selectedProviderByThreadId = composerDraft.activeProvider ?? null;
-    const threadProvider =
-      activeThreadModelSelection?.instanceId ??
-      activeProjectDefaultModelSelection?.instanceId ??
-      null;
-
-    const unlockedSelectedProvider = resolveSelectableProvider(
-      providerStatuses,
-      selectedProviderByThreadId ?? threadProvider ?? "codex",
-    );
-    const selectedProvider: ProviderKind = lockedProvider ?? unlockedSelectedProvider;
-
     // Instance-aware projection of the wire provider list. One entry per
     // configured instance (default built-in + any custom `providerInstances.*`),
     // sorted default-first per driver kind for a stable picker order.
@@ -594,9 +579,25 @@ export const ChatComposer = memo(
       () => sortProviderInstanceEntries(deriveProviderInstanceEntries(providerStatuses)),
       [providerStatuses],
     );
+    const selectedProviderByThreadId = composerDraft.activeProvider ?? null;
+    const threadProvider =
+      activeThread?.session?.providerInstanceId ??
+      activeThreadModelSelection?.instanceId ??
+      activeProjectDefaultModelSelection?.instanceId ??
+      null;
+    const explicitSelectedInstanceId = selectedProviderByThreadId ?? threadProvider;
+
+    const unlockedSelectedProvider =
+      resolveProviderKindForInstanceSelection(
+        providerInstanceEntries,
+        providerStatuses,
+        explicitSelectedInstanceId,
+      ) ?? "codex";
+    const selectedProvider: ProviderKind = lockedProvider ?? unlockedSelectedProvider;
     const lockedContinuationGroupKey = useMemo((): string | null => {
       if (!lockedProvider || !activeThread) return null;
-      const lockedInstanceId = activeThreadModelSelection?.instanceId;
+      const lockedInstanceId =
+        activeThread.session?.providerInstanceId ?? activeThreadModelSelection?.instanceId;
       if (!lockedInstanceId) return null;
       return (
         providerInstanceEntries.find((entry) => entry.instanceId === lockedInstanceId)
@@ -619,12 +620,10 @@ export const ChatComposer = memo(
     //   4. First enabled entry matching the current driver kind.
     //   5. First enabled entry overall / default instance for the kind.
     //
-    // Open-slug instance ids may reference an instance the user later
-    // removed; the fallbacks keep the picker pointing at something
-    // sendable instead of crashing on a stale reference.
     const selectedInstanceId = useMemo<ProviderInstanceId>(() => {
       const candidates: Array<string | null | undefined> = [
         composerDraft.activeProvider,
+        activeThread?.session?.providerInstanceId,
         activeThreadModelSelection?.instanceId,
         activeProjectDefaultModelSelection?.instanceId,
       ];
@@ -646,6 +645,9 @@ export const ChatComposer = memo(
           return match.instanceId;
         }
       }
+      if (explicitSelectedInstanceId) {
+        return ProviderInstanceId.make(explicitSelectedInstanceId);
+      }
       const byKind = providerInstanceEntries.find(
         (entry) =>
           entry.enabled &&
@@ -662,8 +664,10 @@ export const ChatComposer = memo(
       );
     }, [
       activeProjectDefaultModelSelection?.instanceId,
+      activeThread?.session?.providerInstanceId,
       activeThreadModelSelection?.instanceId,
       composerDraft.activeProvider,
+      explicitSelectedInstanceId,
       lockedContinuationGroupKey,
       lockedProvider,
       providerInstanceEntries,
@@ -681,19 +685,19 @@ export const ChatComposer = memo(
     });
 
     // Resolve the active instance's snapshot by `instanceId` so a custom
-    // Codex instance (e.g. `codex_personal`) gets its own slash commands,
-    // skills, and model list — not the default Codex's. The kind-based
-    // `getProviderModels` fallback remains for call sites that legitimately
-    // want driver-level data (icons, interaction-mode toggle).
+    // instance gets its own slash commands, skills, and model list — not
+    // the first snapshot for the same driver kind.
+    const selectedProviderEntry = useMemo(
+      () => providerInstanceEntries.find((entry) => entry.instanceId === selectedInstanceId),
+      [providerInstanceEntries, selectedInstanceId],
+    );
     const selectedProviderStatus = useMemo(
-      () =>
-        providerStatuses.find((provider) => provider.instanceId === selectedInstanceId) ??
-        providerStatuses.find((provider) => provider.provider === selectedProvider),
-      [providerStatuses, selectedInstanceId, selectedProvider],
+      () => selectedProviderEntry?.snapshot ?? null,
+      [selectedProviderEntry],
     );
     const selectedProviderModels = useMemo<ReadonlyArray<ServerProvider["models"][number]>>(
-      () => selectedProviderStatus?.models ?? getProviderModels(providerStatuses, selectedProvider),
-      [providerStatuses, selectedProvider, selectedProviderStatus],
+      () => selectedProviderEntry?.models ?? [],
+      [selectedProviderEntry],
     );
 
     const composerProviderState = useMemo(
@@ -726,26 +730,18 @@ export const ChatComposer = memo(
     );
     const selectedModelForPicker = selectedModel;
     // Instance-keyed option list so the picker can show each configured
-    // instance (built-in + custom) as a first-class sidebar entry. Every
-    // instance of the same kind shares custom model slugs from
-    // `settings.providers[kind].customModels`; if per-instance customization
-    // is needed later, move that lookup to an instance-scoped path.
+    // instance (built-in + custom) as a first-class sidebar entry. The
+    // options are server-reported models plus that exact instance's
+    // configured custom models; selected slugs are not injected into lists.
     const modelOptionsByInstance = useMemo<
       ReadonlyMap<ProviderInstanceId, ReadonlyArray<AppModelOption>>
     >(() => {
       const out = new Map<ProviderInstanceId, ReadonlyArray<AppModelOption>>();
       for (const entry of providerInstanceEntries) {
-        out.set(
-          entry.instanceId,
-          getAppModelOptionsForInstance(
-            settings,
-            entry,
-            entry.instanceId === selectedInstanceId ? selectedModel : undefined,
-          ),
-        );
+        out.set(entry.instanceId, getAppModelOptionsForInstance(settings, entry));
       }
       return out;
-    }, [providerInstanceEntries, selectedInstanceId, selectedModel, settings]);
+    }, [providerInstanceEntries, settings]);
     const selectedModelForPickerWithCustomFallback = useMemo(() => {
       const currentOptions = modelOptionsByInstance.get(selectedInstanceId) ?? [];
       return currentOptions.some((option) => option.slug === selectedModelForPicker)

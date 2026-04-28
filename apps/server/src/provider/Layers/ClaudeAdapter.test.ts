@@ -144,6 +144,7 @@ function makeHarness(config?: {
   readonly nativeEventLogger?: ClaudeAdapterLiveOptions["nativeEventLogger"];
   readonly cwd?: string;
   readonly baseDir?: string;
+  readonly claudeConfig?: Partial<ClaudeSettings>;
 }) {
   const query = new FakeClaudeQuery();
   let createInput:
@@ -174,7 +175,7 @@ function makeHarness(config?: {
     layer: Layer.effect(
       ClaudeAdapter,
       Effect.gen(function* () {
-        const claudeConfig = Schema.decodeSync(ClaudeSettings)({});
+        const claudeConfig = Schema.decodeSync(ClaudeSettings)(config?.claudeConfig ?? {});
         return yield* makeClaudeAdapter(claudeConfig, adapterOptions);
       }),
     ).pipe(
@@ -355,6 +356,25 @@ describe("ClaudeAdapterLive", () => {
 
       const createInput = harness.getLastCreateQueryInput();
       assert.equal(createInput?.options.effort, "max");
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("runs Claude SDK sessions with the configured Claude HOME", () => {
+    const harness = makeHarness({ claudeConfig: { homePath: "~/.claude-work" } });
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: "claudeAgent",
+        modelSelection: createModelSelection("claudeAgent", "claude-opus-4-6"),
+        runtimeMode: "full-access",
+      });
+
+      const createInput = harness.getLastCreateQueryInput();
+      assert.equal(createInput?.options.env?.HOME, path.join(os.homedir(), ".claude-work"));
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),

@@ -7,9 +7,8 @@
  *
  * Unlike Codex, the Claude snapshot probe may invoke a secondary probe
  * (`probeClaudeCapabilities`) to read Anthropic account + slash-command
- * metadata. That probe is per-instance: each instance owns its own Cache so
- * two concurrent Claude instances with different `binaryPath`s don't
- * cross-contaminate their cached init data.
+ * metadata. That probe is per-instance and keyed by binary + resolved HOME so
+ * two concurrent Claude instances don't cross-contaminate account metadata.
  *
  * @module provider/Drivers/ClaudeDriver
  */
@@ -33,6 +32,8 @@ import {
   type ProviderDriver,
   type ProviderInstance,
 } from "../ProviderDriver.ts";
+import { mergeProviderInstanceEnvironment } from "../ProviderInstanceEnvironment.ts";
+import { makeClaudeCapabilitiesCacheKey, makeClaudeContinuationGroupKey } from "./ClaudeHome.ts";
 
 const DRIVER_ID = ProviderDriverId.make("claudeAgent");
 const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
@@ -69,48 +70,55 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
   },
   configSchema: ClaudeSettings,
   defaultConfig: (): ClaudeSettings => Schema.decodeSync(ClaudeSettings)({}),
-  create: ({ instanceId, displayName, accentColor, enabled, config }) =>
+  create: ({ instanceId, displayName, accentColor, environment, enabled, config }) =>
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const eventLoggers = yield* ProviderEventLoggers;
-      const continuationIdentity = defaultProviderContinuationIdentity({
+      const processEnv = mergeProviderInstanceEnvironment(environment);
+      const fallbackContinuationIdentity = defaultProviderContinuationIdentity({
         driverId: DRIVER_ID,
         instanceId,
       });
+      const effectiveConfig = { ...config, enabled } satisfies ClaudeSettings;
+      const continuationGroupKey = makeClaudeContinuationGroupKey(effectiveConfig);
       const stampIdentity = withInstanceIdentity({
         instanceId,
         displayName,
         accentColor,
-        continuationGroupKey: continuationIdentity.continuationKey,
+        continuationGroupKey,
       });
-      const effectiveConfig = { ...config, enabled } satisfies ClaudeSettings;
 
-      const adapter = yield* makeClaudeAdapter(effectiveConfig, {
+      const adapterOptions = {
+        environment: processEnv,
         ...(eventLoggers.native ? { nativeEventLogger: eventLoggers.native } : {}),
-      });
-      const textGeneration = yield* makeClaudeTextGeneration(effectiveConfig);
+      };
+      const adapter = yield* makeClaudeAdapter(effectiveConfig, adapterOptions);
+      const textGeneration = yield* makeClaudeTextGeneration(effectiveConfig, processEnv);
 
-      // Per-instance capabilities cache: keyed on `binaryPath` so two
-      // Claude instances pointing at different binaries don't collide, but
-      // inside one instance the cache short-circuits repeated probe calls.
+      // Per-instance capabilities cache: keyed on binary + resolved HOME so
+      // account-specific probes never share auth metadata across instances.
       const subscriptionProbeCache = yield* Cache.make({
         capacity: 1,
         timeToLive: CAPABILITIES_PROBE_TTL,
-        lookup: (binaryPath: string) => probeClaudeCapabilities(binaryPath),
+        lookup: () => probeClaudeCapabilities(effectiveConfig, processEnv),
       });
+      const capabilitiesCacheKey = makeClaudeCapabilitiesCacheKey(effectiveConfig);
 
       const checkProvider = checkClaudeProviderStatus(
         effectiveConfig,
-        (binaryPath) =>
-          Cache.get(subscriptionProbeCache, binaryPath).pipe(
+        () =>
+          Cache.get(subscriptionProbeCache, capabilitiesCacheKey).pipe(
             Effect.map((probe) => probe?.subscriptionType),
           ),
-        (binaryPath) =>
-          Cache.get(subscriptionProbeCache, binaryPath).pipe(
+        () =>
+          Cache.get(subscriptionProbeCache, capabilitiesCacheKey).pipe(
             Effect.map((probe) => probe?.slashCommands),
           ),
-        (binaryPath) =>
-          Cache.get(subscriptionProbeCache, binaryPath).pipe(Effect.map((probe) => probe?.email)),
+        () =>
+          Cache.get(subscriptionProbeCache, capabilitiesCacheKey).pipe(
+            Effect.map((probe) => probe?.email),
+          ),
+        processEnv,
       ).pipe(
         Effect.map(stampIdentity),
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
@@ -138,7 +146,10 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
       return {
         instanceId,
         driverId: DRIVER_ID,
-        continuationIdentity,
+        continuationIdentity: {
+          ...fallbackContinuationIdentity,
+          continuationKey: continuationGroupKey,
+        },
         displayName,
         accentColor,
         enabled,

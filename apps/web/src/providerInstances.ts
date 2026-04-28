@@ -14,6 +14,7 @@
  */
 import {
   defaultInstanceIdForDriver,
+  isBuiltInDriverId,
   PROVIDER_DISPLAY_NAMES,
   ProviderDriverId,
   type ProviderInstanceId,
@@ -256,4 +257,30 @@ export function resolveSelectableProviderInstance(
     requested?.instanceId ??
     instanceId
   );
+}
+
+/**
+ * Resolve an open model-selection routing key back to a built-in driver kind.
+ * Custom instance ids such as `claude_openrouter` are not themselves
+ * `ProviderKind` literals, but the composer still needs the owning driver kind
+ * for capabilities, options, icons, and turn dispatch metadata.
+ */
+export function resolveProviderKindForInstanceSelection(
+  entries: ReadonlyArray<ProviderInstanceEntry>,
+  providers: ReadonlyArray<ServerProvider>,
+  selection: ProviderInstanceId | ProviderKind | string | null | undefined,
+): ProviderKind | undefined {
+  const matchedEntry = entries.find((entry) => entry.instanceId === selection);
+  if (matchedEntry) {
+    return matchedEntry.driverKind;
+  }
+  const requested =
+    typeof selection === "string" && isBuiltInDriverId(selection) ? selection : null;
+  if (requested) {
+    const provider = providers.find((snapshot) => snapshot.provider === requested);
+    if (provider?.enabled) {
+      return provider.provider;
+    }
+  }
+  return undefined;
 }

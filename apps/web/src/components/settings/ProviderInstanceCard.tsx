@@ -1,10 +1,11 @@
 "use client";
 
-import { ChevronDownIcon, Trash2Icon } from "lucide-react";
+import { ChevronDownIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   isBuiltInDriverId,
   type ProviderInstanceConfig,
+  type ProviderInstanceEnvironmentVariable,
   type ProviderInstanceId,
   type ProviderKind,
   type ServerProvider,
@@ -37,7 +38,30 @@ const PROVIDER_ACCENT_SWATCHES = [
   "#0891b2",
 ] as const;
 
+const ENVIRONMENT_VARIABLE_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
 const REDACTED_EMAIL_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+type EnvironmentDraftRow = {
+  readonly id: string;
+  readonly name: string;
+  readonly value: string;
+  readonly sensitive: boolean;
+  readonly valueRedacted?: boolean;
+};
+
+function makeEnvironmentDraftRow(
+  variable: ProviderInstanceEnvironmentVariable,
+  index: number,
+): EnvironmentDraftRow {
+  return {
+    id: `${index}:${variable.name}`,
+    name: variable.name,
+    value: variable.value,
+    sensitive: variable.sensitive,
+    ...(variable.valueRedacted !== undefined ? { valueRedacted: variable.valueRedacted } : {}),
+  };
+}
 
 function redactedEmailPlaceholder(email: string): string {
   let state = 0x811c9dc5;
@@ -256,6 +280,139 @@ function ProviderAccentColorPicker(props: {
   );
 }
 
+function ProviderEnvironmentSection(props: {
+  readonly environment: ReadonlyArray<ProviderInstanceEnvironmentVariable>;
+  readonly onChange: (environment: ReadonlyArray<ProviderInstanceEnvironmentVariable>) => void;
+}) {
+  const [rows, setRows] = useState<ReadonlyArray<EnvironmentDraftRow>>(() =>
+    props.environment.map(makeEnvironmentDraftRow),
+  );
+
+  useEffect(() => {
+    setRows(props.environment.map(makeEnvironmentDraftRow));
+  }, [props.environment]);
+
+  const publishRows = (nextRows: ReadonlyArray<EnvironmentDraftRow>) => {
+    props.onChange(
+      nextRows
+        .map((row) => ({ ...row, name: row.name.trim() }))
+        .filter((row) => ENVIRONMENT_VARIABLE_NAME_PATTERN.test(row.name))
+        .map(({ id: _id, ...row }) => row),
+    );
+  };
+
+  const updateVariable = (id: string, patch: Partial<Omit<EnvironmentDraftRow, "id">>) => {
+    const nextRows = rows.map((row) =>
+      row.id === id
+        ? {
+            ...row,
+            ...patch,
+            ...(patch.value !== undefined ? { valueRedacted: false } : {}),
+          }
+        : row,
+    );
+    setRows(nextRows);
+    publishRows(nextRows);
+  };
+
+  const removeVariable = (id: string) => {
+    const nextRows = rows.filter((row) => row.id !== id);
+    setRows(nextRows);
+    publishRows(nextRows);
+  };
+
+  return (
+    <div className="grid gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-medium text-foreground">Environment variables</span>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7 gap-1.5 px-2 text-xs"
+          onClick={() =>
+            setRows([
+              ...rows,
+              {
+                id: crypto.randomUUID(),
+                name: "",
+                value: "",
+                sensitive: true,
+              },
+            ])
+          }
+        >
+          <PlusIcon className="size-3" />
+          Add
+        </Button>
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Add variables to pass API keys, base URLs, or other per-instance CLI settings.
+        </p>
+      ) : (
+        <div className="grid gap-2">
+          {rows.map((variable, index) => (
+            <div
+              key={variable.id}
+              className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto_auto] sm:items-center"
+            >
+              <DraftInput
+                value={variable.name}
+                onCommit={(name) => updateVariable(variable.id, { name: name.trim() })}
+                placeholder="VARIABLE_NAME"
+                spellCheck={false}
+                aria-label={`Environment variable name ${index + 1}`}
+              />
+              <DraftInput
+                value={variable.valueRedacted ? "" : variable.value}
+                onCommit={(value) => updateVariable(variable.id, { value })}
+                type={variable.sensitive ? "password" : undefined}
+                autoComplete="off"
+                placeholder={
+                  variable.valueRedacted ? "Stored secret - enter a new value to replace" : "Value"
+                }
+                spellCheck={false}
+                aria-label={`Environment variable value ${index + 1}`}
+              />
+              <label className="inline-flex h-8 items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  className="size-3.5"
+                  checked={variable.sensitive}
+                  onChange={(event) => {
+                    const sensitive = event.currentTarget.checked;
+                    updateVariable(variable.id, {
+                      sensitive,
+                      ...(sensitive && variable.valueRedacted === undefined
+                        ? {}
+                        : { valueRedacted: sensitive ? variable.valueRedacted : false }),
+                    });
+                  }}
+                />
+                Sensitive
+              </label>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                className="size-8 justify-self-start text-muted-foreground hover:text-destructive sm:justify-self-end"
+                onClick={() => removeVariable(variable.id)}
+                aria-label={`Remove environment variable ${variable.name || index + 1}`}
+              >
+                <XIcon className="size-3.5" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+      <span className="text-xs text-muted-foreground">
+        Sensitive values are stored separately and are not returned to the app after saving.
+      </span>
+    </div>
+  );
+}
+
 interface ProviderInstanceCardProps {
   readonly instanceId: ProviderInstanceId;
   readonly instance: ProviderInstanceConfig;
@@ -398,6 +555,16 @@ export function ProviderInstanceCard({
     onUpdate({ ...rest, config: nextConfig } as ProviderInstanceConfig);
   };
 
+  const updateEnvironment = (environment: ReadonlyArray<ProviderInstanceEnvironmentVariable>) => {
+    const cleaned = environment.filter((variable) => variable.name.trim().length > 0);
+    const { environment: _omit, ...rest } = instance;
+    onUpdate(
+      cleaned.length > 0
+        ? ({ ...rest, environment: cleaned } as ProviderInstanceConfig)
+        : (rest as ProviderInstanceConfig),
+    );
+  };
+
   return (
     <div className="border-t border-border first:border-t-0">
       <div className="px-4 py-4 sm:px-5">
@@ -522,6 +689,13 @@ export function ProviderInstanceCard({
                 displayName={displayName}
                 value={accentColor}
                 onCommit={updateAccentColor}
+              />
+            </div>
+
+            <div className="border-t border-border/60 px-4 py-3 sm:px-5">
+              <ProviderEnvironmentSection
+                environment={instance.environment ?? []}
+                onChange={updateEnvironment}
               />
             </div>
 

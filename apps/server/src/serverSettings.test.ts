@@ -119,6 +119,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       assert.deepEqual(next.providers.claudeAgent, {
         enabled: true,
         binaryPath: "/usr/local/bin/claude",
+        homePath: "",
         customModels: ["claude-custom"],
         launchArgs: "",
       });
@@ -163,6 +164,31 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         next.textGenerationModelSelection,
         createModelSelection("codex", "gpt-5.4", [{ id: "reasoningEffort", value: "high" }]),
       );
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
+  it.effect("preserves custom provider instance text generation selections", () =>
+    Effect.gen(function* () {
+      const serverSettings = yield* ServerSettingsService;
+
+      const next = yield* serverSettings.updateSettings({
+        providerInstances: {
+          [ProviderInstanceId.make("claude_openrouter")]: {
+            driver: ProviderDriverId.make("claudeAgent"),
+            enabled: true,
+            config: { customModels: ["openai/gpt-5.5"] },
+          },
+        },
+        textGenerationModelSelection: {
+          instanceId: ProviderInstanceId.make("claude_openrouter"),
+          model: "openai/gpt-5.5",
+        },
+      });
+
+      assert.deepEqual(next.textGenerationModelSelection, {
+        instanceId: ProviderInstanceId.make("claude_openrouter"),
+        model: "openai/gpt-5.5",
+      });
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
 
@@ -267,6 +293,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       assert.deepEqual(next.providers.claudeAgent, {
         enabled: true,
         binaryPath: "/opt/homebrew/bin/claude",
+        homePath: "",
         customModels: [],
         launchArgs: "",
       });
@@ -361,6 +388,69 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           },
         },
       });
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
+  it.effect("stores sensitive provider instance environment values outside settings.json", () =>
+    Effect.gen(function* () {
+      const serverSettings = yield* ServerSettingsService;
+      const serverConfig = yield* ServerConfig;
+      const fileSystem = yield* FileSystem.FileSystem;
+      const instanceId = ProviderInstanceId.make("codex_personal");
+
+      const next = yield* serverSettings.updateSettings({
+        providerInstances: {
+          [instanceId]: {
+            driver: ProviderDriverId.make("codex"),
+            environment: [
+              { name: "OPENROUTER_API_KEY", value: "sk-or-secret", sensitive: true },
+              { name: "ANTHROPIC_BASE_URL", value: "https://openrouter.ai/api", sensitive: false },
+            ],
+            config: {},
+          },
+        },
+      });
+
+      assert.deepEqual(next.providerInstances[instanceId]?.environment, [
+        {
+          name: "OPENROUTER_API_KEY",
+          value: "sk-or-secret",
+          sensitive: true,
+          valueRedacted: true,
+        },
+        { name: "ANTHROPIC_BASE_URL", value: "https://openrouter.ai/api", sensitive: false },
+      ]);
+
+      const raw = yield* fileSystem.readFileString(serverConfig.settingsPath);
+      assert.notInclude(raw, "sk-or-secret");
+      assert.deepEqual(JSON.parse(raw).providerInstances.codex_personal.environment, [
+        {
+          name: "OPENROUTER_API_KEY",
+          value: "",
+          sensitive: true,
+          valueRedacted: true,
+        },
+        { name: "ANTHROPIC_BASE_URL", value: "https://openrouter.ai/api", sensitive: false },
+      ]);
+
+      const roundTripped = yield* serverSettings.updateSettings({
+        providerInstances: {
+          [instanceId]: {
+            driver: ProviderDriverId.make("codex"),
+            displayName: "Codex Personal",
+            environment: [
+              { name: "OPENROUTER_API_KEY", value: "", sensitive: true, valueRedacted: true },
+              { name: "ANTHROPIC_BASE_URL", value: "https://openrouter.ai/api", sensitive: false },
+            ],
+            config: {},
+          },
+        },
+      });
+
+      assert.equal(
+        roundTripped.providerInstances[instanceId]?.environment?.[0]?.value,
+        "sk-or-secret",
+      );
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
 });

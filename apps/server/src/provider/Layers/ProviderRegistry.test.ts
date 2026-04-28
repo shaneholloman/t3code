@@ -96,6 +96,29 @@ function mockSpawnerLayer(
   );
 }
 
+function recordingMockSpawnerLayer(
+  handler: (args: ReadonlyArray<string>) => { stdout: string; stderr: string; code: number },
+) {
+  const commands: Array<{
+    readonly args: ReadonlyArray<string>;
+    readonly env: NodeJS.ProcessEnv | undefined;
+  }> = [];
+  const layer = Layer.succeed(
+    ChildProcessSpawner.ChildProcessSpawner,
+    ChildProcessSpawner.make((command) => {
+      const cmd = command as unknown as {
+        args: ReadonlyArray<string>;
+        options?: {
+          readonly env?: NodeJS.ProcessEnv;
+        };
+      };
+      commands.push({ args: cmd.args, env: cmd.options?.env });
+      return Effect.succeed(mockHandle(handler(cmd.args)));
+    }),
+  );
+  return { layer, commands };
+}
+
 function mockCommandSpawnerLayer(
   handler: (
     command: string,
@@ -890,6 +913,33 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
           ),
         ),
       );
+
+      it.effect("runs Claude status probes with the configured Claude HOME", () => {
+        const claudeHome = "/tmp/t3code-claude-home";
+        const recorded = recordingMockSpawnerLayer((args) => {
+          const joined = args.join(" ");
+          if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+          if (joined === "auth status")
+            return {
+              stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
+              stderr: "",
+              code: 0,
+            };
+          throw new Error(`Unexpected args: ${joined}`);
+        });
+
+        return Effect.gen(function* () {
+          const status = yield* checkClaudeProviderStatus({
+            ...defaultClaudeSettings,
+            homePath: claudeHome,
+          });
+          assert.strictEqual(status.status, "ready");
+          assert.deepStrictEqual(
+            recorded.commands.map((command) => command.env?.HOME),
+            [claudeHome, claudeHome],
+          );
+        }).pipe(Effect.provide(recorded.layer));
+      });
 
       it.effect("includes probed claude slash commands in the provider snapshot", () =>
         Effect.gen(function* () {

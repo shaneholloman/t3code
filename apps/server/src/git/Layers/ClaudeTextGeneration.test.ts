@@ -1,4 +1,5 @@
 import { ClaudeSettings, ProviderInstanceId } from "@t3tools/contracts";
+import nodePath from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
@@ -46,6 +47,10 @@ function makeFakeClaudeBinary(dir: string) {
         "    exit 4",
         "  }",
         "fi",
+        'if [ -n "$T3_FAKE_CLAUDE_HOME_MUST_BE" ] && [ "$HOME" != "$T3_FAKE_CLAUDE_HOME_MUST_BE" ]; then',
+        '  printf "%s\\n" "HOME was $HOME" >&2',
+        "  exit 5",
+        "fi",
         'if [ -n "$T3_FAKE_CLAUDE_STDERR" ]; then',
         '  printf "%s\\n" "$T3_FAKE_CLAUDE_STDERR" >&2',
         "fi",
@@ -67,6 +72,8 @@ function withFakeClaudeEnv<A, E, R>(
     argsMustContain?: string;
     argsMustNotContain?: string;
     stdinMustContain?: string;
+    homeMustBe?: string;
+    claudeConfig?: Partial<ClaudeSettings>;
   },
   effectFn: (textGeneration: TextGenerationShape) => Effect.Effect<A, E, R>,
 ) {
@@ -81,6 +88,7 @@ function withFakeClaudeEnv<A, E, R>(
     const previousArgsMustContain = process.env.T3_FAKE_CLAUDE_ARGS_MUST_CONTAIN;
     const previousArgsMustNotContain = process.env.T3_FAKE_CLAUDE_ARGS_MUST_NOT_CONTAIN;
     const previousStdinMustContain = process.env.T3_FAKE_CLAUDE_STDIN_MUST_CONTAIN;
+    const previousHomeMustBe = process.env.T3_FAKE_CLAUDE_HOME_MUST_BE;
 
     yield* Effect.acquireRelease(
       Effect.sync(() => {
@@ -115,6 +123,12 @@ function withFakeClaudeEnv<A, E, R>(
           process.env.T3_FAKE_CLAUDE_STDIN_MUST_CONTAIN = input.stdinMustContain;
         } else {
           delete process.env.T3_FAKE_CLAUDE_STDIN_MUST_CONTAIN;
+        }
+
+        if (input.homeMustBe !== undefined) {
+          process.env.T3_FAKE_CLAUDE_HOME_MUST_BE = input.homeMustBe;
+        } else {
+          delete process.env.T3_FAKE_CLAUDE_HOME_MUST_BE;
         }
       }),
       () =>
@@ -156,10 +170,16 @@ function withFakeClaudeEnv<A, E, R>(
           } else {
             process.env.T3_FAKE_CLAUDE_STDIN_MUST_CONTAIN = previousStdinMustContain;
           }
+
+          if (previousHomeMustBe === undefined) {
+            delete process.env.T3_FAKE_CLAUDE_HOME_MUST_BE;
+          } else {
+            process.env.T3_FAKE_CLAUDE_HOME_MUST_BE = previousHomeMustBe;
+          }
         }),
     );
 
-    const config = Schema.decodeSync(ClaudeSettings)({});
+    const config = Schema.decodeSync(ClaudeSettings)(input.claudeConfig ?? {});
     const textGeneration = yield* makeClaudeTextGeneration(config);
     return yield* effectFn(textGeneration);
   }).pipe(Effect.scoped);
@@ -261,6 +281,34 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGenerationLive", (it) => {
         }),
     ),
   );
+
+  it.effect("runs Claude text generation with the configured Claude HOME", () => {
+    const claudeHome = nodePath.join(process.cwd(), ".claude-work-test");
+    return withFakeClaudeEnv(
+      {
+        output: JSON.stringify({
+          structured_output: {
+            title: "Use Claude home",
+          },
+        }),
+        homeMustBe: claudeHome,
+        claudeConfig: { homePath: claudeHome },
+      },
+      (textGeneration) =>
+        Effect.gen(function* () {
+          const generated = yield* textGeneration.generateThreadTitle({
+            cwd: process.cwd(),
+            message: "thread title",
+            modelSelection: {
+              instanceId: ProviderInstanceId.make("claudeAgent"),
+              model: "claude-sonnet-4-6",
+            },
+          });
+
+          expect(generated.title).toBe(sanitizeThreadTitle("Use Claude home"));
+        }),
+    );
+  });
 
   it.effect("falls back when Claude thread title normalization becomes whitespace-only", () =>
     withFakeClaudeEnv(

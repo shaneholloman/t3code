@@ -38,6 +38,7 @@ import {
   type CommandResult,
 } from "../providerSnapshot.ts";
 import { compareCliVersions } from "../cliVersion.ts";
+import { makeClaudeEnvironment } from "../Drivers/ClaudeHome.ts";
 
 const DEFAULT_CLAUDE_MODEL_CAPABILITIES: ModelCapabilities = createModelCapabilities({
   optionDescriptors: [],
@@ -608,7 +609,10 @@ function waitForAbortSignal(signal: AbortSignal): Promise<void> {
  * This is used as a fallback when `claude auth status` does not include
  * subscription type information.
  */
-const probeClaudeCapabilities = (binaryPath: string) => {
+const probeClaudeCapabilities = (
+  claudeSettings: ClaudeSettings,
+  environment: NodeJS.ProcessEnv = process.env,
+) => {
   const abort = new AbortController();
   return Effect.tryPromise(async () => {
     const q = claudeQuery({
@@ -620,10 +624,11 @@ const probeClaudeCapabilities = (binaryPath: string) => {
       })(),
       options: {
         persistSession: false,
-        pathToClaudeCodeExecutable: binaryPath,
+        pathToClaudeCodeExecutable: claudeSettings.binaryPath,
         abortController: abort,
         settingSources: ["user", "project", "local"],
         allowedTools: [],
+        env: makeClaudeEnvironment(claudeSettings, environment),
         stderr: () => {},
       },
     });
@@ -651,8 +656,10 @@ const probeClaudeCapabilities = (binaryPath: string) => {
 const runClaudeCommand = Effect.fn("runClaudeCommand")(function* (
   claudeSettings: ClaudeSettings,
   args: ReadonlyArray<string>,
+  environment: NodeJS.ProcessEnv = process.env,
 ) {
   const command = ChildProcess.make(claudeSettings.binaryPath, [...args], {
+    env: makeClaudeEnvironment(claudeSettings, environment),
     shell: process.platform === "win32",
   });
   return yield* spawnAndCollect(claudeSettings.binaryPath, command);
@@ -660,11 +667,12 @@ const runClaudeCommand = Effect.fn("runClaudeCommand")(function* (
 
 export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(function* (
   claudeSettings: ClaudeSettings,
-  resolveSubscriptionType?: (binaryPath: string) => Effect.Effect<string | undefined>,
+  resolveSubscriptionType?: (claudeSettings: ClaudeSettings) => Effect.Effect<string | undefined>,
   resolveSlashCommands?: (
-    binaryPath: string,
+    claudeSettings: ClaudeSettings,
   ) => Effect.Effect<ReadonlyArray<ServerProviderSlashCommand> | undefined>,
-  resolveEmail?: (binaryPath: string) => Effect.Effect<string | undefined>,
+  resolveEmail?: (claudeSettings: ClaudeSettings) => Effect.Effect<string | undefined>,
+  environment: NodeJS.ProcessEnv = process.env,
 ): Effect.fn.Return<ServerProvider, never, ChildProcessSpawner.ChildProcessSpawner> {
   const checkedAt = new Date().toISOString();
   const allModels = providerModelsFromSettings(
@@ -691,7 +699,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     });
   }
 
-  const versionProbe = yield* runClaudeCommand(claudeSettings, ["--version"]).pipe(
+  const versionProbe = yield* runClaudeCommand(claudeSettings, ["--version"], environment).pipe(
     Effect.timeoutOption(DEFAULT_TIMEOUT_MS),
     Effect.result,
   );
@@ -768,15 +776,13 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
 
   const slashCommands =
     (resolveSlashCommands
-      ? yield* resolveSlashCommands(claudeSettings.binaryPath).pipe(
-          Effect.orElseSucceed(() => undefined),
-        )
+      ? yield* resolveSlashCommands(claudeSettings).pipe(Effect.orElseSucceed(() => undefined))
       : undefined) ?? [];
   const dedupedSlashCommands = dedupeSlashCommands(slashCommands);
 
   // ── Auth check + subscription detection ────────────────────────────
 
-  const authProbe = yield* runClaudeCommand(claudeSettings, ["auth", "status"]).pipe(
+  const authProbe = yield* runClaudeCommand(claudeSettings, ["auth", "status"], environment).pipe(
     Effect.timeoutOption(AUTH_PROBE_TIMEOUT_MS),
     Effect.result,
   );
@@ -798,10 +804,10 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
   }
 
   if (!subscriptionType && resolveSubscriptionType) {
-    subscriptionType = yield* resolveSubscriptionType(claudeSettings.binaryPath);
+    subscriptionType = yield* resolveSubscriptionType(claudeSettings);
   }
   if (!email && resolveEmail) {
-    email = yield* resolveEmail(claudeSettings.binaryPath);
+    email = yield* resolveEmail(claudeSettings);
   }
 
   // ── Handle auth results (same logic as before, adjusted models) ──

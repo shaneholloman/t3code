@@ -522,20 +522,18 @@ export function GeneralSettingsPanel() {
   })();
 
   const textGenerationModelSelection = resolveAppModelSelectionState(settings, serverProviders);
-  // `resolveAppModelSelectionState` already routes through
-  // `resolveSelectableProvider`, which falls back to a built-in driver
-  // when the persisted selection names an unknown one — so a narrow with
-  // "codex" fallback is purely a typing safety net here, not a behavior
-  // change.
-  const textGenProvider: ProviderKind = isBuiltInDriverId(textGenerationModelSelection.instanceId)
-    ? textGenerationModelSelection.instanceId
-    : "codex";
   const textGenInstanceId = textGenerationModelSelection.instanceId;
   const textGenModel = textGenerationModelSelection.model;
   const textGenModelOptions = textGenerationModelSelection.options;
   const gitModelInstanceEntries = sortProviderInstanceEntries(
     deriveProviderInstanceEntries(serverProviders),
   );
+  const textGenInstanceEntry = gitModelInstanceEntries.find(
+    (entry) => entry.instanceId === textGenInstanceId,
+  );
+  const textGenProvider: ProviderKind =
+    textGenInstanceEntry?.driverKind ??
+    (isBuiltInDriverId(textGenInstanceId) ? textGenInstanceId : "codex");
   const gitModelOptionsByInstance = getCustomModelOptionsByInstance(
     settings,
     serverProviders,
@@ -1049,11 +1047,7 @@ export function GeneralSettingsPanel() {
                   // first-kind-match) so a custom text-gen instance like
                   // `codex_personal` gets its own model list, not the
                   // default Codex one.
-                  gitModelInstanceEntries.find((entry) => entry.instanceId === textGenInstanceId)
-                    ?.models ??
-                  serverProviders.find((provider) => provider.provider === textGenProvider)
-                    ?.models ??
-                  []
+                  textGenInstanceEntry?.models ?? []
                 }
                 model={textGenModel}
                 prompt=""

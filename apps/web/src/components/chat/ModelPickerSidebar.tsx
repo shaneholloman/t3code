@@ -1,8 +1,9 @@
 import { type ProviderInstanceId } from "@t3tools/contracts";
-import { memo, useMemo, type CSSProperties } from "react";
+import { memo, useMemo } from "react";
 import { Clock3Icon, SparklesIcon, StarIcon } from "lucide-react";
 import { Gemini, GithubCopilotIcon } from "../Icons";
-import { PROVIDER_ICON_BY_PROVIDER } from "./providerIconUtils";
+import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
+import { ScrollArea } from "../ui/scroll-area";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
 import type { ProviderInstanceEntry } from "../../providerInstances";
@@ -41,16 +42,6 @@ const SOON_BADGE_CLASS = `${BADGE_BASE_CLASS} text-muted-foreground `;
 const PICKER_TOOLTIP_SIDE = "left" as const;
 const PICKER_TOOLTIP_CLASS = "max-w-64 text-balance font-normal leading-snug";
 
-function instanceInitials(label: string): string {
-  const words = label.replace(/[_-]+/g, " ").split(/\s+/u).filter(Boolean);
-  if (words.length === 0) return "";
-  if (words.length === 1) return words[0]!.slice(0, 2).toUpperCase();
-  return words
-    .slice(0, 2)
-    .map((word) => word[0]?.toUpperCase() ?? "")
-    .join("");
-}
-
 export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
   selectedInstanceId: ProviderInstanceId | "favorites";
   onSelectInstance: (instanceId: ProviderInstanceId | "favorites") => void;
@@ -86,29 +77,144 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
   }, [props.instanceEntries]);
 
   return (
-    <div className="flex flex-col w-12 border-r bg-muted/30  p-1 overflow-y-auto gap-1">
-      {/* Favorites section */}
-      {showFavorites ? (
-        <div className="pb-1 mb-1 border-b">
-          <div className="relative w-full">
-            {props.selectedInstanceId === "favorites" && (
-              <div className={SELECTED_INDICATOR_CLASS} />
-            )}
+    <ScrollArea
+      hideScrollbars
+      scrollFade
+      className="w-12 shrink-0 border-r bg-muted/30"
+      data-model-picker-sidebar="true"
+    >
+      <div className="flex min-h-full flex-col gap-1 p-1">
+        {/* Favorites section */}
+        {showFavorites ? (
+          <div className="pb-1 mb-1 border-b">
+            <div className="relative w-full">
+              {props.selectedInstanceId === "favorites" && (
+                <div className={SELECTED_INDICATOR_CLASS} />
+              )}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      className={cn(
+                        "relative isolate flex w-full cursor-pointer aspect-square items-center justify-center rounded transition-colors hover:bg-muted",
+                        props.selectedInstanceId === "favorites" && SELECTED_BUTTON_CLASS,
+                      )}
+                      onClick={() => handleSelect("favorites")}
+                      type="button"
+                      data-model-picker-provider="favorites"
+                      aria-label="Favorites"
+                    >
+                      <StarIcon className="size-5 fill-current shrink-0" aria-hidden />
+                    </button>
+                  }
+                />
+                <TooltipPopup
+                  side={PICKER_TOOLTIP_SIDE}
+                  align="center"
+                  className={PICKER_TOOLTIP_CLASS}
+                >
+                  Favorites
+                </TooltipPopup>
+              </Tooltip>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Instance buttons (one per configured instance — built-in + custom) */}
+        {props.instanceEntries.map((entry) => {
+          const isDisabled = !entry.isAvailable || entry.status !== "ready";
+          const isSelected = props.selectedInstanceId === entry.instanceId;
+          const showNewBadge = props.newBadgeInstanceIds?.has(entry.instanceId) ?? false;
+          const showInstanceBadge =
+            Boolean(entry.accentColor) || (duplicateDriverCounts.get(entry.driverKind) ?? 0) > 1;
+
+          const tooltip = isDisabled
+            ? describeUnavailableInstance(entry)
+            : showNewBadge
+              ? `${entry.displayName} — New`
+              : entry.displayName;
+
+          const button = (
+            <button
+              data-model-picker-provider={entry.instanceId}
+              className={cn(
+                "relative isolate flex w-full cursor-pointer aspect-square items-center justify-center rounded transition-colors hover:bg-muted",
+                isSelected && SELECTED_BUTTON_CLASS,
+                isDisabled && "opacity-50 cursor-not-allowed hover:bg-transparent",
+              )}
+              data-provider-accent-color={entry.accentColor}
+              onClick={() => !isDisabled && handleSelect(entry.instanceId)}
+              disabled={isDisabled}
+              type="button"
+              aria-label={
+                isDisabled
+                  ? tooltip
+                  : showNewBadge
+                    ? `${entry.displayName}, new`
+                    : entry.displayName
+              }
+            >
+              <ProviderInstanceIcon
+                driverKind={entry.driverKind}
+                displayName={entry.displayName}
+                accentColor={entry.accentColor}
+                showBadge={showInstanceBadge}
+                className="size-6"
+                iconClassName="size-5"
+              />
+              {showNewBadge ? (
+                <span className={NEW_BADGE_CLASS} aria-hidden>
+                  <SparklesIcon className="size-2" />
+                </span>
+              ) : null}
+            </button>
+          );
+
+          const trigger = isDisabled ? (
+            <span className="relative block w-full">{button}</span>
+          ) : (
+            button
+          );
+
+          return (
+            <div key={entry.instanceId} className="relative w-full">
+              {isSelected && <div className={SELECTED_INDICATOR_CLASS} />}
+              <Tooltip>
+                <TooltipTrigger render={trigger} />
+                <TooltipPopup
+                  side={PICKER_TOOLTIP_SIDE}
+                  align="center"
+                  className={PICKER_TOOLTIP_CLASS}
+                >
+                  {tooltip}
+                </TooltipPopup>
+              </Tooltip>
+            </div>
+          );
+        })}
+
+        {showComingSoon ? (
+          <>
+            {/* Gemini button (coming soon) */}
             <Tooltip>
               <TooltipTrigger
                 render={
-                  <button
-                    className={cn(
-                      "relative isolate flex w-full cursor-pointer aspect-square items-center justify-center rounded transition-colors hover:bg-muted",
-                      props.selectedInstanceId === "favorites" && SELECTED_BUTTON_CLASS,
-                    )}
-                    onClick={() => handleSelect("favorites")}
-                    type="button"
-                    data-model-picker-provider="favorites"
-                    aria-label="Favorites"
-                  >
-                    <StarIcon className="size-5 fill-current shrink-0" aria-hidden />
-                  </button>
+                  <span className="relative block w-full">
+                    <button
+                      className={cn(
+                        "relative isolate flex w-full aspect-square items-center justify-center rounded opacity-50 cursor-not-allowed transition-colors hover:bg-transparent",
+                      )}
+                      disabled
+                      type="button"
+                      data-model-picker-provider="gemini-coming-soon"
+                      aria-label="Gemini — coming soon"
+                    >
+                      <Gemini className="size-5 text-muted-foreground/85" aria-hidden />
+                      <span className={SOON_BADGE_CLASS} aria-hidden>
+                        <Clock3Icon className="size-2" />
+                      </span>
+                    </button>
+                  </span>
                 }
               />
               <TooltipPopup
@@ -116,157 +222,42 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
                 align="center"
                 className={PICKER_TOOLTIP_CLASS}
               >
-                Favorites
+                Gemini — Coming soon
               </TooltipPopup>
             </Tooltip>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Instance buttons (one per configured instance — built-in + custom) */}
-      {props.instanceEntries.map((entry) => {
-        const OptionIcon = PROVIDER_ICON_BY_PROVIDER[entry.driverKind];
-        const isDisabled = !entry.isAvailable || entry.status !== "ready";
-        const isSelected = props.selectedInstanceId === entry.instanceId;
-        const showNewBadge = props.newBadgeInstanceIds?.has(entry.instanceId) ?? false;
-        const showInstanceBadge =
-          Boolean(entry.accentColor) || (duplicateDriverCounts.get(entry.driverKind) ?? 0) > 1;
-        const accentStyle = entry.accentColor
-          ? ({ "--provider-accent": entry.accentColor } as CSSProperties)
-          : undefined;
-
-        const tooltip = isDisabled
-          ? describeUnavailableInstance(entry)
-          : showNewBadge
-            ? `${entry.displayName} — New`
-            : entry.displayName;
-
-        const button = (
-          <button
-            data-model-picker-provider={entry.instanceId}
-            className={cn(
-              "relative isolate flex w-full cursor-pointer aspect-square items-center justify-center rounded transition-colors hover:bg-muted",
-              isSelected && SELECTED_BUTTON_CLASS,
-              isDisabled && "opacity-50 cursor-not-allowed hover:bg-transparent",
-            )}
-            style={accentStyle}
-            data-provider-accent-color={entry.accentColor}
-            onClick={() => !isDisabled && handleSelect(entry.instanceId)}
-            disabled={isDisabled}
-            type="button"
-            aria-label={
-              isDisabled ? tooltip : showNewBadge ? `${entry.displayName}, new` : entry.displayName
-            }
-          >
-            <OptionIcon className="size-5 shrink-0" aria-hidden />
-            {showInstanceBadge ? (
-              <span
-                className={cn(
-                  "pointer-events-none absolute right-0.5 bottom-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full border border-background px-0.5 text-[8px] font-semibold leading-none shadow-sm",
-                  entry.accentColor
-                    ? "bg-[var(--provider-accent)] text-white"
-                    : "bg-muted text-muted-foreground",
-                )}
-                aria-hidden
-              >
-                {instanceInitials(entry.displayName)}
-              </span>
-            ) : null}
-            {showNewBadge ? (
-              <span className={NEW_BADGE_CLASS} aria-hidden>
-                <SparklesIcon className="size-2" />
-              </span>
-            ) : null}
-          </button>
-        );
-
-        const trigger = isDisabled ? (
-          <span className="relative block w-full">{button}</span>
-        ) : (
-          button
-        );
-
-        return (
-          <div key={entry.instanceId} className="relative w-full">
-            {isSelected && <div className={SELECTED_INDICATOR_CLASS} />}
+            {/* Github Copilot button (coming soon) */}
             <Tooltip>
-              <TooltipTrigger render={trigger} />
+              <TooltipTrigger
+                render={
+                  <span className="relative block w-full">
+                    <button
+                      className={cn(
+                        "relative isolate flex w-full aspect-square items-center justify-center rounded opacity-50 cursor-not-allowed transition-colors hover:bg-transparent",
+                      )}
+                      disabled
+                      type="button"
+                      data-model-picker-provider="github-copilot-coming-soon"
+                      aria-label="Github Copilot — coming soon"
+                    >
+                      <GithubCopilotIcon className="size-5 text-muted-foreground/85" aria-hidden />
+                      <span className={SOON_BADGE_CLASS} aria-hidden>
+                        <Clock3Icon className="size-2" />
+                      </span>
+                    </button>
+                  </span>
+                }
+              />
               <TooltipPopup
                 side={PICKER_TOOLTIP_SIDE}
                 align="center"
                 className={PICKER_TOOLTIP_CLASS}
               >
-                {tooltip}
+                Github Copilot — Coming soon
               </TooltipPopup>
             </Tooltip>
-          </div>
-        );
-      })}
-
-      {showComingSoon ? (
-        <>
-          {/* Gemini button (coming soon) */}
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <span className="relative block w-full">
-                  <button
-                    className={cn(
-                      "relative isolate flex w-full aspect-square items-center justify-center rounded opacity-50 cursor-not-allowed transition-colors hover:bg-transparent",
-                    )}
-                    disabled
-                    type="button"
-                    data-model-picker-provider="gemini-coming-soon"
-                    aria-label="Gemini — coming soon"
-                  >
-                    <Gemini className="size-5 text-muted-foreground/85" aria-hidden />
-                    <span className={SOON_BADGE_CLASS} aria-hidden>
-                      <Clock3Icon className="size-2" />
-                    </span>
-                  </button>
-                </span>
-              }
-            />
-            <TooltipPopup
-              side={PICKER_TOOLTIP_SIDE}
-              align="center"
-              className={PICKER_TOOLTIP_CLASS}
-            >
-              Gemini — Coming soon
-            </TooltipPopup>
-          </Tooltip>
-          {/* Github Copilot button (coming soon) */}
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <span className="relative block w-full">
-                  <button
-                    className={cn(
-                      "relative isolate flex w-full aspect-square items-center justify-center rounded opacity-50 cursor-not-allowed transition-colors hover:bg-transparent",
-                    )}
-                    disabled
-                    type="button"
-                    data-model-picker-provider="github-copilot-coming-soon"
-                    aria-label="Github Copilot — coming soon"
-                  >
-                    <GithubCopilotIcon className="size-5 text-muted-foreground/85" aria-hidden />
-                    <span className={SOON_BADGE_CLASS} aria-hidden>
-                      <Clock3Icon className="size-2" />
-                    </span>
-                  </button>
-                </span>
-              }
-            />
-            <TooltipPopup
-              side={PICKER_TOOLTIP_SIDE}
-              align="center"
-              className={PICKER_TOOLTIP_CLASS}
-            >
-              Github Copilot — Coming soon
-            </TooltipPopup>
-          </Tooltip>
-        </>
-      ) : null}
-    </div>
+          </>
+        ) : null}
+      </div>
+    </ScrollArea>
   );
 });

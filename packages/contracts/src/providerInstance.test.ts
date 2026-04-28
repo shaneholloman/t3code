@@ -109,6 +109,32 @@ describe("ProviderInstanceConfig", () => {
     expect(decoded.config).toEqual(opaqueConfig);
   });
 
+  it("decodes generic environment variables on the instance envelope", () => {
+    const decoded = decodeProviderInstanceConfig({
+      driver: "claudeAgent",
+      environment: [
+        { name: "ANTHROPIC_BASE_URL", value: "https://openrouter.ai/api", sensitive: false },
+        { name: "OPENROUTER_API_KEY", value: "sk-or-test", sensitive: true },
+        { name: "ANTHROPIC_API_KEY", value: "", sensitive: false },
+      ],
+    });
+
+    expect(decoded.environment).toEqual([
+      { name: "ANTHROPIC_BASE_URL", value: "https://openrouter.ai/api", sensitive: false },
+      { name: "OPENROUTER_API_KEY", value: "sk-or-test", sensitive: true },
+      { name: "ANTHROPIC_API_KEY", value: "", sensitive: false },
+    ]);
+  });
+
+  it("rejects invalid environment variable names", () => {
+    expect(() =>
+      decodeProviderInstanceConfig({
+        driver: "codex",
+        environment: [{ name: "HAS-DASH", value: "x", sensitive: false }],
+      }),
+    ).toThrow();
+  });
+
   it("decodes envelopes that name an unknown driver and preserves their config opaquely", () => {
     const opaqueConfig = { someUnknownKnob: 42, model: "llama3" };
     const decoded = decodeProviderInstanceConfig({

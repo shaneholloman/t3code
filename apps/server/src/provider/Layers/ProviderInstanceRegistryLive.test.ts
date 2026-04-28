@@ -56,6 +56,7 @@ const makeCodexConfig = (overrides: Partial<CodexSettings>): CodexSettings => ({
 const makeClaudeConfig = (overrides: Partial<ClaudeSettings>): ClaudeSettings => ({
   enabled: false,
   binaryPath: "claude",
+  homePath: "",
   customModels: [],
   launchArgs: "",
   ...overrides,
@@ -250,7 +251,10 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
           driver: claudeDriverId,
           displayName: "Claude",
           enabled: false,
-          config: makeClaudeConfig({ launchArgs: "--verbose" }),
+          config: makeClaudeConfig({
+            homePath: "/home/julius/.claude-work",
+            launchArgs: "--verbose",
+          }),
         },
         [cursorId]: {
           driver: cursorDriverId,
@@ -331,7 +335,7 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
       expect(claudeSnapshot.instanceId).toBe(claudeId);
       expect(claudeSnapshot.driver).toBe(claudeDriverId);
       expect(claudeSnapshot.enabled).toBe(false);
-      expect(claudeSnapshot.continuation?.groupKey).toBe(`${claudeDriverId}:instance:${claudeId}`);
+      expect(claudeSnapshot.continuation?.groupKey).toBe("claude:home:/home/julius/.claude-work");
 
       const cursorSnapshot = yield* cursor!.snapshot.getSnapshot;
       expect(cursorSnapshot.instanceId).toBe(cursorId);

@@ -11,9 +11,9 @@ import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
 import { ModelPickerContent } from "./ModelPickerContent";
+import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import {
   ModelEsque,
-  PROVIDER_ICON_BY_PROVIDER,
   getTriggerDisplayModelLabel,
   getTriggerDisplayModelName,
 } from "./providerIconUtils";
@@ -84,10 +84,13 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   const selectedModel =
     selectedInstanceOptions.find((option) => option.slug === props.model) ??
     selectedInstanceOptions[0];
-  const ProviderIcon = PROVIDER_ICON_BY_PROVIDER[activeDriverKind];
   const triggerTitle = selectedModel ? getTriggerDisplayModelName(selectedModel) : props.model;
   const triggerSubtitle = selectedModel?.subProvider;
   const triggerLabel = selectedModel ? getTriggerDisplayModelLabel(selectedModel) : props.model;
+  const duplicateDriverCount = props.instanceEntries.filter(
+    (entry) => entry.driverKind === activeDriverKind,
+  ).length;
+  const showInstanceBadge = Boolean(activeEntry?.accentColor) || duplicateDriverCount > 1;
 
   const setIsMenuOpen = (open: boolean) => {
     props.onOpenChange?.(open);
@@ -141,9 +144,14 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             props.compact ? "max-w-36 sm:pl-1" : undefined,
           )}
         >
-          <ProviderIcon
-            aria-hidden="true"
-            className={cn("size-4 shrink-0", props.activeProviderIconClassName)}
+          <ProviderInstanceIcon
+            driverKind={activeDriverKind}
+            displayName={activeEntry?.displayName ?? triggerLabel}
+            accentColor={activeEntry?.accentColor}
+            showBadge={showInstanceBadge}
+            className={showInstanceBadge ? "size-5" : "size-4"}
+            iconClassName={cn("size-4", props.activeProviderIconClassName)}
+            badgeClassName="right-[-0.125rem] bottom-[-0.125rem] h-3 min-w-3 text-[7px]"
           />
           <Tooltip>
             <TooltipTrigger

@@ -32,6 +32,7 @@ import {
   type ProviderDriver,
   type ProviderInstance,
 } from "../ProviderDriver.ts";
+import { mergeProviderInstanceEnvironment } from "../ProviderInstanceEnvironment.ts";
 
 const DRIVER_ID = ProviderDriverId.make("opencode");
 const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
@@ -68,11 +69,12 @@ export const OpenCodeDriver: ProviderDriver<OpenCodeSettings, OpenCodeDriverEnv>
   },
   configSchema: OpenCodeSettings,
   defaultConfig: (): OpenCodeSettings => Schema.decodeSync(OpenCodeSettings)({}),
-  create: ({ instanceId, displayName, accentColor, enabled, config }) =>
+  create: ({ instanceId, displayName, accentColor, environment, enabled, config }) =>
     Effect.gen(function* () {
       const openCodeRuntime = yield* OpenCodeRuntime;
       const serverConfig = yield* ServerConfig;
       const eventLoggers = yield* ProviderEventLoggers;
+      const processEnv = mergeProviderInstanceEnvironment(environment);
       const continuationIdentity = defaultProviderContinuationIdentity({
         driverId: DRIVER_ID,
         instanceId,
@@ -86,14 +88,16 @@ export const OpenCodeDriver: ProviderDriver<OpenCodeSettings, OpenCodeDriverEnv>
       const effectiveConfig = { ...config, enabled } satisfies OpenCodeSettings;
 
       const adapter = yield* makeOpenCodeAdapter(effectiveConfig, {
+        environment: processEnv,
         ...(eventLoggers.native ? { nativeEventLogger: eventLoggers.native } : {}),
       });
-      const textGeneration = yield* makeOpenCodeTextGeneration(effectiveConfig);
+      const textGeneration = yield* makeOpenCodeTextGeneration(effectiveConfig, processEnv);
 
-      const checkProvider = checkOpenCodeProviderStatus(effectiveConfig, serverConfig.cwd).pipe(
-        Effect.map(stampIdentity),
-        Effect.provideService(OpenCodeRuntime, openCodeRuntime),
-      );
+      const checkProvider = checkOpenCodeProviderStatus(
+        effectiveConfig,
+        serverConfig.cwd,
+        processEnv,
+      ).pipe(Effect.map(stampIdentity), Effect.provideService(OpenCodeRuntime, openCodeRuntime));
 
       const snapshot = yield* makeManagedServerProvider<OpenCodeSettings>({
         getSettings: Effect.succeed(effectiveConfig),

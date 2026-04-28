@@ -3,7 +3,7 @@ import {
   defaultInstanceIdForDriver,
   type ModelSelection,
   ProviderDriverId,
-  type ProviderInstanceId,
+  ProviderInstanceId,
   type ProviderKind,
   type ServerProvider,
 } from "@t3tools/contracts";
@@ -29,7 +29,7 @@ export const MAX_CUSTOM_MODEL_LENGTH = 256;
  * Resolve the custom-model list for a given instance, preferring the
  * instance's own `providerInstances[id].config.customModels` blob when
  * present and falling back to the legacy per-kind
- * `settings.providers[kind].customModels` bucket otherwise.
+ * `settings.providers[kind].customModels` bucket for default instances only.
  *
  * The Settings UI promotes the legacy bucket into an explicit
  * `providerInstances[defaultId]` entry on every edit (the "migrate on
@@ -37,9 +37,9 @@ export const MAX_CUSTOM_MODEL_LENGTH = 256;
  * `ProviderInstanceRegistryHydration`), so this helper exists primarily
  * so readers pick up that promotion immediately — and so first-time
  * viewers on pre-migration settings still see their legacy list on
- * default slots. Custom instances today have no legacy counterpart, so
- * the fallback is effectively unreachable for non-default ids but kept
- * symmetric for clarity.
+ * default slots. Custom instances intentionally do not read the legacy
+ * per-driver bucket; otherwise one custom model added to `claude_openrouter`
+ * can appear on the stock `claudeAgent` instance.
  */
 function readInstanceCustomModels(
   settings: UnifiedSettings,
@@ -54,6 +54,10 @@ function readInstanceCustomModels(
       return value.filter((entry): entry is string => typeof entry === "string");
     }
   }
+  const defaultInstanceId = defaultInstanceIdForDriver(ProviderDriverId.make(driverKind));
+  if (instanceId !== defaultInstanceId) {
+    return [];
+  }
   return settings.providers[driverKind].customModels;
 }
 
@@ -63,6 +67,17 @@ export interface AppModelOption {
   shortName?: string;
   subProvider?: string;
   isCustom: boolean;
+}
+
+function toAppModelOption(model: ServerProvider["models"][number]): AppModelOption {
+  const option: AppModelOption = {
+    slug: model.slug,
+    name: model.name,
+    isCustom: model.isCustom,
+  };
+  if (model.shortName) option.shortName = model.shortName;
+  if (model.subProvider) option.subProvider = model.subProvider;
+  return option;
 }
 
 export function normalizeCustomModelSlugs(
@@ -98,19 +113,10 @@ export function getAppModelOptions(
   settings: UnifiedSettings,
   providers: ReadonlyArray<ServerProvider>,
   provider: ProviderKind,
-  selectedModel?: string | null,
+  _selectedModel?: string | null,
 ): AppModelOption[] {
-  const options: AppModelOption[] = getProviderModels(providers, provider).map(
-    ({ slug, name, shortName, subProvider, isCustom }) => ({
-      slug,
-      name,
-      ...(shortName ? { shortName } : {}),
-      ...(subProvider ? { subProvider } : {}),
-      isCustom,
-    }),
-  );
+  const options: AppModelOption[] = getProviderModels(providers, provider).map(toAppModelOption);
   const seen = new Set(options.map((option) => option.slug));
-  const trimmedSelectedModel = selectedModel?.trim().toLowerCase();
   const builtInModelSlugs = new Set(
     getProviderModels(providers, provider)
       .filter((model) => !model.isCustom)
@@ -136,22 +142,6 @@ export function getAppModelOptions(
     });
   }
 
-  const normalizedSelectedModel = normalizeModelSlug(selectedModel, provider);
-  const selectedModelMatchesExistingName =
-    typeof trimmedSelectedModel === "string" &&
-    options.some((option) => option.name.toLowerCase() === trimmedSelectedModel);
-  if (
-    normalizedSelectedModel &&
-    !seen.has(normalizedSelectedModel) &&
-    !selectedModelMatchesExistingName
-  ) {
-    options.push({
-      slug: normalizedSelectedModel,
-      name: normalizedSelectedModel,
-      isCustom: true,
-    });
-  }
-
   return options;
 }
 
@@ -162,27 +152,16 @@ export function getAppModelOptions(
  * instance gets the precise model list its driver reported. Custom model
  * slugs come from the instance's own `providerInstances[id].config.customModels`
  * when present, falling back to the legacy per-kind
- * `settings.providers[driverKind].customModels` bucket — so a default
- * slot that hasn't yet migrated to the new storage still shows its
- * legacy list, and two instances of the same kind can now maintain
- * distinct custom-model lists.
+ * `settings.providers[driverKind].customModels` bucket for default
+ * instances only. This keeps two instances of the same kind from leaking
+ * custom slugs into each other.
  */
 export function getAppModelOptionsForInstance(
   settings: UnifiedSettings,
   entry: ProviderInstanceEntry,
-  selectedModel?: string | null,
 ): AppModelOption[] {
-  const options: AppModelOption[] = entry.models.map(
-    ({ slug, name, shortName, subProvider, isCustom }) => ({
-      slug,
-      name,
-      ...(shortName ? { shortName } : {}),
-      ...(subProvider ? { subProvider } : {}),
-      isCustom,
-    }),
-  );
+  const options: AppModelOption[] = entry.models.map(toAppModelOption);
   const seen = new Set(options.map((option) => option.slug));
-  const trimmedSelectedModel = selectedModel?.trim().toLowerCase();
   const builtInModelSlugs = new Set(
     entry.models.filter((model) => !model.isCustom).map((model) => model.slug),
   );
@@ -195,22 +174,6 @@ export function getAppModelOptionsForInstance(
 
     seen.add(slug);
     options.push({ slug, name: slug, isCustom: true });
-  }
-
-  const normalizedSelectedModel = normalizeModelSlug(selectedModel, entry.driverKind);
-  const selectedModelMatchesExistingName =
-    typeof trimmedSelectedModel === "string" &&
-    options.some((option) => option.name.toLowerCase() === trimmedSelectedModel);
-  if (
-    normalizedSelectedModel &&
-    !seen.has(normalizedSelectedModel) &&
-    !selectedModelMatchesExistingName
-  ) {
-    options.push({
-      slug: normalizedSelectedModel,
-      name: normalizedSelectedModel,
-      isCustom: true,
-    });
   }
 
   return options;
@@ -230,29 +193,39 @@ export function resolveAppModelSelection(
   );
 }
 
+export function resolveAppModelSelectionForInstance(
+  instanceId: ProviderInstanceId,
+  settings: UnifiedSettings,
+  providers: ReadonlyArray<ServerProvider>,
+  selectedModel: string | null | undefined,
+): string | null {
+  const entry = deriveProviderInstanceEntries(providers).find(
+    (candidate) => candidate.instanceId === instanceId,
+  );
+  if (!entry) return null;
+  const options = getAppModelOptionsForInstance(settings, entry);
+  return (
+    resolveSelectableModel(entry.driverKind, selectedModel, options) ??
+    options[0]?.slug ??
+    entry.models[0]?.slug ??
+    null
+  );
+}
+
 /**
  * Instance-keyed model options map. Each configured instance gets its own
  * option list so the model picker can show the same driver's built-in and
  * custom instances side by side without collapsing them.
- *
- * `selectedInstanceId` + `selectedModel` seed the "unknown slug as custom"
- * fallback on exactly one instance — the one the composer currently has
- * selected — so a persisted-but-unlisted slug still appears in its own
- * instance without leaking into sibling instances' option lists.
  */
 export function getCustomModelOptionsByInstance(
   settings: UnifiedSettings,
   providers: ReadonlyArray<ServerProvider>,
-  selectedInstanceId?: ProviderInstanceId | null,
-  selectedModel?: string | null,
+  _selectedInstanceId?: ProviderInstanceId | null,
+  _selectedModel?: string | null,
 ): ReadonlyMap<ProviderInstanceId, ReadonlyArray<ModelEsque>> {
   const out = new Map<ProviderInstanceId, ReadonlyArray<ModelEsque>>();
   for (const entry of deriveProviderInstanceEntries(providers)) {
-    const carriesSelection = selectedInstanceId === entry.instanceId;
-    out.set(
-      entry.instanceId,
-      getAppModelOptionsForInstance(settings, entry, carriesSelection ? selectedModel : undefined),
-    );
+    out.set(entry.instanceId, getAppModelOptionsForInstance(settings, entry));
   }
   return out;
 }
@@ -262,9 +235,34 @@ export function resolveAppModelSelectionState(
   providers: ReadonlyArray<ServerProvider>,
 ): ModelSelection {
   const selection = settings.textGenerationModelSelection ?? {
-    instanceId: "codex" as const,
+    instanceId: ProviderInstanceId.make("codex"),
     model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.codex,
   };
+  const entries = deriveProviderInstanceEntries(providers);
+  const selectedEntry = entries.find(
+    (entry) => entry.instanceId === selection.instanceId && entry.enabled && entry.isAvailable,
+  );
+  const entry =
+    selectedEntry ?? entries.find((candidate) => candidate.enabled && candidate.isAvailable);
+  if (entry) {
+    // When the instance changed due to fallback (e.g. selected instance was disabled),
+    // don't carry over the old instance's model — use the fallback instance's default.
+    const selectedModel = selectedEntry ? selection.model : null;
+    const model =
+      resolveAppModelSelectionForInstance(entry.instanceId, settings, providers, selectedModel) ??
+      entry.models[0]?.slug ??
+      DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[entry.driverKind];
+    const { modelOptionsForDispatch } = getComposerProviderState({
+      provider: entry.driverKind,
+      model,
+      models: entry.models,
+      prompt: "",
+      modelOptions: selectedEntry ? selection.options : undefined,
+    });
+
+    return createModelSelection(entry.instanceId, model, modelOptionsForDispatch);
+  }
+
   const provider = resolveSelectableProvider(providers, selection.instanceId);
 
   // When the provider changed due to fallback (e.g. selected provider was disabled),

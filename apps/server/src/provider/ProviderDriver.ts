@@ -21,7 +21,11 @@
  *
  * @module provider/ProviderDriver
  */
-import type { ProviderDriverId, ProviderInstanceId } from "@t3tools/contracts";
+import type {
+  ProviderDriverId,
+  ProviderInstanceEnvironment,
+  ProviderInstanceId,
+} from "@t3tools/contracts";
 import type { Effect, Schema, Scope } from "effect";
 
 import type { TextGenerationShape } from "../git/Services/TextGeneration.ts";
@@ -92,6 +96,7 @@ export interface ProviderDriverCreateInput<Config> {
   readonly instanceId: ProviderInstanceId;
   readonly displayName: string | undefined;
   readonly accentColor?: string | undefined;
+  readonly environment: ProviderInstanceEnvironment;
   readonly enabled: boolean;
   readonly config: Config;
 }

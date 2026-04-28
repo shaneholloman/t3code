@@ -41,6 +41,7 @@ const CODEX_TIMEOUT_MS = 180_000;
  */
 export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(function* (
   codexConfig: CodexSettings,
+  environment: NodeJS.ProcessEnv = process.env,
 ) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -183,7 +184,7 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
         ],
         {
           env: {
-            ...process.env,
+            ...environment,
             ...(codexConfig.homePath ? { CODEX_HOME: expandHomePath(codexConfig.homePath) } : {}),
           },
           cwd,

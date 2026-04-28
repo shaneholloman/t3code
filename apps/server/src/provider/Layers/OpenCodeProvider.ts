@@ -295,6 +295,7 @@ export const makePendingOpenCodeProvider = (openCodeSettings: OpenCodeSettings):
 export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatus")(function* (
   openCodeSettings: OpenCodeSettings,
   cwd: string,
+  environment: NodeJS.ProcessEnv = process.env,
 ): Effect.fn.Return<ServerProvider, never, OpenCodeRuntime> {
   const openCodeRuntime = yield* OpenCodeRuntime;
   const checkedAt = new Date().toISOString();
@@ -359,6 +360,7 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
         .runOpenCodeCommand({
           binaryPath: openCodeSettings.binaryPath,
           args: ["--version"],
+          environment,
         })
         .pipe(
           Effect.mapError(
@@ -409,6 +411,7 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
           .connectToOpenCodeServer({
             binaryPath: openCodeSettings.binaryPath,
             serverUrl: openCodeSettings.serverUrl,
+            environment,
           })
           .pipe(
             Effect.mapError(

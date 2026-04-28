@@ -9,6 +9,7 @@ import {
   type MessageId,
   type OrchestrationReadModel,
   type ProjectId,
+  ProviderDriverId,
   ProviderInstanceId,
   type ServerConfig,
   type ServerLifecycleWelcomePayload,
@@ -2434,6 +2435,128 @@ describe("ChatView timeline estimator parity (full app)", () => {
             request.data === "bun install\r",
         ),
       ).toBe(false);
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("keeps custom provider instance ids when bootstrapping a local draft thread", async () => {
+    setDraftThreadWithoutWorktree();
+    const openRouterInstanceId = ProviderInstanceId.make("claude_openrouter");
+    const openRouterSelection = createModelSelection(openRouterInstanceId, "openai/gpt-5.5");
+    useComposerDraftStore.getState().setModelSelection(THREAD_REF, openRouterSelection);
+
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createDraftOnlySnapshot(),
+      configureFixture: (nextFixture) => {
+        nextFixture.serverConfig = {
+          ...nextFixture.serverConfig,
+          providers: [
+            ...nextFixture.serverConfig.providers,
+            {
+              provider: "claudeAgent",
+              driver: ProviderDriverId.make("claudeAgent"),
+              instanceId: ProviderInstanceId.make("claudeAgent"),
+              enabled: true,
+              installed: true,
+              version: "2.1.117",
+              status: "ready",
+              auth: { status: "authenticated" },
+              checkedAt: NOW_ISO,
+              models: [
+                {
+                  slug: "claude-opus-4-7",
+                  name: "Claude Opus 4.7",
+                  isCustom: false,
+                  capabilities: createModelCapabilities({ optionDescriptors: [] }),
+                },
+              ],
+              slashCommands: [],
+              skills: [],
+            },
+            {
+              provider: "claudeAgent",
+              driver: ProviderDriverId.make("claudeAgent"),
+              instanceId: openRouterInstanceId,
+              displayName: "Claude OpenRouter",
+              enabled: true,
+              installed: true,
+              version: "2.1.117",
+              status: "ready",
+              auth: { status: "authenticated" },
+              checkedAt: NOW_ISO,
+              models: [
+                {
+                  slug: "claude-opus-4-7",
+                  name: "Claude Opus 4.7",
+                  isCustom: false,
+                  capabilities: createModelCapabilities({ optionDescriptors: [] }),
+                },
+              ],
+              slashCommands: [],
+              skills: [],
+            },
+          ],
+          settings: {
+            ...nextFixture.serverConfig.settings,
+            providerInstances: {
+              ...nextFixture.serverConfig.settings.providerInstances,
+              [openRouterInstanceId]: {
+                driver: ProviderDriverId.make("claudeAgent"),
+                displayName: "Claude OpenRouter",
+                config: { customModels: ["openai/gpt-5.5"] },
+              },
+            },
+          },
+        };
+      },
+      resolveRpc: (body) => {
+        if (body._tag === ORCHESTRATION_WS_METHODS.dispatchCommand) {
+          return {
+            sequence: fixture.snapshot.snapshotSequence + 1,
+          };
+        }
+        return undefined;
+      },
+    });
+
+    try {
+      useComposerDraftStore.getState().setPrompt(THREAD_REF, "Hello there");
+      await waitForLayout();
+
+      const sendButton = await waitForSendButton();
+      expect(sendButton.disabled).toBe(false);
+      sendButton.click();
+
+      await vi.waitFor(
+        () => {
+          const turnStartRequest = wsRequests.find(
+            (request) =>
+              request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand &&
+              request.type === "thread.turn.start",
+          ) as
+            | {
+                modelSelection?: { instanceId?: string; model?: string };
+                bootstrap?: {
+                  createThread?: {
+                    modelSelection?: { instanceId?: string; model?: string };
+                  };
+                };
+              }
+            | undefined;
+
+          expect(turnStartRequest?.modelSelection).toMatchObject({
+            instanceId: openRouterInstanceId,
+            model: "openai/gpt-5.5",
+          });
+          expect(turnStartRequest?.bootstrap?.createThread?.modelSelection).toMatchObject({
+            instanceId: openRouterInstanceId,
+            model: "openai/gpt-5.5",
+          });
+        },
+        { timeout: 8_000, interval: 16 },
+      );
     } finally {
       await mounted.cleanup();
     }

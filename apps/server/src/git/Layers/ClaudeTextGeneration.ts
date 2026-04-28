@@ -38,6 +38,7 @@ import {
   resolveClaudeApiModelId,
   resolveClaudeEffort,
 } from "../../provider/Layers/ClaudeProvider.ts";
+import { makeClaudeEnvironment } from "../../provider/Drivers/ClaudeHome.ts";
 
 const CLAUDE_TIMEOUT_MS = 180_000;
 
@@ -51,6 +52,7 @@ const ClaudeOutputEnvelope = Schema.Struct({
 
 export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(function* (
   claudeSettings: ClaudeSettings,
+  environment: NodeJS.ProcessEnv = process.env,
 ) {
   const commandSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
@@ -127,6 +129,7 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
           "--dangerously-skip-permissions",
         ],
         {
+          env: makeClaudeEnvironment(claudeSettings, environment),
           cwd,
           shell: process.platform === "win32",
           stdin: {

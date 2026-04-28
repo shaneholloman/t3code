@@ -83,6 +83,7 @@ const ACP_IMPLEMENT_MODE_ALIASES = ["code", "agent", "default", "chat", "impleme
 const ACP_APPROVAL_MODE_ALIASES = ["ask"];
 
 export interface CursorAdapterLiveOptions {
+  readonly environment?: NodeJS.ProcessEnv;
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
   /**
@@ -496,6 +497,7 @@ export function makeCursorAdapter(
 
           const acp = yield* makeCursorAcpRuntime({
             cursorSettings: effectiveCursorSettings,
+            ...(options?.environment ? { environment: options.environment } : {}),
             childProcessSpawner,
             cwd,
             ...(resumeSessionId ? { resumeSessionId } : {}),
