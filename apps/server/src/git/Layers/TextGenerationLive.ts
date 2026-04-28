@@ -51,7 +51,14 @@ const resolveInstance = (
   registry.getInstance(instanceId).pipe(
     Effect.flatMap((instance) =>
       instance
-        ? Effect.succeed(instance.textGeneration)
+        ? instance.enabled
+          ? Effect.succeed(instance.textGeneration)
+          : Effect.fail(
+              new TextGenerationError({
+                operation,
+                detail: `Provider instance '${instanceId}' is disabled.`,
+              }),
+            )
         : Effect.fail(
             new TextGenerationError({
               operation,
