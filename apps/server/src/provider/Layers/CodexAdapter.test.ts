@@ -6,6 +6,7 @@ import {
   ApprovalRequestId,
   CodexSettings,
   EventId,
+  ProviderInstanceId,
   ProviderItemId,
   type ProviderApprovalDecision,
   type ProviderEvent,
@@ -344,6 +345,57 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
       });
     }),
   );
+
+  it.effect("maps codex model options for the adapter's bound custom instance id", () => {
+    const customInstanceId = ProviderInstanceId.make("codex_personal");
+    const customRuntimeFactory = makeRuntimeFactory();
+    const customLayer = Layer.effect(
+      CodexAdapter,
+      Effect.gen(function* () {
+        const codexConfig = Schema.decodeSync(CodexSettings)({});
+        return yield* makeCodexAdapter(codexConfig, {
+          instanceId: customInstanceId,
+          makeRuntime: customRuntimeFactory.factory,
+        });
+      }),
+    ).pipe(
+      Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
+      Layer.provideMerge(ServerSettingsService.layerTest()),
+      Layer.provideMerge(providerSessionDirectoryTestLayer),
+      Layer.provideMerge(NodeServices.layer),
+    );
+
+    return Effect.gen(function* () {
+      const adapter = yield* CodexAdapter;
+      yield* adapter.startSession({
+        provider: "codex",
+        threadId: asThreadId("sess-custom-instance"),
+        runtimeMode: "full-access",
+      });
+      const runtime = customRuntimeFactory.lastRuntime;
+      assert.ok(runtime);
+      runtime.sendTurnImpl.mockClear();
+
+      yield* Effect.ignore(
+        adapter.sendTurn({
+          threadId: asThreadId("sess-custom-instance"),
+          input: "hello",
+          modelSelection: createModelSelection("codex_personal", "gpt-5.3-codex", [
+            { id: "reasoningEffort", value: "high" },
+            { id: "fastMode", value: true },
+          ]),
+          attachments: [],
+        }),
+      );
+
+      assert.deepStrictEqual(runtime.sendTurnImpl.mock.calls[0]?.[0], {
+        input: "hello",
+        model: "gpt-5.3-codex",
+        effort: "high",
+        serviceTier: "fast",
+      });
+    }).pipe(Effect.provide(customLayer));
+  });
 });
 
 const lifecycleRuntimeFactory = makeRuntimeFactory();

@@ -112,6 +112,7 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
     // Proxy directly — the facade has no state of its own; the instance
     // registry already coalesces adds/removes/rebuilds into one emission.
     streamChanges: registry.streamChanges,
+    subscribeChanges: registry.subscribeChanges,
   } satisfies ProviderAdapterRegistryShape;
 });
 

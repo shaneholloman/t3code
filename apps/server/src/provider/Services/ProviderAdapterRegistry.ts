@@ -23,7 +23,7 @@
  */
 import type { ProviderDriverId, ProviderInstanceId, ProviderKind } from "@t3tools/contracts";
 import { Context } from "effect";
-import type { Effect, Stream } from "effect";
+import type { Effect, PubSub, Scope, Stream } from "effect";
 
 import type { ProviderAdapterError, ProviderUnsupportedError } from "../Errors.ts";
 import type { ProviderAdapterShape } from "./ProviderAdapter.ts";
@@ -92,6 +92,13 @@ export interface ProviderAdapterRegistryShape {
    * subscriptions for instances they haven't seen yet.
    */
   readonly streamChanges: Stream.Stream<void>;
+
+  /**
+   * Acquire a change subscription synchronously in the caller's current fiber.
+   * Consumers that must avoid missing a publish between initial reconciliation
+   * and watcher startup should use this, then fork `Stream.fromSubscription`.
+   */
+  readonly subscribeChanges: Effect.Effect<PubSub.Subscription<void>, never, Scope.Scope>;
 }
 
 /**

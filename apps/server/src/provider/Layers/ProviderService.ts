@@ -256,10 +256,12 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     yield* Ref.set(subscribedAdapters, next);
   });
 
+  const instanceChanges = yield* registry.subscribeChanges;
   yield* reconcileInstanceSubscriptions;
-  yield* Stream.runForEach(registry.streamChanges, () => reconcileInstanceSubscriptions).pipe(
-    Effect.forkScoped,
-  );
+  yield* Stream.runForEach(
+    Stream.fromSubscription(instanceChanges),
+    () => reconcileInstanceSubscriptions,
+  ).pipe(Effect.forkScoped);
 
   const recoverSessionForThread = Effect.fn("recoverSessionForThread")(function* (input: {
     readonly binding: ProviderRuntimeBinding;

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
   EventId,
   type OpenCodeSettings,
+  ProviderInstanceId,
   type ProviderRuntimeEvent,
   type ProviderSession,
   RuntimeItemId,
@@ -89,6 +90,7 @@ interface OpenCodeSessionContext {
 }
 
 export interface OpenCodeAdapterLiveOptions {
+  readonly instanceId?: ProviderInstanceId;
   readonly environment?: NodeJS.ProcessEnv;
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
@@ -441,6 +443,7 @@ export function makeOpenCodeAdapter(
   options?: OpenCodeAdapterLiveOptions,
 ) {
   return Effect.gen(function* () {
+    const boundInstanceId = options?.instanceId ?? ProviderInstanceId.make("opencode");
     const serverConfig = yield* ServerConfig;
     const openCodeRuntime = yield* OpenCodeRuntime;
     const nativeEventLogger =
@@ -1130,11 +1133,11 @@ export function makeOpenCodeAdapter(
       }
 
       const agent =
-        input.modelSelection?.instanceId === PROVIDER
+        input.modelSelection?.instanceId === boundInstanceId
           ? getModelSelectionStringOptionValue(input.modelSelection, "agent")
           : undefined;
       const variant =
-        input.modelSelection?.instanceId === PROVIDER
+        input.modelSelection?.instanceId === boundInstanceId
           ? getModelSelectionStringOptionValue(input.modelSelection, "variant")
           : undefined;
 

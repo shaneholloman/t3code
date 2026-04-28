@@ -6,6 +6,7 @@ import { Context, Effect, Layer, Option, Schema } from "effect";
 import { beforeEach } from "vitest";
 
 import { OpenCodeSettings, ThreadId, ProviderInstanceId } from "@t3tools/contracts";
+import { createModelSelection } from "@t3tools/shared/model";
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
@@ -44,6 +45,7 @@ const runtimeMock = {
     abortCalls: [] as string[],
     closeCalls: [] as string[],
     revertCalls: [] as Array<{ sessionID: string; messageID?: string }>,
+    promptCalls: [] as Array<unknown>,
     promptAsyncError: null as Error | null,
     closeError: null as Error | null,
     messages: [] as MessageEntry[],
@@ -56,6 +58,7 @@ const runtimeMock = {
     this.state.abortCalls.length = 0;
     this.state.closeCalls.length = 0;
     this.state.revertCalls.length = 0;
+    this.state.promptCalls.length = 0;
     this.state.promptAsyncError = null;
     this.state.closeError = null;
     this.state.messages = [];
@@ -116,7 +119,8 @@ const OpenCodeRuntimeTestDouble: OpenCodeRuntimeShape = {
         abort: async ({ sessionID }: { sessionID: string }) => {
           runtimeMock.state.abortCalls.push(sessionID);
         },
-        promptAsync: async () => {
+        promptAsync: async (input: unknown) => {
+          runtimeMock.state.promptCalls.push(input);
           if (runtimeMock.state.promptAsyncError) {
             throw runtimeMock.state.promptAsyncError;
           }
@@ -320,6 +324,53 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
       assert.equal(sessions[0]?.lastError, "prompt failed");
     }),
   );
+
+  it.effect("passes agent and variant options for the adapter's bound custom instance id", () => {
+    const customInstanceId = ProviderInstanceId.make("opencode_zen");
+    const adapterLayer = Layer.effect(
+      OpenCodeAdapter,
+      Effect.gen(function* () {
+        return yield* makeOpenCodeAdapter(openCodeAdapterTestSettings, {
+          instanceId: customInstanceId,
+        });
+      }),
+    ).pipe(
+      Layer.provideMerge(Layer.succeed(OpenCodeRuntime, OpenCodeRuntimeTestDouble)),
+      Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
+      Layer.provideMerge(ServerSettingsService.layerTest()),
+      Layer.provideMerge(providerSessionDirectoryTestLayer),
+      Layer.provideMerge(NodeServices.layer),
+    );
+
+    return Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      yield* adapter.startSession({
+        provider: "opencode",
+        threadId: asThreadId("thread-custom-instance"),
+        runtimeMode: "full-access",
+      });
+
+      yield* adapter.sendTurn({
+        threadId: asThreadId("thread-custom-instance"),
+        input: "Fix it",
+        modelSelection: createModelSelection("opencode_zen", "anthropic/claude-sonnet-4-5", [
+          { id: "agent", value: "github-copilot" },
+          { id: "variant", value: "high" },
+        ]),
+      });
+
+      assert.deepEqual(runtimeMock.state.promptCalls.at(-1), {
+        sessionID: "http://127.0.0.1:9999/session",
+        model: {
+          providerID: "anthropic",
+          modelID: "claude-sonnet-4-5",
+        },
+        agent: "github-copilot",
+        variant: "high",
+        parts: [{ type: "text", text: "Fix it" }],
+      });
+    }).pipe(Effect.provide(adapterLayer));
+  });
 
   it.effect("reverts the full thread when rollback removes every assistant turn", () =>
     Effect.gen(function* () {

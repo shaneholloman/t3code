@@ -88,6 +88,7 @@ export const OpenCodeDriver: ProviderDriver<OpenCodeSettings, OpenCodeDriverEnv>
       const effectiveConfig = { ...config, enabled } satisfies OpenCodeSettings;
 
       const adapter = yield* makeOpenCodeAdapter(effectiveConfig, {
+        instanceId,
         environment: processEnv,
         ...(eventLoggers.native ? { nativeEventLogger: eventLoggers.native } : {}),
       });

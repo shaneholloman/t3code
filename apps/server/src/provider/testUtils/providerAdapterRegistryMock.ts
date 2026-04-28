@@ -19,7 +19,7 @@ import {
   type ProviderInstanceId,
   type ProviderKind,
 } from "@t3tools/contracts";
-import { Effect, Stream } from "effect";
+import { Effect, PubSub, Stream } from "effect";
 
 import { ProviderUnsupportedError, type ProviderAdapterError } from "../Errors.ts";
 import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
@@ -94,5 +94,8 @@ export const makeAdapterRegistryMock = (adapters: KindAdapterMap): ProviderAdapt
     // satisfy the shape. Tests exercising hot-reload build their own
     // stream via the real `ProviderInstanceRegistry`.
     streamChanges: Stream.empty,
+    subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), (pubsub) =>
+      PubSub.subscribe(pubsub),
+    ),
   };
 };

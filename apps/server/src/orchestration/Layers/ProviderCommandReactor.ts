@@ -297,14 +297,15 @@ const make = Effect.gen(function* () {
           }),
       ),
     );
-    if (!Schema.is(ProviderKind)(desiredInfo.driverId)) {
+    const desiredDriverId = desiredInfo.driverId;
+    if (!Schema.is(ProviderKind)(desiredDriverId)) {
       return yield* new ProviderAdapterRequestError({
         provider: "codex",
         method: "thread.turn.start",
-        detail: `Requested provider instance '${desiredInstanceId}' uses unknown provider driver '${desiredInfo.driverId}'. The driver is not installed in this build.`,
+        detail: `Requested provider instance '${desiredInstanceId}' uses unknown provider driver '${desiredDriverId}'. The driver is not installed in this build.`,
       });
     }
-    const preferredProvider: ProviderKind = desiredInfo.driverId;
+    const preferredProvider: ProviderKind = desiredDriverId;
     if (
       thread.session !== null &&
       requestedModelSelection !== undefined &&

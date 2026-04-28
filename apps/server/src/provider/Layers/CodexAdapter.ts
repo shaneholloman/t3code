@@ -12,7 +12,7 @@ import {
   type CanonicalRequestType,
   type CodexSettings,
   type ProviderEvent,
-  type ProviderInstanceId,
+  ProviderInstanceId,
   type ProviderRuntimeEvent,
   type ProviderRequestKind,
   type ThreadTokenUsageSnapshot,
@@ -1334,6 +1334,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
   codexConfig: CodexSettings,
   options?: CodexAdapterLiveOptions,
 ) {
+  const boundInstanceId = options?.instanceId ?? ProviderInstanceId.make("codex");
   const fileSystem = yield* FileSystem.FileSystem;
   const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const serverConfig = yield* Effect.service(ServerConfig);
@@ -1376,8 +1377,10 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             ? { resumeCursor: input.resumeCursor }
             : {}),
           runtimeMode: input.runtimeMode,
-          ...(input.modelSelection ? { model: input.modelSelection.model } : {}),
-          ...(input.modelSelection &&
+          ...(input.modelSelection?.instanceId === boundInstanceId
+            ? { model: input.modelSelection.model }
+            : {}),
+          ...(input.modelSelection?.instanceId === boundInstanceId &&
           getModelSelectionBooleanOptionValue(input.modelSelection, "fastMode") === true
             ? { serviceTier: "fast" }
             : {}),
@@ -1492,17 +1495,17 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
 
     const session = yield* requireSession(input.threadId);
     const reasoningEffort =
-      input.modelSelection?.instanceId === "codex"
+      input.modelSelection?.instanceId === boundInstanceId
         ? getModelSelectionStringOptionValue(input.modelSelection, "reasoningEffort")
         : undefined;
     const fastMode =
-      input.modelSelection?.instanceId === "codex"
+      input.modelSelection?.instanceId === boundInstanceId
         ? getModelSelectionBooleanOptionValue(input.modelSelection, "fastMode")
         : undefined;
     return yield* session.runtime
       .sendTurn({
         ...(input.input !== undefined ? { input: input.input } : {}),
-        ...(input.modelSelection?.instanceId === "codex"
+        ...(input.modelSelection?.instanceId === boundInstanceId
           ? { model: input.modelSelection.model }
           : {}),
         ...(reasoningEffort
