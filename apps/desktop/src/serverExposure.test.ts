@@ -171,7 +171,7 @@ describe("resolveDesktopCoreAdvertisedEndpoints", () => {
       },
       {
         id: "manual:http://desktop.example.test:3773",
-        label: "Custom HTTPS",
+        label: "Custom endpoint",
         provider: {
           id: "manual",
           label: "Manual",
@@ -187,7 +187,7 @@ describe("resolveDesktopCoreAdvertisedEndpoints", () => {
         },
         source: "user",
         status: "unknown",
-        description: "User-configured HTTPS endpoint for this desktop backend.",
+        description: "User-configured endpoint for this desktop backend.",
       },
     ]);
   });

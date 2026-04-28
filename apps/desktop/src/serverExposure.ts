@@ -165,17 +165,18 @@ export function resolveDesktopCoreAdvertisedEndpoints(
 
   for (const customEndpointUrl of input.customHttpsEndpointUrls ?? []) {
     try {
+      const isHttps = isHttpsEndpointUrl(customEndpointUrl);
       endpoints.push(
         createManualEndpoint({
           id: `manual:${customEndpointUrl}`,
-          label: "Custom HTTPS",
+          label: isHttps ? "Custom HTTPS" : "Custom endpoint",
           httpBaseUrl: customEndpointUrl,
           reachability: "public",
-          ...(isHttpsEndpointUrl(customEndpointUrl)
-            ? ({ hostedHttpsCompatibility: "compatible" } as const)
-            : {}),
+          ...(isHttps ? ({ hostedHttpsCompatibility: "compatible" } as const) : {}),
           status: "unknown",
-          description: "User-configured HTTPS endpoint for this desktop backend.",
+          description: isHttps
+            ? "User-configured HTTPS endpoint for this desktop backend."
+            : "User-configured endpoint for this desktop backend.",
         }),
       );
     } catch {
