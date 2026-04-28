@@ -78,6 +78,21 @@ const HANDLED_TURN_START_KEY_TTL = Duration.minutes(30);
 const DEFAULT_RUNTIME_MODE: RuntimeMode = "full-access";
 const DEFAULT_THREAD_TITLE = "New thread";
 
+export function providerErrorLabel(value: string | undefined): string {
+  const normalized = value?.trim();
+  return normalized && normalized.length > 0 ? normalized : "unknown";
+}
+
+export function providerErrorLabelFromInstanceHint(input: {
+  readonly instanceId?: string | undefined;
+  readonly modelSelectionInstanceId?: string | undefined;
+  readonly sessionProvider?: string | undefined;
+}): string {
+  return providerErrorLabel(
+    input.instanceId ?? input.modelSelectionInstanceId ?? input.sessionProvider,
+  );
+}
+
 function canReplaceThreadTitle(currentTitle: string, titleSeed?: string): boolean {
   const trimmedCurrentTitle = currentTitle.trim();
   if (trimmedCurrentTitle === DEFAULT_THREAD_TITLE) {
@@ -281,7 +296,11 @@ const make = Effect.gen(function* () {
       Effect.mapError(
         () =>
           new ProviderAdapterRequestError({
-            provider: "codex",
+            provider: providerErrorLabelFromInstanceHint({
+              instanceId: String(currentInstanceId),
+              modelSelectionInstanceId: String(thread.modelSelection.instanceId),
+              sessionProvider: thread.session?.providerName ?? undefined,
+            }),
             method: "thread.turn.start",
             detail: `Thread '${threadId}' references unknown provider instance '${currentInstanceId}'. The instance is not configured in this build.`,
           }),
@@ -291,7 +310,9 @@ const make = Effect.gen(function* () {
       Effect.mapError(
         () =>
           new ProviderAdapterRequestError({
-            provider: "codex",
+            provider: providerErrorLabelFromInstanceHint({
+              instanceId: String(desiredModelSelection.instanceId),
+            }),
             method: "thread.turn.start",
             detail: `Requested provider instance '${desiredInstanceId}' is not configured in this build.`,
           }),
@@ -300,7 +321,7 @@ const make = Effect.gen(function* () {
     const desiredDriverId = desiredInfo.driverId;
     if (!Schema.is(ProviderKind)(desiredDriverId)) {
       return yield* new ProviderAdapterRequestError({
-        provider: "codex",
+        provider: providerErrorLabel(String(desiredDriverId)),
         method: "thread.turn.start",
         detail: `Requested provider instance '${desiredInstanceId}' uses unknown provider driver '${desiredDriverId}'. The driver is not installed in this build.`,
       });

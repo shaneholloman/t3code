@@ -43,7 +43,11 @@ import { RepositoryIdentityResolverLive } from "../../project/Layers/RepositoryI
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
-import { ProviderCommandReactorLive } from "./ProviderCommandReactor.ts";
+import {
+  providerErrorLabel,
+  providerErrorLabelFromInstanceHint,
+  ProviderCommandReactorLive,
+} from "./ProviderCommandReactor.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { ProviderCommandReactor } from "../Services/ProviderCommandReactor.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -102,6 +106,30 @@ describe("ProviderCommandReactor", () => {
       fs.rmSync(baseDir, { recursive: true, force: true });
     }
     createdBaseDirs.clear();
+  });
+
+  describe("provider error attribution", () => {
+    it("uses the current provider instance slug when current instance lookup fails", () => {
+      expect(
+        providerErrorLabelFromInstanceHint({
+          instanceId: "codex_personal",
+          modelSelectionInstanceId: "codex",
+          sessionProvider: "codex",
+        }),
+      ).toBe("codex_personal");
+    });
+
+    it("uses the desired provider instance slug when desired instance lookup fails", () => {
+      expect(
+        providerErrorLabelFromInstanceHint({
+          instanceId: "claude_openrouter",
+        }),
+      ).toBe("claude_openrouter");
+    });
+
+    it("uses the unknown driver id when the resolved driver is not a built-in provider kind", () => {
+      expect(providerErrorLabel("third_party_driver")).toBe("third_party_driver");
+    });
   });
 
   async function createHarness(input?: {
