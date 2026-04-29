@@ -149,12 +149,13 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
       if (value.length > 0) config[field.key] = value;
     }
     const hasConfig = Object.keys(config).length > 0;
+    const normalizedAccentColor = normalizeProviderAccentColor(accentColor);
 
     const nextInstance: ProviderInstanceConfig = {
       driver: driver as ProviderDriverId,
       enabled: true,
       ...(label.trim().length > 0 ? { displayName: label.trim() } : {}),
-      ...(normalizeProviderAccentColor(accentColor) ? { accentColor } : {}),
+      ...(normalizedAccentColor ? { accentColor: normalizedAccentColor } : {}),
       ...(hasConfig ? { config } : {}),
     };
     // `ProviderInstanceId.make` revalidates the slug; we've already checked

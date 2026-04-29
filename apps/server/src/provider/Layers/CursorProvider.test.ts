@@ -14,6 +14,7 @@ import {
   buildCursorProviderSnapshot,
   buildCursorCapabilitiesFromConfigOptions,
   buildCursorDiscoveredModelsFromConfigOptions,
+  checkCursorProviderStatus,
   discoverCursorModelCapabilitiesViaAcp,
   discoverCursorModelsViaAcp,
   getCursorFallbackModels,
@@ -61,6 +62,22 @@ async function makeMockAgentWrapper(extraEnv?: Record<string, string>) {
     .join("\n");
   const script = `#!/bin/sh
 ${envExports}
+exec ${JSON.stringify("bun")} ${JSON.stringify(mockAgentPath)} "$@"
+`;
+  await writeFile(wrapperPath, script, "utf8");
+  await chmod(wrapperPath, 0o755);
+  return wrapperPath;
+}
+
+async function makeMockAgentWithAboutWrapper() {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "cursor-provider-about-mock-"));
+  const wrapperPath = path.join(dir, "fake-agent.sh");
+  const script = `#!/bin/sh
+if [ "$1" = "about" ]; then
+  printf 'CLI Version         2026.04.09-f2b0fcd\\n'
+  printf 'User Email          cursor@example.com\\n'
+  exit 0
+fi
 exec ${JSON.stringify("bun")} ${JSON.stringify(mockAgentPath)} "$@"
 `;
   await writeFile(wrapperPath, script, "utf8");
@@ -425,6 +442,37 @@ describe("buildCursorDiscoveredModelsFromConfigOptions", () => {
         capabilities: emptyCapabilities,
       },
     ]);
+  });
+});
+
+describe("checkCursorProviderStatus", () => {
+  it("passes the injected environment to ACP model discovery", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "cursor-provider-status-env-"));
+    const requestLogPath = path.join(tempDir, "requests.ndjson");
+    const wrapperPath = await makeMockAgentWithAboutWrapper();
+
+    const provider = await Effect.runPromise(
+      checkCursorProviderStatus(
+        {
+          enabled: true,
+          binaryPath: wrapperPath,
+          apiEndpoint: "",
+          customModels: [],
+        },
+        {
+          ...process.env,
+          T3_ACP_REQUEST_LOG_PATH: requestLogPath,
+        },
+      ).pipe(Effect.provide(NodeServices.layer)),
+    );
+
+    expect(provider.models.map((model) => model.slug)).toEqual([
+      "default",
+      "composer-2",
+      "gpt-5.4",
+      "claude-opus-4-6",
+    ]);
+    await expect(waitForFileContent(requestLogPath)).resolves.toContain("initialize");
   });
 });
 

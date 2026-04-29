@@ -294,12 +294,24 @@ function ProviderEnvironmentSection(props: {
   }, [props.environment]);
 
   const publishRows = (nextRows: ReadonlyArray<EnvironmentDraftRow>) => {
-    props.onChange(
-      nextRows
-        .map((row) => ({ ...row, name: row.name.trim() }))
-        .filter((row) => ENVIRONMENT_VARIABLE_NAME_PATTERN.test(row.name))
-        .map(({ id: _id, ...row }) => row),
-    );
+    const published: ProviderInstanceEnvironmentVariable[] = [];
+    for (const row of nextRows) {
+      const name = row.name.trim();
+      if (!ENVIRONMENT_VARIABLE_NAME_PATTERN.test(name)) {
+        if (
+          name.length > 0 ||
+          row.value.length > 0 ||
+          row.sensitive !== true ||
+          row.valueRedacted !== undefined
+        ) {
+          return;
+        }
+        continue;
+      }
+      const { id: _id, ...rest } = row;
+      published.push({ ...rest, name });
+    }
+    props.onChange(published);
   };
 
   const updateVariable = (id: string, patch: Partial<Omit<EnvironmentDraftRow, "id">>) => {

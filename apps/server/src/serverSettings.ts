@@ -15,7 +15,6 @@ import {
   DEFAULT_SERVER_SETTINGS,
   isBuiltInDriverId,
   type ModelSelection,
-  ProviderDriverId,
   type ProviderInstanceConfig,
   type ProviderInstanceEnvironmentVariable,
   type ProviderKind,
@@ -163,13 +162,8 @@ const PROVIDER_ORDER: readonly ProviderKind[] = ["codex", "claudeAgent", "openco
 function resolveTextGenerationProvider(settings: ServerSettings): ServerSettings {
   const selection = settings.textGenerationModelSelection;
   const instanceConfig = settings.providerInstances[selection.instanceId];
-  const selectedDriver = instanceConfig?.driver ?? ProviderDriverId.make(selection.instanceId);
-  if (isBuiltInDriverId(selectedDriver)) {
-    const selectedDriverKind = selectedDriver as ProviderKind;
-    const selectedInstanceEnabled = instanceConfig?.enabled ?? true;
-    if (selectedInstanceEnabled && settings.providers[selectedDriverKind].enabled) {
-      return settings;
-    }
+  if (instanceConfig !== undefined) {
+    return (instanceConfig.enabled ?? true) ? settings : fallbackTextGenerationProvider(settings);
   }
 
   if (
@@ -179,6 +173,10 @@ function resolveTextGenerationProvider(settings: ServerSettings): ServerSettings
     return settings;
   }
 
+  return fallbackTextGenerationProvider(settings);
+}
+
+function fallbackTextGenerationProvider(settings: ServerSettings): ServerSettings {
   const fallback = PROVIDER_ORDER.find((p) => settings.providers[p].enabled);
   if (!fallback) {
     return settings;

@@ -192,6 +192,65 @@ it.layer(NodeServices.layer)("server settings", (it) => {
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
 
+  it.effect(
+    "uses explicit provider instance enabled state over legacy provider enabled state",
+    () =>
+      Effect.gen(function* () {
+        const serverSettings = yield* ServerSettingsService;
+        const instanceId = ProviderInstanceId.make("claude_openrouter");
+
+        const next = yield* serverSettings.updateSettings({
+          providers: {
+            claudeAgent: {
+              enabled: false,
+            },
+          },
+          providerInstances: {
+            [instanceId]: {
+              driver: ProviderDriverId.make("claudeAgent"),
+              enabled: true,
+              config: { customModels: ["openai/gpt-5.5"] },
+            },
+          },
+          textGenerationModelSelection: {
+            instanceId,
+            model: "openai/gpt-5.5",
+          },
+        });
+
+        assert.deepEqual(next.textGenerationModelSelection, {
+          instanceId,
+          model: "openai/gpt-5.5",
+        });
+      }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
+  it.effect("preserves enabled text generation selections for non-built-in drivers", () =>
+    Effect.gen(function* () {
+      const serverSettings = yield* ServerSettingsService;
+      const instanceId = ProviderInstanceId.make("openrouter_text");
+
+      const next = yield* serverSettings.updateSettings({
+        providerInstances: {
+          [instanceId]: {
+            driver: ProviderDriverId.make("openrouter"),
+            enabled: true,
+            config: { customModels: ["openai/gpt-5.5"] },
+          },
+        },
+        textGenerationModelSelection: {
+          instanceId,
+          model: "openai/gpt-5.5",
+        },
+      });
+
+      assert.deepEqual(next.textGenerationModelSelection, {
+        instanceId,
+        model: "openai/gpt-5.5",
+      });
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
   it.effect("drops stale text generation options when resetting model selection", () =>
     Effect.gen(function* () {
       const serverSettings = yield* ServerSettingsService;

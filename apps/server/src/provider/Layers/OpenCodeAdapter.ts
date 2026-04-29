@@ -422,7 +422,7 @@ const stopOpenCodeContext = Effect.fn("stopOpenCodeContext")(function* (
 ) {
   // Race-safe one-shot: first caller flips the flag, everyone else no-ops.
   if (yield* Ref.getAndSet(context.stopped, true)) {
-    return;
+    return false;
   }
 
   // Best-effort remote abort. The scope close below tears down the local
@@ -436,6 +436,7 @@ const stopOpenCodeContext = Effect.fn("stopOpenCodeContext")(function* (
   // runs each finalizer we registered — the `AbortController.abort()` call,
   // the child-process termination, etc.
   yield* Scope.close(context.sessionScope, Exit.void);
+  return true;
 });
 
 export function makeOpenCodeAdapter(
@@ -1271,9 +1272,15 @@ export function makeOpenCodeAdapter(
 
     const stopSession: OpenCodeAdapterShape["stopSession"] = Effect.fn("stopSession")(
       function* (threadId) {
-        const context = ensureSessionContext(sessions, threadId);
-        yield* stopOpenCodeContext(context);
+        const context = sessions.get(threadId);
+        if (!context) {
+          throw new ProviderAdapterSessionNotFoundError({ provider: PROVIDER, threadId });
+        }
+        const stopped = yield* stopOpenCodeContext(context);
         sessions.delete(threadId);
+        if (!stopped) {
+          return;
+        }
         yield* emit({
           ...buildEventBase({ threadId }),
           type: "session.exited",

@@ -660,7 +660,12 @@ export function GeneralSettingsPanel() {
     const legacyConfig = settings.providers[providerSettings.provider];
     const defaultLegacyConfig = DEFAULT_UNIFIED_SETTINGS.providers[providerSettings.provider];
     const effectiveInstance: ProviderInstanceConfig =
-      explicitInstance ?? ({ driver, config: legacyConfig } satisfies ProviderInstanceConfig);
+      explicitInstance ??
+      ({
+        driver,
+        enabled: legacyConfig.enabled,
+        config: legacyConfig,
+      } satisfies ProviderInstanceConfig);
     const isDirty =
       explicitInstance !== undefined || !Equal.equals(legacyConfig, defaultLegacyConfig);
     rows.push({
