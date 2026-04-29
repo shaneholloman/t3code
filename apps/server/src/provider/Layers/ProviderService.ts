@@ -24,7 +24,7 @@ import {
   type ProviderRuntimeEvent,
   type ProviderSession,
 } from "@t3tools/contracts";
-import { Effect, Layer, Option, PubSub, Ref, Schema, SchemaIssue, Stream } from "effect";
+import { Cause, Effect, Layer, Option, PubSub, Ref, Schema, SchemaIssue, Stream } from "effect";
 
 import {
   increment,
@@ -47,7 +47,6 @@ import {
 import { type EventNdjsonLogger } from "./EventNdjsonLogger.ts";
 import { ProviderEventLoggers } from "./ProviderEventLoggers.ts";
 import { AnalyticsService } from "../../telemetry/Services/AnalyticsService.ts";
-import { ServerSettingsService } from "../../serverSettings.ts";
 
 /**
  * Hook for tests that want to override the canonical event logger pulled
@@ -190,7 +189,6 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   options?: ProviderServiceLiveOptions,
 ) {
   const analytics = yield* Effect.service(AnalyticsService);
-  const serverSettings = yield* ServerSettingsService;
   const eventLoggers = yield* ProviderEventLoggers;
   // Options-provided logger wins (test overrides); otherwise we take whatever
   // the `ProviderEventLoggers` tag exposes — `undefined` means "no canonical
@@ -510,15 +508,6 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         "provider.runtime_mode": parsed.runtimeMode,
       });
       return yield* Effect.gen(function* () {
-        const settings = yield* serverSettings.getSettings.pipe(
-          Effect.mapError((error) =>
-            toValidationError(
-              "ProviderService.startSession",
-              `Failed to load provider settings: ${error.message}`,
-              error,
-            ),
-          ),
-        );
         const instanceInfo = yield* registry.getInstanceInfo(resolvedInstanceId);
         const resolvedProvider = instanceInfo.driverKind;
         metricProvider = resolvedProvider;
@@ -533,16 +522,6 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           threadId,
           provider: resolvedProvider,
         };
-        const legacyProviderSettings =
-          resolvedProvider in settings.providers
-            ? settings.providers[resolvedProvider as keyof typeof settings.providers]
-            : undefined;
-        if (legacyProviderSettings !== undefined && !legacyProviderSettings.enabled) {
-          return yield* toValidationError(
-            "ProviderService.startSession",
-            `Provider '${resolvedProvider}' is disabled in T3 Code settings.`,
-          );
-        }
         if (!instanceInfo.enabled) {
           return yield* toValidationError(
             "ProviderService.startSession",
@@ -1026,8 +1005,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   });
 
   yield* Effect.addFinalizer(() =>
-    Effect.catch(runStopAll(), (cause) =>
-      Effect.logWarning("failed to stop provider service", { cause }),
+    runStopAll().pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("failed to stop provider service", { cause: Cause.pretty(cause) }),
+      ),
     ),
   );
 

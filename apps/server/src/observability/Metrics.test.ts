@@ -76,10 +76,11 @@ describe("withMetrics", () => {
     Effect.gen(function* () {
       const counter = Metric.counter("with_metrics_lazy_total");
       const timer = Metric.timer("with_metrics_lazy_duration");
-      let provider = "unknown";
+      let provider = ProviderDriverKind.make("unknown");
+      const lazyInittedProvider = ProviderDriverKind.make("codex");
 
       yield* Effect.sync(() => {
-        provider = "codex";
+        provider = lazyInittedProvider;
       }).pipe(
         withMetrics({
           counter,
@@ -94,7 +95,7 @@ describe("withMetrics", () => {
       const snapshots = yield* Metric.snapshot;
       assert.equal(
         hasMetricSnapshot(snapshots, "with_metrics_lazy_total", {
-          provider: ProviderDriverKind.make("codex"),
+          provider: lazyInittedProvider,
           operation: "lazy",
           outcome: "success",
         }),
@@ -102,7 +103,7 @@ describe("withMetrics", () => {
       );
       assert.equal(
         hasMetricSnapshot(snapshots, "with_metrics_lazy_duration", {
-          provider: ProviderDriverKind.make("codex"),
+          provider: lazyInittedProvider,
           operation: "lazy",
         }),
         true,

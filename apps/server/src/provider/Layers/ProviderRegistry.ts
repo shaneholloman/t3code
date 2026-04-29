@@ -28,7 +28,7 @@ import {
   type ProviderInstanceId,
   type ServerProvider,
 } from "@t3tools/contracts";
-import { Effect, Equal, FileSystem, Layer, Path, PubSub, Ref, Stream } from "effect";
+import { Cause, Effect, Equal, FileSystem, Layer, Path, PubSub, Ref, Stream } from "effect";
 import * as Semaphore from "effect/Semaphore";
 
 import { ServerConfig } from "../../config.ts";
@@ -472,6 +472,19 @@ export const ProviderRegistryLive = Layer.effect(
         }
       }),
     );
+    const syncLiveSourcesAndContinue = syncLiveSources.pipe(
+      Effect.catchCause((cause) => {
+        if (Cause.hasInterruptsOnly(cause)) {
+          return Effect.interrupt;
+        }
+        return Effect.logError(
+          "provider registry instance sync failed; keeping subscription alive",
+          {
+            cause: Cause.pretty(cause),
+          },
+        );
+      }),
+    );
 
     // Seed `providersRef` with the boot-time fallback snapshots so
     // consumers calling `getProviders` immediately after layer build see
@@ -517,22 +530,29 @@ export const ProviderRegistryLive = Layer.effect(
     // `Stream.fromSubscription` builds a stream over the pre-acquired
     // subscription rather than subscribing on stream start, which is
     // what closes the race.
-    yield* Stream.runForEach(Stream.fromSubscription(instanceChanges), () => syncLiveSources).pipe(
-      Effect.forkScoped,
-    );
+    yield* Stream.runForEach(
+      Stream.fromSubscription(instanceChanges),
+      () => syncLiveSourcesAndContinue,
+    ).pipe(Effect.forkScoped);
+
+    const recoverRefreshFailure = Effect.fn("recoverRefreshFailure")(function* (
+      cause: Cause.Cause<unknown>,
+    ) {
+      if (Cause.hasInterruptsOnly(cause)) {
+        return yield* Effect.interrupt;
+      }
+      yield* Effect.logError("provider registry refresh failed; preserving cached providers", {
+        cause: Cause.pretty(cause),
+      });
+      return yield* Ref.get(providersRef);
+    });
 
     return {
       getProviders: Ref.get(providersRef),
       refresh: (provider?: ProviderDriverKind) =>
-        refresh(provider).pipe(
-          Effect.tapError(Effect.logError),
-          Effect.orElseSucceed(() => [] as ReadonlyArray<ServerProvider>),
-        ),
+        refresh(provider).pipe(Effect.catchCause(recoverRefreshFailure)),
       refreshInstance: (instanceId: ProviderInstanceId) =>
-        refreshInstance(instanceId).pipe(
-          Effect.tapError(Effect.logError),
-          Effect.orElseSucceed(() => [] as ReadonlyArray<ServerProvider>),
-        ),
+        refreshInstance(instanceId).pipe(Effect.catchCause(recoverRefreshFailure)),
       get streamChanges() {
         return Stream.fromPubSub(changesPubSub);
       },

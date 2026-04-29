@@ -21,10 +21,11 @@ import {
 import { createModelSelection } from "@t3tools/shared/model";
 import { it, assert, vi } from "@effect/vitest";
 
-import { Effect, Exit, Fiber, Layer, Metric, Option, PubSub, Ref, Stream } from "effect";
+import { Effect, Exit, Fiber, Layer, Metric, Option, PubSub, Ref, Scope, Stream } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import {
+  ProviderAdapterRequestError,
   ProviderAdapterSessionNotFoundError,
   ProviderUnsupportedError,
   ProviderValidationError,
@@ -299,22 +300,76 @@ function makeProviderServiceLayer() {
   };
 }
 
+it.effect("ProviderServiceLive catches stopAll failures during shutdown", () =>
+  Effect.gen(function* () {
+    const codex = makeFakeCodexAdapter();
+    codex.stopAll.mockImplementation(() =>
+      Effect.fail(
+        new ProviderAdapterRequestError({
+          provider: String(CODEX_DRIVER),
+          method: "stopAll",
+          detail: "simulated stopAll failure",
+        }),
+      ),
+    );
+    const registry = makeAdapterRegistryMock({
+      [CODEX_DRIVER]: codex.adapter,
+    });
+    const providerAdapterLayer = Layer.succeed(ProviderAdapterRegistry, registry);
+    const runtimeRepositoryLayer = ProviderSessionRuntimeRepositoryLive.pipe(
+      Layer.provide(SqlitePersistenceMemory),
+    );
+    const directoryLayer = ProviderSessionDirectoryLive.pipe(Layer.provide(runtimeRepositoryLayer));
+    const providerLayer = Layer.mergeAll(
+      makeProviderServiceLive().pipe(
+        Layer.provide(providerAdapterLayer),
+        Layer.provide(directoryLayer),
+        Layer.provide(defaultServerSettingsLayer),
+        Layer.provideMerge(AnalyticsService.layerTest),
+        Layer.provide(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
+      ),
+      directoryLayer,
+      runtimeRepositoryLayer,
+      NodeServices.layer,
+    );
+    const scope = yield* Scope.make();
+    const runtimeServices = yield* Layer.build(providerLayer).pipe(Scope.provide(scope));
+
+    yield* Effect.gen(function* () {
+      yield* ProviderService;
+    }).pipe(Effect.provide(runtimeServices));
+    const closeExit = yield* Scope.close(scope, Exit.void).pipe(Effect.exit);
+
+    assert.equal(Exit.isSuccess(closeExit), true);
+    assert.equal(codex.stopAll.mock.calls.length, 1);
+  }),
+);
+
 it.effect("ProviderServiceLive rejects new sessions for disabled providers", () =>
   Effect.gen(function* () {
     const codex = makeFakeCodexAdapter();
     const claude = makeFakeCodexAdapter(CLAUDE_AGENT_DRIVER);
-    const registry = makeAdapterRegistryMock({
-      [ProviderDriverKind.make("codex")]: codex.adapter,
-      [ProviderDriverKind.make("claudeAgent")]: claude.adapter,
+    const registryBase = makeAdapterRegistryMock({
+      [CODEX_DRIVER]: codex.adapter,
+      [CLAUDE_AGENT_DRIVER]: claude.adapter,
     });
+    const registry: ProviderAdapterRegistryShape = {
+      ...registryBase,
+      getInstanceInfo: (instanceId) =>
+        instanceId === claudeAgentInstanceId
+          ? Effect.succeed({
+              instanceId,
+              driverKind: CLAUDE_AGENT_DRIVER,
+              displayName: undefined,
+              enabled: false,
+              continuationIdentity: {
+                driverKind: CLAUDE_AGENT_DRIVER,
+                continuationKey: "claudeAgent:instance:claudeAgent",
+              },
+            })
+          : registryBase.getInstanceInfo(instanceId),
+    };
     const providerAdapterLayer = Layer.succeed(ProviderAdapterRegistry, registry);
-    const serverSettingsLayer = ServerSettingsService.layerTest({
-      providers: {
-        claudeAgent: {
-          enabled: false,
-        },
-      },
-    });
     const runtimeRepositoryLayer = ProviderSessionRuntimeRepositoryLive.pipe(
       Layer.provide(SqlitePersistenceMemory),
     );
@@ -322,7 +377,7 @@ it.effect("ProviderServiceLive rejects new sessions for disabled providers", () 
     const providerLayer = makeProviderServiceLive().pipe(
       Layer.provide(providerAdapterLayer),
       Layer.provide(directoryLayer),
-      Layer.provide(serverSettingsLayer),
+      Layer.provide(defaultServerSettingsLayer),
       Layer.provide(AnalyticsService.layerTest),
       Layer.provide(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
     );
@@ -340,9 +395,82 @@ it.effect("ProviderServiceLive rejects new sessions for disabled providers", () 
     );
 
     assert.instanceOf(failure, ProviderValidationError);
-    assert.include(failure.issue, "Provider 'claudeAgent' is disabled in T3 Code settings.");
+    assert.include(failure.issue, "Provider instance 'claudeAgent' is disabled");
     assert.equal(claude.startSession.mock.calls.length, 0);
   }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+it.effect(
+  "ProviderServiceLive allows enabled custom instances when legacy driver is disabled",
+  () =>
+    Effect.gen(function* () {
+      const instanceId = ProviderInstanceId.make("codex_personal");
+      const driverKind = CODEX_DRIVER;
+      const codex = makeFakeCodexAdapter();
+      const unsupported = () =>
+        new ProviderUnsupportedError({
+          provider: driverKind,
+        });
+      const registry: ProviderAdapterRegistryShape = {
+        getByInstance: (requestedInstanceId) =>
+          requestedInstanceId === instanceId
+            ? Effect.succeed(codex.adapter)
+            : Effect.fail(unsupported()),
+        getInstanceInfo: (requestedInstanceId) =>
+          requestedInstanceId === instanceId
+            ? Effect.succeed({
+                instanceId,
+                driverKind,
+                displayName: "Codex Personal",
+                enabled: true,
+                continuationIdentity: {
+                  driverKind,
+                  continuationKey: "codex:/Users/example/.codex",
+                },
+              })
+            : Effect.fail(unsupported()),
+        listInstances: () => Effect.succeed([instanceId]),
+        listProviders: () => Effect.succeed([driverKind] as const),
+        streamChanges: Stream.empty,
+        subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), (pubsub) =>
+          PubSub.subscribe(pubsub),
+        ),
+      };
+      const providerAdapterLayer = Layer.succeed(ProviderAdapterRegistry, registry);
+      const serverSettingsLayer = ServerSettingsService.layerTest({
+        providers: {
+          codex: {
+            enabled: false,
+          },
+        },
+      });
+      const runtimeRepositoryLayer = ProviderSessionRuntimeRepositoryLive.pipe(
+        Layer.provide(SqlitePersistenceMemory),
+      );
+      const directoryLayer = ProviderSessionDirectoryLive.pipe(
+        Layer.provide(runtimeRepositoryLayer),
+      );
+      const providerLayer = makeProviderServiceLive().pipe(
+        Layer.provide(providerAdapterLayer),
+        Layer.provide(directoryLayer),
+        Layer.provide(serverSettingsLayer),
+        Layer.provide(AnalyticsService.layerTest),
+        Layer.provide(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
+      );
+
+      const session = yield* Effect.gen(function* () {
+        const provider = yield* ProviderService;
+        return yield* provider.startSession(asThreadId("thread-enabled-custom"), {
+          provider: driverKind,
+          providerInstanceId: instanceId,
+          threadId: asThreadId("thread-enabled-custom"),
+          runtimeMode: "full-access",
+        });
+      }).pipe(Effect.provide(providerLayer));
+
+      assert.equal(session.providerInstanceId, instanceId);
+      assert.equal(codex.startSession.mock.calls.length, 1);
+    }).pipe(Effect.provide(NodeServices.layer)),
 );
 
 it.effect("ProviderServiceLive rejects new sessions for disabled custom instances", () =>
