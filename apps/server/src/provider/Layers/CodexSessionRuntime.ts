@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import {
   ApprovalRequestId,
   DEFAULT_MODEL,
@@ -19,7 +17,7 @@ import {
   TurnId,
 } from "@t3tools/contracts";
 import { normalizeModelSlug } from "@t3tools/shared/model";
-import { Deferred, Effect, Exit, Layer, Queue, Ref, Scope, Schema, Stream } from "effect";
+import { Deferred, Effect, Exit, Layer, Queue, Ref, Scope, Random, Schema, Stream } from "effect";
 import * as SchemaIssue from "effect/SchemaIssue";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import * as CodexClient from "effect-codex-app-server/client";
@@ -91,7 +89,10 @@ export interface CodexSessionRuntimeOptions {
 
 export interface CodexSessionRuntimeSendTurnInput {
   readonly input?: string;
-  readonly attachments?: ReadonlyArray<{ readonly type: "image"; readonly url: string }>;
+  readonly attachments?: ReadonlyArray<{
+    readonly type: "image";
+    readonly url: string;
+  }>;
   readonly model?: string;
   readonly serviceTier?: EffectCodexSchema.V2TurnStartParams__ServiceTier | undefined;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort | undefined;
@@ -325,7 +326,10 @@ export function buildTurnStartParams(input: {
   readonly threadId: string;
   readonly runtimeMode: RuntimeMode;
   readonly prompt?: string;
-  readonly attachments?: ReadonlyArray<{ readonly type: "image"; readonly url: string }>;
+  readonly attachments?: ReadonlyArray<{
+    readonly type: "image";
+    readonly url: string;
+  }>;
   readonly model?: string;
   readonly serviceTier?: EffectCodexSchema.V2TurnStartParams__ServiceTier;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort;
@@ -736,14 +740,15 @@ export const makeCodexSessionRuntime = (
     const offerEvent = (event: ProviderEvent) => Queue.offer(events, event).pipe(Effect.asVoid);
 
     const emitEvent = (event: Omit<ProviderEvent, "id" | "provider" | "createdAt">) =>
-      offerEvent({
-        id: EventId.make(randomUUID()),
-        provider: PROVIDER,
-        ...(options.providerInstanceId ? { providerInstanceId: options.providerInstanceId } : {}),
-        createdAt: new Date().toISOString(),
-        ...event,
-      });
-
+      Effect.flatMap(Random.nextUUIDv4, (id) =>
+        offerEvent({
+          id: EventId.make(id),
+          provider: PROVIDER,
+          ...(options.providerInstanceId ? { providerInstanceId: options.providerInstanceId } : {}),
+          createdAt: new Date().toISOString(),
+          ...event,
+        }),
+      );
     const emitSessionEvent = (method: string, message: string) =>
       emitEvent({
         kind: "session",
@@ -903,7 +908,7 @@ export const makeCodexSessionRuntime = (
 
     yield* client.handleServerRequest("item/commandExecution/requestApproval", (payload) =>
       Effect.gen(function* () {
-        const requestId = ApprovalRequestId.make(randomUUID());
+        const requestId = ApprovalRequestId.make(yield* Random.nextUUIDv4);
         const turnId = TurnId.make(payload.turnId);
         const itemId = ProviderItemId.make(payload.itemId);
         const decision = yield* Deferred.make<ProviderApprovalDecision>();
@@ -959,7 +964,7 @@ export const makeCodexSessionRuntime = (
 
     yield* client.handleServerRequest("item/fileChange/requestApproval", (payload) =>
       Effect.gen(function* () {
-        const requestId = ApprovalRequestId.make(randomUUID());
+        const requestId = ApprovalRequestId.make(yield* Random.nextUUIDv4);
         const turnId = TurnId.make(payload.turnId);
         const itemId = ProviderItemId.make(payload.itemId);
         const decision = yield* Deferred.make<ProviderApprovalDecision>();
@@ -1015,7 +1020,7 @@ export const makeCodexSessionRuntime = (
 
     yield* client.handleServerRequest("item/tool/requestUserInput", (payload) =>
       Effect.gen(function* () {
-        const requestId = ApprovalRequestId.make(randomUUID());
+        const requestId = ApprovalRequestId.make(yield* Random.nextUUIDv4);
         const turnId = TurnId.make(payload.turnId);
         const itemId = ProviderItemId.make(payload.itemId);
         const answers = yield* Deferred.make<ProviderUserInputAnswers>();

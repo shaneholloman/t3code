@@ -1,5 +1,4 @@
 import { ClaudeSettings, ProviderInstanceId } from "@t3tools/contracts";
-import nodePath from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
@@ -282,33 +281,36 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGenerationLive", (it) => {
     ),
   );
 
-  it.effect("runs Claude text generation with the configured Claude HOME", () => {
-    const claudeHome = nodePath.join(process.cwd(), ".claude-work-test");
-    return withFakeClaudeEnv(
-      {
-        output: JSON.stringify({
-          structured_output: {
-            title: "Use Claude home",
-          },
-        }),
-        homeMustBe: claudeHome,
-        claudeConfig: { homePath: claudeHome },
-      },
-      (textGeneration) =>
-        Effect.gen(function* () {
-          const generated = yield* textGeneration.generateThreadTitle({
-            cwd: process.cwd(),
-            message: "thread title",
-            modelSelection: {
-              instanceId: ProviderInstanceId.make("claudeAgent"),
-              model: "claude-sonnet-4-6",
+  it.effect("runs Claude text generation with the configured Claude HOME", () =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const claudeHome = path.join(process.cwd(), ".claude-work-test");
+      return yield* withFakeClaudeEnv(
+        {
+          output: JSON.stringify({
+            structured_output: {
+              title: "Use Claude home",
             },
-          });
+          }),
+          homeMustBe: claudeHome,
+          claudeConfig: { homePath: claudeHome },
+        },
+        (textGeneration) =>
+          Effect.gen(function* () {
+            const generated = yield* textGeneration.generateThreadTitle({
+              cwd: process.cwd(),
+              message: "thread title",
+              modelSelection: {
+                instanceId: ProviderInstanceId.make("claudeAgent"),
+                model: "claude-sonnet-4-6",
+              },
+            });
 
-          expect(generated.title).toBe(sanitizeThreadTitle("Use Claude home"));
-        }),
-    );
-  });
+            expect(generated.title).toBe(sanitizeThreadTitle("Use Claude home"));
+          }),
+      );
+    }),
+  );
 
   it.effect("falls back when Claude thread title normalization becomes whitespace-only", () =>
     withFakeClaudeEnv(

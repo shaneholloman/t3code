@@ -1,9 +1,8 @@
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
+import * as NodeOS from "node:os";
 
 import { ProviderDriverKind, type CodexSettings } from "@t3tools/contracts";
-import { Effect, Schema } from "effect";
+import { Effect, FileSystem, Path, Schema } from "effect";
+import * as PlatformError from "effect/PlatformError";
 
 import { expandHomePath } from "../../pathExpansion.ts";
 
@@ -13,8 +12,6 @@ export interface CodexHomeLayout {
   readonly effectiveHomePath: string | undefined;
   readonly continuationKey: string;
 }
-
-const DEFAULT_CODEX_HOME = path.join(os.homedir(), ".codex");
 
 const KNOWN_SHARED_DIRECTORIES = [
   "sessions",
@@ -30,13 +27,19 @@ const KNOWN_SHARED_DIRECTORIES = [
 
 const PRIVATE_ENTRY_NAMES = new Set(["auth.json", "models_cache.json"]);
 
-function resolveHomePath(value: string | undefined): string {
-  const expanded = value && value.trim().length > 0 ? expandHomePath(value) : DEFAULT_CODEX_HOME;
+function resolveHomePath(path: Path.Path, value: string | undefined): string {
+  const expanded =
+    value && value.trim().length > 0
+      ? expandHomePath(value)
+      : path.join(NodeOS.homedir(), ".codex");
   return path.resolve(expanded);
 }
 
-export function resolveCodexHomeLayout(config: CodexSettings): CodexHomeLayout {
-  const sharedHomePath = resolveHomePath(config.homePath);
+export const resolveCodexHomeLayout = Effect.fn("resolveCodexHomeLayout")(function* (
+  config: CodexSettings,
+): Effect.fn.Return<CodexHomeLayout, never, Path.Path> {
+  const path = yield* Path.Path;
+  const sharedHomePath = resolveHomePath(path, config.homePath);
   const shadowHomePath = config.shadowHomePath.trim();
   if (shadowHomePath.length === 0) {
     return {
@@ -54,7 +57,7 @@ export function resolveCodexHomeLayout(config: CodexSettings): CodexHomeLayout {
     effectiveHomePath,
     continuationKey: `codex:home:${sharedHomePath}`,
   };
-}
+});
 
 export class CodexShadowHomeError extends Schema.TaggedErrorClass<CodexShadowHomeError>()(
   "CodexShadowHomeError",
@@ -68,128 +71,190 @@ export class CodexShadowHomeError extends Schema.TaggedErrorClass<CodexShadowHom
   }
 }
 
-async function pathExists(target: string): Promise<boolean> {
-  try {
-    await fs.lstat(target);
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
-    throw error;
-  }
+type LinkState =
+  | {
+      readonly _tag: "Missing";
+    }
+  | {
+      readonly _tag: "NotSymlink";
+    }
+  | {
+      readonly _tag: "Symlink";
+      readonly target: string;
+    };
+
+function toShadowHomeError(cause: unknown): CodexShadowHomeError {
+  return Schema.is(CodexShadowHomeError)(cause)
+    ? cause
+    : new CodexShadowHomeError({
+        detail: "Failed to materialize Codex shadow home.",
+        cause,
+      });
 }
 
-async function removePrivateSymlink(input: {
+function normalizeShadowHomeError<A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, CodexShadowHomeError, R> {
+  return effect.pipe(Effect.mapError(toShadowHomeError));
+}
+
+function isNotSymlinkError(error: PlatformError.PlatformError): boolean {
+  const cause = error.reason.cause;
+  return (
+    error.reason._tag === "Unknown" &&
+    typeof cause === "object" &&
+    cause !== null &&
+    "code" in cause &&
+    cause.code === "EINVAL"
+  );
+}
+
+const readLinkState = Effect.fn("CodexHomeLayout.readLinkState")(function* (
+  fileSystem: FileSystem.FileSystem,
+  linkPath: string,
+): Effect.fn.Return<LinkState, CodexShadowHomeError> {
+  return yield* fileSystem.readLink(linkPath).pipe(
+    Effect.map((target): LinkState => ({ _tag: "Symlink", target })),
+    Effect.catch((error) => {
+      if (error.reason._tag === "NotFound") {
+        return Effect.succeed<LinkState>({ _tag: "Missing" });
+      }
+      if (isNotSymlinkError(error)) {
+        return Effect.succeed<LinkState>({ _tag: "NotSymlink" });
+      }
+      return Effect.fail(toShadowHomeError(error));
+    }),
+  );
+});
+
+const removePrivateSymlink = Effect.fn("CodexHomeLayout.removePrivateSymlink")(function* (input: {
+  readonly fileSystem: FileSystem.FileSystem;
   readonly shadowPath: string;
   readonly entryName: string;
-}): Promise<void> {
+}): Effect.fn.Return<void, CodexShadowHomeError, Path.Path> {
+  const path = yield* Path.Path;
   const privatePath = path.join(input.shadowPath, input.entryName);
-  try {
-    const stat = await fs.lstat(privatePath);
-    if (stat.isSymbolicLink()) {
-      await fs.unlink(privatePath);
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error;
-    }
+  const state = yield* readLinkState(input.fileSystem, privatePath);
+  if (state._tag === "Symlink") {
+    yield* normalizeShadowHomeError(input.fileSystem.remove(privatePath));
   }
-}
+});
 
-async function ensureSymlink(input: {
+const ensureSymlink = Effect.fn("CodexHomeLayout.ensureSymlink")(function* (input: {
+  readonly fileSystem: FileSystem.FileSystem;
   readonly shadowPath: string;
   readonly sharedPath: string;
   readonly entryName: string;
-}): Promise<void> {
+}): Effect.fn.Return<void, CodexShadowHomeError, Path.Path> {
+  const path = yield* Path.Path;
   const target = path.join(input.sharedPath, input.entryName);
   const link = path.join(input.shadowPath, input.entryName);
-  try {
-    const stat = await fs.lstat(link);
-    if (!stat.isSymbolicLink()) {
-      throw new CodexShadowHomeError({
-        detail: `Cannot create Codex shadow home because '${link}' already exists and is not a symlink.`,
-      });
-    }
-    const existingTarget = await fs.readlink(link);
-    const resolvedExisting = path.resolve(path.dirname(link), existingTarget);
-    if (resolvedExisting !== target) {
-      await fs.unlink(link);
-      await fs.symlink(target, link);
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error;
-    }
-    await fs.symlink(target, link);
+  const state = yield* readLinkState(input.fileSystem, link);
+
+  if (state._tag === "NotSymlink") {
+    return yield* new CodexShadowHomeError({
+      detail: `Cannot create Codex shadow home because '${link}' already exists and is not a symlink.`,
+    });
   }
-}
+
+  if (state._tag === "Missing") {
+    return yield* normalizeShadowHomeError(input.fileSystem.symlink(target, link));
+  }
+
+  const resolvedExisting = path.resolve(path.dirname(link), state.target);
+  if (resolvedExisting !== target) {
+    yield* normalizeShadowHomeError(input.fileSystem.remove(link));
+    yield* normalizeShadowHomeError(input.fileSystem.symlink(target, link));
+  }
+});
+
+const ensureShadowAuthIsPrivate = Effect.fn("CodexHomeLayout.ensureShadowAuthIsPrivate")(function* (
+  fileSystem: FileSystem.FileSystem,
+  shadowPath: string,
+): Effect.fn.Return<void, CodexShadowHomeError, Path.Path> {
+  const path = yield* Path.Path;
+  const authPath = path.join(shadowPath, "auth.json");
+  const state = yield* readLinkState(fileSystem, authPath);
+  if (state._tag === "Symlink") {
+    return yield* new CodexShadowHomeError({
+      detail: `Codex shadow auth file '${authPath}' must be a real file, not a symlink.`,
+    });
+  }
+});
 
 export const materializeCodexShadowHome = Effect.fn("materializeCodexShadowHome")(function* (
   layout: CodexHomeLayout,
 ) {
   if (layout.mode !== "authOverlay") return;
-  if (!layout.effectiveHomePath) return;
-  if (layout.sharedHomePath === layout.effectiveHomePath) {
+  const effectiveHomePath = layout.effectiveHomePath;
+  if (!effectiveHomePath) return;
+  if (layout.sharedHomePath === effectiveHomePath) {
     return yield* new CodexShadowHomeError({
       detail: "Codex shadow home path must be different from the shared home path.",
     });
   }
 
-  yield* Effect.tryPromise({
-    try: async () => {
-      await fs.mkdir(layout.sharedHomePath, { recursive: true });
-      await fs.mkdir(layout.effectiveHomePath!, { recursive: true });
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
 
-      for (const dir of KNOWN_SHARED_DIRECTORIES) {
-        await fs.mkdir(path.join(layout.sharedHomePath, dir), { recursive: true });
-      }
-
-      const entries = new Set<string>(KNOWN_SHARED_DIRECTORIES);
-      for (const dirent of await fs.readdir(layout.sharedHomePath, { withFileTypes: true })) {
-        if (!PRIVATE_ENTRY_NAMES.has(dirent.name)) {
-          entries.add(dirent.name);
-        }
-      }
-
-      for (const entryName of PRIVATE_ENTRY_NAMES) {
-        if (entryName !== "auth.json") {
-          await removePrivateSymlink({
-            shadowPath: layout.effectiveHomePath!,
-            entryName,
-          });
-        }
-      }
-
-      for (const entryName of entries) {
-        if (PRIVATE_ENTRY_NAMES.has(entryName)) continue;
-        await ensureSymlink({
-          shadowPath: layout.effectiveHomePath!,
-          sharedPath: layout.sharedHomePath,
-          entryName,
-        });
-      }
-
-      const authPath = path.join(layout.effectiveHomePath!, "auth.json");
-      if (await pathExists(authPath)) {
-        const authStat = await fs.lstat(authPath);
-        if (authStat.isSymbolicLink()) {
-          throw new CodexShadowHomeError({
-            detail: `Codex shadow auth file '${authPath}' must be a real file, not a symlink.`,
-          });
-        }
-      }
-    },
-    catch: (cause) =>
-      Schema.is(CodexShadowHomeError)(cause)
-        ? cause
-        : new CodexShadowHomeError({
-            detail: "Failed to materialize Codex shadow home.",
-            cause,
+  yield* normalizeShadowHomeError(
+    Effect.all(
+      [
+        fileSystem.makeDirectory(layout.sharedHomePath, { recursive: true }),
+        fileSystem.makeDirectory(effectiveHomePath, { recursive: true }),
+        ...KNOWN_SHARED_DIRECTORIES.map((directory) =>
+          fileSystem.makeDirectory(path.join(layout.sharedHomePath, directory), {
+            recursive: true,
           }),
-  });
+        ),
+      ],
+      { concurrency: "unbounded" },
+    ),
+  );
+
+  const sharedEntryNames = yield* normalizeShadowHomeError(
+    fileSystem.readDirectory(layout.sharedHomePath),
+  );
+  const entries = new Set<string>(KNOWN_SHARED_DIRECTORIES);
+  for (const entryName of sharedEntryNames) {
+    if (!PRIVATE_ENTRY_NAMES.has(entryName)) {
+      entries.add(entryName);
+    }
+  }
+
+  yield* Effect.forEach(
+    PRIVATE_ENTRY_NAMES,
+    (entryName) =>
+      entryName === "auth.json"
+        ? Effect.void
+        : removePrivateSymlink({
+            fileSystem,
+            shadowPath: effectiveHomePath,
+            entryName,
+          }),
+    { discard: true },
+  );
+
+  yield* Effect.forEach(
+    entries,
+    (entryName) => {
+      if (PRIVATE_ENTRY_NAMES.has(entryName)) {
+        return Effect.void;
+      }
+      return ensureSymlink({
+        fileSystem,
+        shadowPath: effectiveHomePath,
+        sharedPath: layout.sharedHomePath,
+        entryName,
+      });
+    },
+    { discard: true },
+  );
+
+  yield* ensureShadowAuthIsPrivate(fileSystem, effectiveHomePath);
 });
 
-export function codexContinuationIdentity(config: CodexSettings) {
-  const layout = resolveCodexHomeLayout(config);
+export function codexContinuationIdentity(layout: CodexHomeLayout) {
   return {
     driverKind: ProviderDriverKind.make("codex"),
     continuationKey: layout.continuationKey,

@@ -1,6 +1,4 @@
-import { randomUUID } from "node:crypto";
-
-import { Effect, FileSystem, Option, Path, Schema, Scope, Stream } from "effect";
+import { Effect, FileSystem, Option, Path, Random, Schema, Scope, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import { type CodexSettings, type ModelSelection } from "@t3tools/contracts";
@@ -72,21 +70,23 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
     prefix: string,
     content: string,
   ): Effect.Effect<string, TextGenerationError, Scope.Scope> => {
-    return fileSystem
-      .makeTempFileScoped({
-        prefix: `t3code-${prefix}-${process.pid}-${randomUUID()}.tmp`,
-      })
-      .pipe(
-        Effect.tap((filePath) => fileSystem.writeFileString(filePath, content)),
-        Effect.mapError(
-          (cause) =>
-            new TextGenerationError({
-              operation,
-              detail: `Failed to write temp file`,
-              cause,
-            }),
-        ),
-      );
+    return Effect.gen(function* () {
+      const tempFileId = yield* Random.nextUUIDv4;
+      return yield* fileSystem
+        .makeTempFileScoped({
+          prefix: `t3code-${prefix}-${process.pid}-${tempFileId}.tmp`,
+        })
+        .pipe(Effect.tap((filePath) => fileSystem.writeFileString(filePath, content)));
+    }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new TextGenerationError({
+            operation,
+            detail: `Failed to write temp file`,
+            cause,
+          }),
+      ),
+    );
   };
 
   const safeUnlink = (filePath: string): Effect.Effect<void, never> =>

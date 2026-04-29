@@ -6,7 +6,7 @@ import {
   type ServerProviderModel,
   type ServerProviderSlashCommand,
 } from "@t3tools/contracts";
-import { Effect, Option, Result } from "effect";
+import { Effect, Option, Path, Result } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import {
   createModelCapabilities,
@@ -447,38 +447,41 @@ const probeClaudeCapabilities = (
   environment: NodeJS.ProcessEnv = process.env,
 ) => {
   const abort = new AbortController();
-  return Effect.tryPromise(async () => {
-    const q = claudeQuery({
-      // Never yield — we only need initialization data, not a conversation.
-      // This prevents any prompt from reaching the Anthropic API.
-      // oxlint-disable-next-line require-yield
-      prompt: (async function* (): AsyncGenerator<SDKUserMessage> {
-        await waitForAbortSignal(abort.signal);
-      })(),
-      options: {
-        persistSession: false,
-        pathToClaudeCodeExecutable: claudeSettings.binaryPath,
-        abortController: abort,
-        settingSources: ["user", "project", "local"],
-        allowedTools: [],
-        env: makeClaudeEnvironment(claudeSettings, environment),
-        stderr: () => {},
-      },
+  return Effect.gen(function* () {
+    const claudeEnvironment = yield* makeClaudeEnvironment(claudeSettings, environment);
+    return yield* Effect.tryPromise(async () => {
+      const q = claudeQuery({
+        // Never yield — we only need initialization data, not a conversation.
+        // This prevents any prompt from reaching the Anthropic API.
+        // oxlint-disable-next-line require-yield
+        prompt: (async function* (): AsyncGenerator<SDKUserMessage> {
+          await waitForAbortSignal(abort.signal);
+        })(),
+        options: {
+          persistSession: false,
+          pathToClaudeCodeExecutable: claudeSettings.binaryPath,
+          abortController: abort,
+          settingSources: ["user", "project", "local"],
+          allowedTools: [],
+          env: claudeEnvironment,
+          stderr: () => {},
+        },
+      });
+      const init = await q.initializationResult();
+      const account = init.account as
+        | {
+            readonly email?: string;
+            readonly subscriptionType?: string;
+            readonly tokenSource?: string;
+          }
+        | undefined;
+      return {
+        email: account?.email,
+        subscriptionType: account?.subscriptionType,
+        tokenSource: account?.tokenSource,
+        slashCommands: parseClaudeInitializationCommands(init.commands),
+      } satisfies ClaudeCapabilitiesProbe;
     });
-    const init = await q.initializationResult();
-    const account = init.account as
-      | {
-          readonly email?: string;
-          readonly subscriptionType?: string;
-          readonly tokenSource?: string;
-        }
-      | undefined;
-    return {
-      email: account?.email,
-      subscriptionType: account?.subscriptionType,
-      tokenSource: account?.tokenSource,
-      slashCommands: parseClaudeInitializationCommands(init.commands),
-    } satisfies ClaudeCapabilitiesProbe;
   }).pipe(
     Effect.ensuring(
       Effect.sync(() => {
@@ -499,8 +502,9 @@ const runClaudeCommand = Effect.fn("runClaudeCommand")(function* (
   args: ReadonlyArray<string>,
   environment: NodeJS.ProcessEnv = process.env,
 ) {
+  const claudeEnvironment = yield* makeClaudeEnvironment(claudeSettings, environment);
   const command = ChildProcess.make(claudeSettings.binaryPath, [...args], {
-    env: makeClaudeEnvironment(claudeSettings, environment),
+    env: claudeEnvironment,
     shell: process.platform === "win32",
   });
   return yield* spawnAndCollect(claudeSettings.binaryPath, command);
@@ -512,7 +516,11 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     claudeSettings: ClaudeSettings,
   ) => Effect.Effect<ClaudeCapabilitiesProbe | undefined>,
   environment: NodeJS.ProcessEnv = process.env,
-): Effect.fn.Return<ServerProviderDraft, never, ChildProcessSpawner.ChildProcessSpawner> {
+): Effect.fn.Return<
+  ServerProviderDraft,
+  never,
+  ChildProcessSpawner.ChildProcessSpawner | Path.Path
+> {
   const checkedAt = new Date().toISOString();
   const allModels = providerModelsFromSettings(
     BUILT_IN_MODELS,

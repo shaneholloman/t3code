@@ -1,16 +1,12 @@
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { randomUUID } from "node:crypto";
-
-import { Effect, Schema } from "effect";
-import { describe, expect, it } from "vitest";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe, expect, it } from "@effect/vitest";
+import { Effect, FileSystem, Path, Schema } from "effect";
 
 import { CodexSettings } from "@t3tools/contracts";
 import {
+  CodexShadowHomeError,
   materializeCodexShadowHome,
   resolveCodexHomeLayout,
-  CodexShadowHomeError,
 } from "./CodexHomeLayout.ts";
 
 const decodeCodexSettings = (input: {
@@ -21,100 +17,149 @@ const decodeCodexSettings = (input: {
   readonly binaryPath?: string;
 }): CodexSettings => Schema.decodeSync(CodexSettings)(input);
 
-describe("CodexHomeLayout", () => {
-  it("uses direct CODEX_HOME when no shadow home is configured", () => {
-    const homePath = fs.mkdtempSync(path.join(os.tmpdir(), "t3code-codex-home-"));
-    try {
-      const layout = resolveCodexHomeLayout(
-        decodeCodexSettings({
-          homePath,
-        }),
-      );
+const makeTempDir = Effect.fn("CodexHomeLayout.test.makeTempDir")(function* (prefix: string) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  return yield* fileSystem.makeTempDirectoryScoped({ prefix });
+});
 
-      expect(layout).toMatchObject({
-        mode: "direct",
-        sharedHomePath: homePath,
-        effectiveHomePath: homePath,
-        continuationKey: `codex:home:${homePath}`,
-      });
-    } finally {
-      fs.rmSync(homePath, { recursive: true, force: true });
-    }
+const writeTextFile = Effect.fn("CodexHomeLayout.test.writeTextFile")(function* (
+  filePath: string,
+  contents: string,
+) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  yield* fileSystem.makeDirectory(path.dirname(filePath), { recursive: true });
+  yield* fileSystem.writeFileString(filePath, contents);
+});
+
+it.layer(NodeServices.layer)("CodexHomeLayout", (it) => {
+  describe("resolveCodexHomeLayout", () => {
+    it.effect("uses direct CODEX_HOME when no shadow home is configured", () =>
+      Effect.gen(function* () {
+        const homePath = yield* makeTempDir("t3code-codex-home-");
+
+        const layout = yield* resolveCodexHomeLayout(
+          decodeCodexSettings({
+            homePath,
+          }),
+        );
+
+        expect(layout).toMatchObject({
+          mode: "direct",
+          sharedHomePath: homePath,
+          effectiveHomePath: homePath,
+          continuationKey: `codex:home:${homePath}`,
+        });
+      }),
+    );
+
+    it.effect("uses the shared home for continuation and the shadow home for runtime", () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const sharedHome = yield* makeTempDir("t3code-codex-shared-");
+        const shadowRoot = yield* makeTempDir("t3code-codex-shadow-root-");
+        const shadowHome = path.join(shadowRoot, "shadow");
+
+        const layout = yield* resolveCodexHomeLayout(
+          decodeCodexSettings({
+            homePath: sharedHome,
+            shadowHomePath: shadowHome,
+          }),
+        );
+
+        expect(layout).toMatchObject({
+          mode: "authOverlay",
+          sharedHomePath: sharedHome,
+          effectiveHomePath: shadowHome,
+          continuationKey: `codex:home:${sharedHome}`,
+        });
+      }),
+    );
   });
 
-  it("uses the shared home for continuation and the shadow home for runtime", () => {
-    const sharedHome = fs.mkdtempSync(path.join(os.tmpdir(), "t3code-codex-shared-"));
-    const shadowHome = path.join(os.tmpdir(), `t3code-codex-shadow-${randomUUID()}`);
-    try {
-      const layout = resolveCodexHomeLayout(
-        decodeCodexSettings({
-          homePath: sharedHome,
-          shadowHomePath: shadowHome,
-        }),
-      );
+  describe("materializeCodexShadowHome", () => {
+    it.effect("materializes a shadow home with shared state links and private auth", () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const sharedHome = yield* makeTempDir("t3code-codex-shared-");
+        const shadowRoot = yield* makeTempDir("t3code-codex-shadow-root-");
+        const shadowHome = path.join(shadowRoot, "shadow");
 
-      expect(layout).toMatchObject({
-        mode: "authOverlay",
-        sharedHomePath: sharedHome,
-        effectiveHomePath: shadowHome,
-        continuationKey: `codex:home:${sharedHome}`,
-      });
-    } finally {
-      fs.rmSync(sharedHome, { recursive: true, force: true });
-      fs.rmSync(shadowHome, { recursive: true, force: true });
-    }
-  });
+        yield* fileSystem.makeDirectory(path.join(sharedHome, "sessions"));
+        yield* writeTextFile(path.join(sharedHome, "config.toml"), 'model = "gpt-5-codex"\n');
+        yield* writeTextFile(path.join(sharedHome, "models_cache.json"), '{"models":["shared"]}\n');
+        yield* writeTextFile(path.join(sharedHome, "auth.json"), '{"shared":true}\n');
+        yield* fileSystem.makeDirectory(shadowHome, { recursive: true });
+        yield* writeTextFile(path.join(shadowHome, "auth.json"), '{"shadow":true}\n');
+        yield* fileSystem.symlink(
+          path.join(sharedHome, "models_cache.json"),
+          path.join(shadowHome, "models_cache.json"),
+        );
 
-  it("materializes a shadow home with shared state links and private auth", async () => {
-    const sharedHome = fs.mkdtempSync(path.join(os.tmpdir(), "t3code-codex-shared-"));
-    const shadowHome = path.join(os.tmpdir(), `t3code-codex-shadow-${randomUUID()}`);
-    try {
-      fs.mkdirSync(path.join(sharedHome, "sessions"));
-      fs.writeFileSync(path.join(sharedHome, "config.toml"), 'model = "gpt-5-codex"\n');
-      fs.writeFileSync(path.join(sharedHome, "models_cache.json"), '{"models":["shared"]}\n');
-      fs.writeFileSync(path.join(sharedHome, "auth.json"), '{"shared":true}\n');
-      fs.mkdirSync(shadowHome, { recursive: true });
-      fs.writeFileSync(path.join(shadowHome, "auth.json"), '{"shadow":true}\n');
-      fs.symlinkSync(
-        path.join(sharedHome, "models_cache.json"),
-        path.join(shadowHome, "models_cache.json"),
-      );
+        const layout = yield* resolveCodexHomeLayout(
+          decodeCodexSettings({
+            homePath: sharedHome,
+            shadowHomePath: shadowHome,
+          }),
+        );
 
-      const layout = resolveCodexHomeLayout(
-        decodeCodexSettings({
-          homePath: sharedHome,
-          shadowHomePath: shadowHome,
-        }),
-      );
+        yield* materializeCodexShadowHome(layout);
 
-      await Effect.runPromise(materializeCodexShadowHome(layout));
+        const sessionsTarget = yield* fileSystem.readLink(path.join(shadowHome, "sessions"));
+        const configTarget = yield* fileSystem.readLink(path.join(shadowHome, "config.toml"));
+        const modelsCacheExists = yield* fileSystem.exists(
+          path.join(shadowHome, "models_cache.json"),
+        );
+        const authLinkResult = yield* fileSystem
+          .readLink(path.join(shadowHome, "auth.json"))
+          .pipe(Effect.result);
+        const authContents = yield* fileSystem.readFileString(path.join(shadowHome, "auth.json"));
 
-      expect(fs.lstatSync(path.join(shadowHome, "sessions")).isSymbolicLink()).toBe(true);
-      expect(fs.lstatSync(path.join(shadowHome, "config.toml")).isSymbolicLink()).toBe(true);
-      expect(fs.existsSync(path.join(shadowHome, "models_cache.json"))).toBe(false);
-      expect(fs.lstatSync(path.join(shadowHome, "auth.json")).isSymbolicLink()).toBe(false);
-      expect(fs.readFileSync(path.join(shadowHome, "auth.json"), "utf8")).toContain("shadow");
-    } finally {
-      fs.rmSync(sharedHome, { recursive: true, force: true });
-      fs.rmSync(shadowHome, { recursive: true, force: true });
-    }
-  });
+        expect(sessionsTarget).toBe(path.join(sharedHome, "sessions"));
+        expect(configTarget).toBe(path.join(sharedHome, "config.toml"));
+        expect(modelsCacheExists).toBe(false);
+        expect(authLinkResult._tag).toBe("Failure");
+        expect(authContents).toContain("shadow");
+      }),
+    );
 
-  it("rejects shadow homes that point at the shared home", async () => {
-    const sharedHome = fs.mkdtempSync(path.join(os.tmpdir(), "t3code-codex-shared-"));
-    try {
-      const layout = resolveCodexHomeLayout(
-        decodeCodexSettings({
-          homePath: sharedHome,
-          shadowHomePath: sharedHome,
-        }),
-      );
+    it.effect("rejects shadow homes that point at the shared home", () =>
+      Effect.gen(function* () {
+        const sharedHome = yield* makeTempDir("t3code-codex-shared-");
+        const layout = yield* resolveCodexHomeLayout(
+          decodeCodexSettings({
+            homePath: sharedHome,
+            shadowHomePath: sharedHome,
+          }),
+        );
 
-      await expect(Effect.runPromise(materializeCodexShadowHome(layout))).rejects.toBeInstanceOf(
-        CodexShadowHomeError,
-      );
-    } finally {
-      fs.rmSync(sharedHome, { recursive: true, force: true });
-    }
+        const error = yield* materializeCodexShadowHome(layout).pipe(Effect.flip);
+
+        expect(error).toBeInstanceOf(CodexShadowHomeError);
+      }),
+    );
+
+    it.effect("rejects shared entries that already exist in the shadow home as real files", () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const sharedHome = yield* makeTempDir("t3code-codex-shared-");
+        const shadowRoot = yield* makeTempDir("t3code-codex-shadow-root-");
+        const shadowHome = path.join(shadowRoot, "shadow");
+        yield* writeTextFile(path.join(sharedHome, "config.toml"), 'model = "gpt-5-codex"\n');
+        yield* writeTextFile(path.join(shadowHome, "config.toml"), 'model = "local"\n');
+
+        const layout = yield* resolveCodexHomeLayout(
+          decodeCodexSettings({
+            homePath: sharedHome,
+            shadowHomePath: shadowHome,
+          }),
+        );
+
+        const error = yield* materializeCodexShadowHome(layout).pipe(Effect.flip);
+
+        expect(error.detail).toContain("already exists and is not a symlink");
+      }),
+    );
   });
 });

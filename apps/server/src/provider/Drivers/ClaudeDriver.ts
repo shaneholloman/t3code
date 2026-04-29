@@ -74,6 +74,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
   create: ({ instanceId, displayName, accentColor, environment, enabled, config }) =>
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const path = yield* Path.Path;
       const eventLoggers = yield* ProviderEventLoggers;
       const processEnv = mergeProviderInstanceEnvironment(environment);
       const fallbackContinuationIdentity = defaultProviderContinuationIdentity({
@@ -81,7 +82,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
         instanceId,
       });
       const effectiveConfig = { ...config, enabled } satisfies ClaudeSettings;
-      const continuationGroupKey = makeClaudeContinuationGroupKey(effectiveConfig);
+      const continuationGroupKey = yield* makeClaudeContinuationGroupKey(effectiveConfig);
       const stampIdentity = withInstanceIdentity({
         instanceId,
         displayName,
@@ -102,9 +103,12 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
       const capabilitiesProbeCache = yield* Cache.make({
         capacity: 1,
         timeToLive: CAPABILITIES_PROBE_TTL,
-        lookup: () => probeClaudeCapabilities(effectiveConfig, processEnv),
+        lookup: () =>
+          probeClaudeCapabilities(effectiveConfig, processEnv).pipe(
+            Effect.provideService(Path.Path, path),
+          ),
       });
-      const capabilitiesCacheKey = makeClaudeCapabilitiesCacheKey(effectiveConfig);
+      const capabilitiesCacheKey = yield* makeClaudeCapabilitiesCacheKey(effectiveConfig);
 
       const checkProvider = checkClaudeProviderStatus(
         effectiveConfig,
@@ -113,6 +117,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
       ).pipe(
         Effect.map(stampIdentity),
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        Effect.provideService(Path.Path, path),
       );
 
       const snapshot = yield* makeManagedServerProvider<ClaudeSettings>({

@@ -55,6 +55,7 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
   environment: NodeJS.ProcessEnv = process.env,
 ) {
   const commandSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const claudeEnvironment = yield* makeClaudeEnvironment(claudeSettings, environment);
 
   const readStreamAsString = <E>(
     operation: string,
@@ -129,7 +130,7 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
           "--dangerously-skip-permissions",
         ],
         {
-          env: makeClaudeEnvironment(claudeSettings, environment),
+          env: claudeEnvironment,
           cwd,
           shell: process.platform === "win32",
           stdin: {

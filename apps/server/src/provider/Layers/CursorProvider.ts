@@ -1,6 +1,4 @@
-import * as nodeFs from "node:fs";
 import * as nodeOs from "node:os";
-import * as nodePath from "node:path";
 
 import type {
   CursorSettings,
@@ -13,7 +11,7 @@ import type {
 } from "@t3tools/contracts";
 import { ProviderDriverKind } from "@t3tools/contracts";
 import type * as EffectAcpSchema from "effect-acp/schema";
-import { Cause, Effect, Exit, Layer, Option, Result } from "effect";
+import { Cause, Effect, Exit, FileSystem, Layer, Option, Path, Result } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import {
   createModelCapabilities,
@@ -848,14 +846,13 @@ function isCursorAboutJsonFormatUnsupported(result: CommandResult): boolean {
   );
 }
 
-function readCursorCliConfigChannel(): string | undefined {
-  try {
-    const configPath = nodePath.join(nodeOs.homedir(), ".cursor", "cli-config.json");
-    return parseCursorCliConfigChannel(nodeFs.readFileSync(configPath, "utf8"));
-  } catch {
-    return undefined;
-  }
-}
+const readCursorCliConfigChannel = Effect.fn("readCursorCliConfigChannel")(function* () {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const configPath = path.join(nodeOs.homedir(), ".cursor", "cli-config.json");
+  const raw = yield* fileSystem.readFileString(configPath).pipe(Effect.orElseSucceed(() => ""));
+  return parseCursorCliConfigChannel(raw);
+});
 
 export function getCursorParameterizedModelPickerUnsupportedMessage(input: {
   readonly version: string | null | undefined;
@@ -1078,7 +1075,11 @@ const runCursorAboutCommand = (
 export const checkCursorProviderStatus = Effect.fn("checkCursorProviderStatus")(function* (
   cursorSettings: CursorSettings,
   environment: NodeJS.ProcessEnv = process.env,
-): Effect.fn.Return<ServerProviderDraft, never, ChildProcessSpawner.ChildProcessSpawner> {
+): Effect.fn.Return<
+  ServerProviderDraft,
+  never,
+  ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
+> {
   const checkedAt = new Date().toISOString();
   const fallbackModels = getCursorFallbackModels(cursorSettings);
 
@@ -1140,10 +1141,11 @@ export const checkCursorProviderStatus = Effect.fn("checkCursorProviderStatus")(
   }
 
   const parsed = parseCursorAboutOutput(aboutProbe.success.value);
+  const cursorCliConfigChannel = yield* readCursorCliConfigChannel();
   const parameterizedModelPickerUnsupportedMessage =
     getCursorParameterizedModelPickerUnsupportedMessage({
       version: parsed.version,
-      channel: readCursorCliConfigChannel(),
+      channel: cursorCliConfigChannel,
     });
   if (parameterizedModelPickerUnsupportedMessage) {
     return buildServerProvider({

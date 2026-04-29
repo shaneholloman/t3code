@@ -43,6 +43,9 @@ const ENVIRONMENT_VARIABLE_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
 const REDACTED_EMAIL_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
+let environmentVariableDraftId = 0;
+const nextEnvironmentVariableDraftId = () => `provider-env-${environmentVariableDraftId++}`;
+
 type EnvironmentDraftRow = {
   readonly id: string;
   readonly name: string;
@@ -369,7 +372,7 @@ function ProviderEnvironmentSection(props: {
             setRows([
               ...rows,
               {
-                id: crypto.randomUUID(),
+                id: nextEnvironmentVariableDraftId(),
                 name: "",
                 value: "",
                 sensitive: true,

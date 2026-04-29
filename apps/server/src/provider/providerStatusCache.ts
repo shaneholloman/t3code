@@ -1,11 +1,10 @@
-import * as nodePath from "node:path";
 import {
   type ProviderDriverKind,
   type ProviderInstanceId,
   type ServerProvider,
   ServerProvider as ServerProviderSchema,
 } from "@t3tools/contracts";
-import { Cause, Effect, FileSystem, Schema } from "effect";
+import { Cause, Effect, FileSystem, Path, Schema } from "effect";
 
 import { writeFileStringAtomically } from "../atomicWrite.ts";
 
@@ -85,10 +84,15 @@ export const hydrateCachedProvider = (input: {
  * Cache contents must still carry matching `instanceId` + `driver` identity
  * before hydration. The filename alone is not trusted as a routing key.
  */
-export const resolveProviderStatusCachePath = (input: {
-  readonly cacheDir: string;
-  readonly instanceId: ProviderInstanceId;
-}) => nodePath.join(input.cacheDir, `${input.instanceId}.json`);
+export const resolveProviderStatusCachePath = Effect.fn("resolveProviderStatusCachePath")(
+  function* (input: {
+    readonly cacheDir: string;
+    readonly instanceId: ProviderInstanceId;
+  }): Effect.fn.Return<string, never, Path.Path> {
+    const path = yield* Path.Path;
+    return path.join(input.cacheDir, `${input.instanceId}.json`);
+  },
+);
 
 /**
  * Legacy kind-keyed path resolver retained for callers that still think in
@@ -97,10 +101,15 @@ export const resolveProviderStatusCachePath = (input: {
  *
  * @deprecated use `resolveProviderStatusCachePath` with an instance id.
  */
-export const resolveLegacyProviderStatusCachePath = (input: {
+export const resolveLegacyProviderStatusCachePath = Effect.fn(
+  "resolveLegacyProviderStatusCachePath",
+)(function* (input: {
   readonly cacheDir: string;
   readonly provider: ProviderDriverKind;
-}) => nodePath.join(input.cacheDir, `${input.provider}.json`);
+}): Effect.fn.Return<string, never, Path.Path> {
+  const path = yield* Path.Path;
+  return path.join(input.cacheDir, `${input.provider}.json`);
+});
 
 export const readProviderStatusCache = (filePath: string) =>
   Effect.gen(function* () {

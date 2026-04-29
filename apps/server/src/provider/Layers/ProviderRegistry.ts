@@ -179,44 +179,45 @@ export const ProviderRegistryLive = Layer.effect(
 
     const cachedProviders = yield* Effect.forEach(
       bootSources,
-      (source) => {
-        // One cache file per configured instance. For the default
-        // instance of a built-in kind the path equals `<kind>.json` —
-        // identical to the legacy filename. We still require the cache
-        // payload to carry matching instance id + driver kind; old
-        // identity-less payloads are discarded and the awaited refresh
-        // below repopulates the cache.
-        const filePath = resolveProviderStatusCachePath({
-          cacheDir: config.providerStatusCacheDir,
-          instanceId: source.instanceId,
-        });
-        const fallbackProvider = fallbackByInstance.get(source.instanceId);
-        if (fallbackProvider === undefined) {
-          return Effect.void.pipe(Effect.as(undefined as ServerProvider | undefined));
-        }
-        return readProviderStatusCache(filePath).pipe(
-          Effect.provideService(FileSystem.FileSystem, fileSystem),
-          Effect.flatMap((cachedProvider) => {
-            if (cachedProvider === undefined) {
-              return Effect.void.pipe(Effect.as(undefined as ServerProvider | undefined));
-            }
-            const correlation = {
-              cachedProvider,
-              fallbackProvider,
-            } as const;
-            if (!isCachedProviderCorrelated(correlation)) {
-              return Effect.logWarning("provider status cache identity mismatch, ignoring", {
-                path: filePath,
-                instanceId: source.instanceId,
-                cachedInstanceId: cachedProvider.instanceId ?? null,
-                driver: source.driverKind,
-                cachedDriver: cachedProvider.driver ?? null,
-              }).pipe(Effect.as(undefined as ServerProvider | undefined));
-            }
-            return Effect.succeed(hydrateCachedProvider(correlation));
-          }),
-        );
-      },
+      (source) =>
+        Effect.gen(function* () {
+          // One cache file per configured instance. For the default
+          // instance of a built-in kind the path equals `<kind>.json` —
+          // identical to the legacy filename. We still require the cache
+          // payload to carry matching instance id + driver kind; old
+          // identity-less payloads are discarded and the awaited refresh
+          // below repopulates the cache.
+          const filePath = yield* resolveProviderStatusCachePath({
+            cacheDir: config.providerStatusCacheDir,
+            instanceId: source.instanceId,
+          }).pipe(Effect.provideService(Path.Path, path));
+          const fallbackProvider = fallbackByInstance.get(source.instanceId);
+          if (fallbackProvider === undefined) {
+            return undefined;
+          }
+          return yield* readProviderStatusCache(filePath).pipe(
+            Effect.provideService(FileSystem.FileSystem, fileSystem),
+            Effect.flatMap((cachedProvider) => {
+              if (cachedProvider === undefined) {
+                return Effect.void.pipe(Effect.as(undefined as ServerProvider | undefined));
+              }
+              const correlation = {
+                cachedProvider,
+                fallbackProvider,
+              } as const;
+              if (!isCachedProviderCorrelated(correlation)) {
+                return Effect.logWarning("provider status cache identity mismatch, ignoring", {
+                  path: filePath,
+                  instanceId: source.instanceId,
+                  cachedInstanceId: cachedProvider.instanceId ?? null,
+                  driver: source.driverKind,
+                  cachedDriver: cachedProvider.driver ?? null,
+                }).pipe(Effect.as(undefined as ServerProvider | undefined));
+              }
+              return Effect.succeed(hydrateCachedProvider(correlation));
+            }),
+          );
+        }),
       { concurrency: "unbounded" },
     ).pipe(
       Effect.map((providers) =>
@@ -242,25 +243,26 @@ export const ProviderRegistryLive = Layer.effect(
       liveSubsRef,
     ).pipe(Effect.map((map) => Array.from(map.values(), buildSnapshotSource)));
 
-    const persistProvider = (provider: ServerProvider) => {
-      // Persist every instance — the file name is the instance id, so
-      // multi-instance setups (e.g. `codex_personal`, `codex_work`) each
-      // get their own cache. We resolve the path fresh so snapshots
-      // produced by newly-added instances post-boot still land on disk
-      // without the aggregator holding a stale `cachePathByInstance`
-      // entry.
-      const key = snapshotInstanceKey(provider);
-      const filePath = resolveProviderStatusCachePath({
-        cacheDir: config.providerStatusCacheDir,
-        instanceId: key,
+    const persistProvider = (provider: ServerProvider) =>
+      Effect.gen(function* () {
+        // Persist every instance — the file name is the instance id, so
+        // multi-instance setups (e.g. `codex_personal`, `codex_work`) each
+        // get their own cache. We resolve the path fresh so snapshots
+        // produced by newly-added instances post-boot still land on disk
+        // without the aggregator holding a stale `cachePathByInstance`
+        // entry.
+        const key = snapshotInstanceKey(provider);
+        const filePath = yield* resolveProviderStatusCachePath({
+          cacheDir: config.providerStatusCacheDir,
+          instanceId: key,
+        }).pipe(Effect.provideService(Path.Path, path));
+        yield* writeProviderStatusCache({ filePath, provider }).pipe(
+          Effect.provideService(FileSystem.FileSystem, fileSystem),
+          Effect.provideService(Path.Path, path),
+          Effect.tapError(Effect.logError),
+          Effect.ignore,
+        );
       });
-      return writeProviderStatusCache({ filePath, provider }).pipe(
-        Effect.provideService(FileSystem.FileSystem, fileSystem),
-        Effect.provideService(Path.Path, path),
-        Effect.tapError(Effect.logError),
-        Effect.ignore,
-      );
-    };
 
     const upsertProviders = Effect.fn("upsertProviders")(function* (
       nextProviders: ReadonlyArray<ServerProvider>,

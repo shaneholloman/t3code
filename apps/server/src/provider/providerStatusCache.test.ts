@@ -54,15 +54,15 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
         status: "warning",
         auth: { status: "unknown", type: "opencode" },
       });
-      const codexPath = resolveProviderStatusCachePath({
+      const codexPath = yield* resolveProviderStatusCachePath({
         cacheDir: tempDir,
         instanceId: defaultInstanceIdForDriver(ProviderDriverKind.make("codex")),
       });
-      const claudePath = resolveProviderStatusCachePath({
+      const claudePath = yield* resolveProviderStatusCachePath({
         cacheDir: tempDir,
         instanceId: defaultInstanceIdForDriver(ProviderDriverKind.make("claudeAgent")),
       });
-      const openCodePath = resolveProviderStatusCachePath({
+      const openCodePath = yield* resolveProviderStatusCachePath({
         cacheDir: tempDir,
         instanceId: defaultInstanceIdForDriver(ProviderDriverKind.make("opencode")),
       });
