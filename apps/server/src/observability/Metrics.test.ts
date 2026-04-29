@@ -76,10 +76,10 @@ describe("withMetrics", () => {
     Effect.gen(function* () {
       const counter = Metric.counter("with_metrics_lazy_total");
       const timer = Metric.timer("with_metrics_lazy_duration");
-      let provider = "unknown";
+      let provider: string = ProviderDriverKind.make("unknown");
 
       yield* Effect.sync(() => {
-        provider = "codex";
+        provider = ProviderDriverKind.make("codex");
       }).pipe(
         withMetrics({
           counter,
