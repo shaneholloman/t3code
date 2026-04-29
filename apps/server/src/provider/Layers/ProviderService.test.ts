@@ -22,7 +22,7 @@ import {
 import { createModelSelection } from "@t3tools/shared/model";
 import { it, assert, vi } from "@effect/vitest";
 
-import { Effect, Fiber, Layer, Metric, Option, PubSub, Ref, Stream } from "effect";
+import { Effect, Exit, Fiber, Layer, Metric, Option, PubSub, Ref, Stream } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import {
@@ -834,6 +834,37 @@ routing.layer("ProviderServiceLive routing", (it) => {
         assert.equal(startPayload.providerInstanceId, claudeAgentInstanceId);
         assert.equal(startPayload.cwd, "/tmp/project-claude");
       }
+    }),
+  );
+
+  it.effect("dies when an active session conflicts with its persisted binding", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService;
+      const directory = yield* ProviderSessionDirectory;
+      const threadId = asThreadId("thread-binding-mismatch");
+
+      yield* provider.startSession(threadId, {
+        provider: "codex",
+        providerInstanceId: codexInstanceId,
+        threadId,
+        cwd: "/tmp/project-binding-mismatch",
+        runtimeMode: "full-access",
+      });
+      yield* directory.upsert({
+        threadId,
+        provider: "claudeAgent",
+        providerInstanceId: claudeAgentInstanceId,
+        runtimeMode: "full-access",
+      });
+
+      const exit = yield* Effect.exit(provider.listSessions());
+      assert.equal(Exit.hasDies(exit), true);
+      yield* directory.upsert({
+        threadId,
+        provider: "codex",
+        providerInstanceId: codexInstanceId,
+        runtimeMode: "full-access",
+      });
     }),
   );
 

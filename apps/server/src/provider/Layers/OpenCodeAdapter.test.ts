@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
-import { Context, Effect, Layer, Option, Schema } from "effect";
+import { Context, Effect, Exit, Fiber, Layer, Option, Schema, Scope, Stream } from "effect";
 import { beforeEach } from "vitest";
 
 import { OpenCodeSettings, ThreadId, ProviderInstanceId } from "@t3tools/contracts";
@@ -284,6 +284,39 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
         "http://127.0.0.1:9999",
       ]);
       assert.deepEqual(sessions, []);
+    }),
+  );
+
+  it.effect("completes streamEvents when the adapter scope closes", () =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make("sequential");
+      let scopeClosed = false;
+
+      try {
+        const adapterLayer = Layer.effect(
+          OpenCodeAdapter,
+          makeOpenCodeAdapter(openCodeAdapterTestSettings),
+        ).pipe(
+          Layer.provideMerge(Layer.succeed(OpenCodeRuntime, OpenCodeRuntimeTestDouble)),
+          Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
+          Layer.provideMerge(ServerSettingsService.layerTest()),
+          Layer.provideMerge(providerSessionDirectoryTestLayer),
+          Layer.provideMerge(NodeServices.layer),
+        );
+        const context = yield* Layer.buildWithScope(adapterLayer, scope);
+        const adapter = yield* Effect.service(OpenCodeAdapter).pipe(Effect.provide(context));
+        const eventsFiber = yield* adapter.streamEvents.pipe(Stream.runCollect, Effect.forkChild);
+
+        yield* Scope.close(scope, Exit.void);
+        scopeClosed = true;
+
+        const exit = yield* Fiber.await(eventsFiber).pipe(Effect.timeout("1 second"));
+        assert.equal(Exit.hasInterrupts(exit), true);
+      } finally {
+        if (!scopeClosed) {
+          yield* Scope.close(scope, Exit.void).pipe(Effect.ignore);
+        }
+      }
     }),
   );
 

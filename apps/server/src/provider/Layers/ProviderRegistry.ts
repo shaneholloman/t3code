@@ -11,8 +11,8 @@
  * Each configured instance (including multi-instance setups like
  * `codex_personal` + `codex_work`) contributes one `ProviderSnapshotSource`,
  * keyed by `instanceId`. Instances whose driver is unavailable or whose
- * config failed to decode never surface here; they live in
- * `instanceRegistry.listUnavailable` and are rendered via a separate path.
+ * config failed to decode are merged from `instanceRegistry.listUnavailable`
+ * as shadow snapshots so the UI can render their exact unavailable reason.
  *
  * Cache paths on disk are now keyed by `instanceId`. Because
  * `defaultInstanceIdForDriver(kind) === kind` for built-in kinds, existing
@@ -278,6 +278,8 @@ export const ProviderRegistryLive = Layer.effect(
       nextProviders: ReadonlyArray<ServerProvider>,
       options?: {
         readonly publish?: boolean;
+        readonly persist?: boolean;
+        readonly replace?: boolean;
       },
     ) {
       const [previousProviders, providers] = yield* Ref.modify(
@@ -289,7 +291,12 @@ export const ProviderRegistryLive = Layer.effect(
 
           for (const provider of nextProviders) {
             const key = snapshotInstanceKey(provider);
-            mergedProviders.set(key, mergeProviderSnapshot(mergedProviders.get(key), provider));
+            mergedProviders.set(
+              key,
+              options?.replace === true
+                ? provider
+                : mergeProviderSnapshot(mergedProviders.get(key), provider),
+            );
           }
 
           const providers = orderProviderSnapshots([...mergedProviders.values()]);
@@ -298,10 +305,12 @@ export const ProviderRegistryLive = Layer.effect(
       );
 
       if (haveProvidersChanged(previousProviders, providers)) {
-        yield* Effect.forEach(nextProviders, persistProvider, {
-          concurrency: "unbounded",
-          discard: true,
-        });
+        if (options?.persist !== false) {
+          yield* Effect.forEach(nextProviders, persistProvider, {
+            concurrency: "unbounded",
+            discard: true,
+          });
+        }
         if (options?.publish !== false) {
           yield* PubSub.publish(changesPubSub, providers);
         }
@@ -393,9 +402,14 @@ export const ProviderRegistryLive = Layer.effect(
     const syncLiveSources = syncSemaphore.withPermits(1)(
       Effect.gen(function* () {
         const instances = yield* instanceRegistry.listInstances;
+        const unavailableProviders = yield* instanceRegistry.listUnavailable;
         const nextByInstance = new Map<ProviderInstanceId, ProviderInstance>(
           instances.map((instance) => [instance.instanceId, instance] as const),
         );
+        const knownInstanceIds = new Set<ProviderInstanceId>(nextByInstance.keys());
+        for (const provider of unavailableProviders) {
+          knownInstanceIds.add(snapshotInstanceKey(provider));
+        }
         const previousSubs = yield* Ref.get(liveSubsRef);
 
         // Carry over subscriptions for instances whose identity is
@@ -444,6 +458,10 @@ export const ProviderRegistryLive = Layer.effect(
             refreshOneSource(buildSnapshotSource(instance)).pipe(Effect.ignoreCause({ log: true })),
           { concurrency: "unbounded", discard: true },
         );
+        yield* upsertProviders(unavailableProviders, {
+          persist: false,
+          replace: true,
+        });
 
         const nextSubs = new Map(carriedOver);
         for (const [instanceId, instance] of newlyAdded) {
@@ -453,11 +471,20 @@ export const ProviderRegistryLive = Layer.effect(
 
         // Drop aggregator state for instances that have disappeared —
         // otherwise the UI would keep rendering ghosts.
-        yield* Ref.update(providersRef, (providers) =>
-          orderProviderSnapshots(
-            providers.filter((provider) => nextByInstance.has(snapshotInstanceKey(provider))),
-          ),
+        const [previousProviders, providers] = yield* Ref.modify(
+          providersRef,
+          (previousProviders) => {
+            const providers = orderProviderSnapshots(
+              previousProviders.filter((provider) =>
+                knownInstanceIds.has(snapshotInstanceKey(provider)),
+              ),
+            );
+            return [[previousProviders, providers] as const, providers];
+          },
         );
+        if (haveProvidersChanged(previousProviders, providers)) {
+          yield* PubSub.publish(changesPubSub, providers);
+        }
       }),
     );
 

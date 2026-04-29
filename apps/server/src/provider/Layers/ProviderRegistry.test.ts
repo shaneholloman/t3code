@@ -714,6 +714,59 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
         }),
       );
 
+      it.effect("includes unavailable instance snapshots in getProviders", () =>
+        Effect.gen(function* () {
+          const serverSettings = yield* makeMutableServerSettingsService(
+            Schema.decodeSync(ServerSettings)(
+              deepMerge(DEFAULT_SERVER_SETTINGS, {
+                providers: {
+                  codex: { enabled: false },
+                  claudeAgent: { enabled: false },
+                  cursor: { enabled: false },
+                  opencode: { enabled: false },
+                },
+                providerInstances: {
+                  ghost_main: {
+                    driver: "ghostDriver",
+                    displayName: "A fork-only driver we don't ship",
+                    enabled: false,
+                    config: { arbitrary: "payload" },
+                  },
+                } as unknown as ContractServerSettings["providerInstances"],
+              }),
+            ),
+          );
+          const scope = yield* Scope.make();
+          yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+          const providerRegistryLayer = ProviderRegistryLive.pipe(
+            Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
+            Layer.provideMerge(Layer.succeed(ServerSettingsService, serverSettings)),
+            Layer.provideMerge(
+              ServerConfig.layerTest(process.cwd(), {
+                prefix: "t3-provider-registry-",
+              }),
+            ),
+            Layer.provideMerge(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
+            Layer.provideMerge(OpenCodeRuntimeLive),
+            Layer.provideMerge(NodeServices.layer),
+          );
+          const runtimeServices = yield* Layer.build(providerRegistryLayer).pipe(
+            Scope.provide(scope),
+          );
+
+          yield* Effect.gen(function* () {
+            const registry = yield* ProviderRegistry;
+            const providers = yield* registry.getProviders;
+            const ghost = providers.find((provider) => provider.instanceId === "ghost_main");
+
+            assert.notStrictEqual(ghost, undefined);
+            assert.strictEqual(ghost?.driver, "ghostDriver");
+            assert.strictEqual(ghost?.availability, "unavailable");
+            assert.match(ghost?.unavailableReason ?? "", /ghostDriver/);
+          }).pipe(Effect.provide(runtimeServices));
+        }),
+      );
+
       it.effect(
         "keeps cursor disabled and skips probing when the provider setting is disabled",
         () =>

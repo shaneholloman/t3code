@@ -485,7 +485,7 @@ export function makeOpenCodeAdapter(
         if (managedNativeEventLogger !== undefined) {
           yield* managedNativeEventLogger.close();
         }
-      }),
+      }).pipe(Effect.ensuring(Queue.shutdown(runtimeEvents))),
     );
 
     const emit = (event: ProviderRuntimeEvent) =>

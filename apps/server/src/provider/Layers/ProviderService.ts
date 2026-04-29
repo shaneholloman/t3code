@@ -898,13 +898,17 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           binding,
         );
         if (binding.provider !== session.provider) {
-          throw new Error(
-            `ProviderService.listSessions: thread '${session.threadId}' is active on provider '${session.provider}' but persisted binding names provider '${binding.provider}'.`,
+          return yield* Effect.die(
+            new Error(
+              `ProviderService.listSessions: thread '${session.threadId}' is active on provider '${session.provider}' but persisted binding names provider '${binding.provider}'.`,
+            ),
           );
         }
         if (overrides.providerInstanceId !== session.providerInstanceId) {
-          throw new Error(
-            `ProviderService.listSessions: thread '${session.threadId}' is active on provider instance '${session.providerInstanceId}' but persisted binding names '${overrides.providerInstanceId}'.`,
+          return yield* Effect.die(
+            new Error(
+              `ProviderService.listSessions: thread '${session.threadId}' is active on provider instance '${session.providerInstanceId}' but persisted binding names '${overrides.providerInstanceId}'.`,
+            ),
           );
         }
         if (session.resumeCursor === undefined && binding.resumeCursor !== undefined) {
