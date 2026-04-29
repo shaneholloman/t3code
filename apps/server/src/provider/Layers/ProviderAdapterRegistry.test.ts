@@ -3,7 +3,7 @@ import {
   ProviderDriverKind,
   type ServerProvider,
 } from "@t3tools/contracts";
-import { it, vi } from "@effect/vitest";
+import { it, assert, vi } from "@effect/vitest";
 
 import { Effect, Layer, PubSub, Stream } from "effect";
 
@@ -11,6 +11,7 @@ import type { ClaudeAdapterShape } from "../Services/ClaudeAdapter.ts";
 import type { CodexAdapterShape } from "../Services/CodexAdapter.ts";
 import type { CursorAdapterShape } from "../Services/CursorAdapter.ts";
 import type { OpenCodeAdapterShape } from "../Services/OpenCodeAdapter.ts";
+import { ProviderAdapterRegistry } from "../Services/ProviderAdapterRegistry.ts";
 import { ProviderInstanceRegistry } from "../Services/ProviderInstanceRegistry.ts";
 import type { ProviderInstance } from "../ProviderDriver.ts";
 import type { TextGenerationShape } from "../../git/Services/TextGeneration.ts";
@@ -137,9 +138,47 @@ const fakeInstanceRegistryLayer = Layer.succeed(ProviderInstanceRegistry, {
   subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), (pubsub) => PubSub.subscribe(pubsub)),
 });
 
-const _layer = it.layer(
-  Layer.mergeAll(
-    Layer.provide(ProviderAdapterRegistryLive, fakeInstanceRegistryLayer),
-    NodeServices.layer,
-  ),
+const layer = Layer.mergeAll(
+  Layer.provide(ProviderAdapterRegistryLive, fakeInstanceRegistryLayer),
+  NodeServices.layer,
 );
+
+it.layer(layer)("ProviderAdapterRegistryLive", (it) => {
+  it("resolves adapters and routing metadata from provider instances", () =>
+    Effect.gen(function* () {
+      const registry = yield* ProviderAdapterRegistry;
+      const claudeInstanceId = defaultInstanceIdForDriver(CLAUDE_AGENT_DRIVER);
+
+      const adapter = yield* registry.getByInstance(claudeInstanceId);
+      assert.strictEqual(adapter, fakeClaudeAdapter);
+
+      const info = yield* registry.getInstanceInfo(claudeInstanceId);
+      assert.deepStrictEqual(info, {
+        instanceId: claudeInstanceId,
+        driverKind: CLAUDE_AGENT_DRIVER,
+        displayName: undefined,
+        accentColor: undefined,
+        enabled: true,
+        continuationIdentity: {
+          driverKind: CLAUDE_AGENT_DRIVER,
+          continuationKey: "claudeAgent:instance:claudeAgent",
+        },
+      });
+
+      const instances = yield* registry.listInstances();
+      assert.deepStrictEqual(instances, [
+        defaultInstanceIdForDriver(CODEX_DRIVER),
+        claudeInstanceId,
+        defaultInstanceIdForDriver(OPENCODE_DRIVER),
+        defaultInstanceIdForDriver(CURSOR_DRIVER),
+      ]);
+
+      const providers = yield* registry.listProviders();
+      assert.deepStrictEqual(providers, [
+        CODEX_DRIVER,
+        CLAUDE_AGENT_DRIVER,
+        OPENCODE_DRIVER,
+        CURSOR_DRIVER,
+      ]);
+    }));
+});
