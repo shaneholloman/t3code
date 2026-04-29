@@ -53,7 +53,9 @@ const makeIntegrationFixture = Effect.gen(function* () {
   const cwd = yield* makeWorkspaceDirectory;
   const harness = yield* makeTestProviderAdapterHarness();
 
-  const registry = makeAdapterRegistryMock({ codex: harness.adapter });
+  const registry = makeAdapterRegistryMock({
+    [ProviderDriverKind.make("codex")]: harness.adapter,
+  });
 
   const directoryLayer = ProviderSessionDirectoryLive.pipe(
     Layer.provide(ProviderSessionRuntimeRepositoryLive),

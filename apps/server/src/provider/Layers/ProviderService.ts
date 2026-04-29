@@ -23,7 +23,6 @@ import {
   type ProviderDriverKind,
   type ProviderRuntimeEvent,
   type ProviderSession,
-  ServerProvider,
 } from "@t3tools/contracts";
 import { Effect, Layer, Option, PubSub, Ref, Schema, SchemaIssue, Stream } from "effect";
 

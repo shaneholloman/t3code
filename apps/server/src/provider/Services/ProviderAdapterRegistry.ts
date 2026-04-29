@@ -12,8 +12,6 @@
  *   - `getByInstance` / `listInstances` — new per-instance routing. Callers
  *     that already know an `instanceId` (threads, sessions, events)
  *     should prefer these.
- *   - `getByProvider` / `listProviders` — legacy kind-keyed shims. Resolve
- *     against the *default* instance for that driver
  *     (`defaultInstanceIdForDriver(kind) === kind`), matching the pre-Slice-D
  *     behaviour. New code should not grow additional callers of the kind-keyed
  *     methods; they exist so the settings UI, WS refresh RPC, and a handful
@@ -62,18 +60,6 @@ export interface ProviderAdapterRegistryShape {
    * callers of this method want something they can pass to `getByInstance`.
    */
   readonly listInstances: () => Effect.Effect<ReadonlyArray<ProviderInstanceId>>;
-
-  /**
-   * Legacy: resolve the adapter for a provider *kind*. Picks the default
-   * instance id (`defaultInstanceIdForDriver(kind) === kind` as a slug) and
-   * delegates to `getByInstance`.
-   *
-   * @deprecated Prefer `getByInstance`. Retained for migration-era call
-   * sites (legacy persisted rows, WS refresh RPC).
-   */
-  readonly getByProvider: (
-    provider: ProviderDriverKind,
-  ) => Effect.Effect<ProviderAdapterShape<ProviderAdapterError>, ProviderUnsupportedError>;
 
   /**
    * Legacy: list provider kinds whose default instance is currently

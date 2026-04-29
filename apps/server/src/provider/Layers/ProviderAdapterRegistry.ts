@@ -13,10 +13,6 @@
  * new instance via settings makes `getByInstance` resolve immediately
  * without rebuilding the facade.
  *
- * Legacy `getByProvider(kind)` is a thin shim that routes to the *default*
- * instance for that driver (`defaultInstanceIdForDriver(kind) === kind`),
- * matching the pre-Slice-D single-instance-per-driver behaviour.
- *
  * @module ProviderAdapterRegistryLive
  */
 import {
@@ -74,15 +70,6 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
       Effect.map((instances) => instances.map((instance) => instance.instanceId)),
     );
 
-  // Legacy kind-keyed shim: translate `kind` into the default instance
-  // id for that driver (the kind literal itself, as a slug) and delegate.
-  const getByProvider: ProviderAdapterRegistryShape["getByProvider"] = (provider) =>
-    getByInstance(defaultInstanceIdForDriver(provider)).pipe(
-      // Re-shape the failure so callers still see `ProviderUnsupportedError`
-      // carrying the *kind* they asked about, not the derived instance id.
-      Effect.mapError(() => new ProviderUnsupportedError({ provider })),
-    );
-
   const listProviders: ProviderAdapterRegistryShape["listProviders"] = () =>
     registry.listInstances.pipe(
       Effect.map((instances) => {
@@ -104,7 +91,6 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
     getByInstance,
     getInstanceInfo,
     listInstances,
-    getByProvider,
     listProviders,
     // Proxy directly — the facade has no state of its own; the instance
     // registry already coalesces adds/removes/rebuilds into one emission.

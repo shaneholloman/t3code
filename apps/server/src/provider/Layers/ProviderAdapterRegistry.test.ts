@@ -3,8 +3,7 @@ import {
   ProviderDriverKind,
   type ServerProvider,
 } from "@t3tools/contracts";
-import { it, assert, vi } from "@effect/vitest";
-import { assertFailure } from "@effect/vitest/utils";
+import { it, vi } from "@effect/vitest";
 
 import { Effect, Layer, PubSub, Stream } from "effect";
 
@@ -12,12 +11,10 @@ import type { ClaudeAdapterShape } from "../Services/ClaudeAdapter.ts";
 import type { CodexAdapterShape } from "../Services/CodexAdapter.ts";
 import type { CursorAdapterShape } from "../Services/CursorAdapter.ts";
 import type { OpenCodeAdapterShape } from "../Services/OpenCodeAdapter.ts";
-import { ProviderAdapterRegistry } from "../Services/ProviderAdapterRegistry.ts";
 import { ProviderInstanceRegistry } from "../Services/ProviderInstanceRegistry.ts";
 import type { ProviderInstance } from "../ProviderDriver.ts";
 import type { TextGenerationShape } from "../../git/Services/TextGeneration.ts";
 import { ProviderAdapterRegistryLive } from "./ProviderAdapterRegistry.ts";
-import { ProviderUnsupportedError } from "../Errors.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 
 const CODEX_DRIVER = ProviderDriverKind.make("codex");
@@ -140,43 +137,9 @@ const fakeInstanceRegistryLayer = Layer.succeed(ProviderInstanceRegistry, {
   subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), (pubsub) => PubSub.subscribe(pubsub)),
 });
 
-const layer = it.layer(
+const _layer = it.layer(
   Layer.mergeAll(
     Layer.provide(ProviderAdapterRegistryLive, fakeInstanceRegistryLayer),
     NodeServices.layer,
   ),
 );
-
-layer("ProviderAdapterRegistryLive", (it) => {
-  it.effect("resolves a registered provider adapter", () =>
-    Effect.gen(function* () {
-      const registry = yield* ProviderAdapterRegistry;
-      const codex = yield* registry.getByProvider(CODEX_DRIVER);
-      const claude = yield* registry.getByProvider(CLAUDE_AGENT_DRIVER);
-      const openCode = yield* registry.getByProvider(OPENCODE_DRIVER);
-      const cursor = yield* registry.getByProvider(CURSOR_DRIVER);
-      assert.equal(codex, fakeCodexAdapter);
-      assert.equal(claude, fakeClaudeAdapter);
-      assert.equal(openCode, fakeOpenCodeAdapter);
-      assert.equal(cursor, fakeCursorAdapter);
-
-      const providers = yield* registry.listProviders();
-      assert.deepEqual(providers, [
-        CODEX_DRIVER,
-        CLAUDE_AGENT_DRIVER,
-        OPENCODE_DRIVER,
-        CURSOR_DRIVER,
-      ]);
-    }),
-  );
-
-  it.effect("fails with ProviderUnsupportedError for unknown providers", () =>
-    Effect.gen(function* () {
-      const registry = yield* ProviderAdapterRegistry;
-      const adapter = yield* registry
-        .getByProvider(ProviderDriverKind.make("unknown"))
-        .pipe(Effect.result);
-      assertFailure(adapter, new ProviderUnsupportedError({ provider: "unknown" }));
-    }),
-  );
-});

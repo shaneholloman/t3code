@@ -226,11 +226,7 @@ export function resolveSelectableProviderInstance(
   if (requested && requested.enabled && requested.isAvailable) {
     return instanceId;
   }
-  return (
-    entries.find((entry) => entry.enabled && entry.isAvailable)?.instanceId ??
-    requested?.instanceId ??
-    instanceId
-  );
+  return entries.find((entry) => entry.enabled && entry.isAvailable)?.instanceId;
 }
 
 /**

@@ -2,6 +2,7 @@ import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@t3
 import { describe, expect, it } from "vitest";
 import {
   deriveProviderInstanceEntries,
+  resolveSelectableProviderInstance,
   resolveProviderDriverKindForInstanceSelection,
 } from "./providerInstances";
 
@@ -9,6 +10,7 @@ function provider(input: {
   provider: ProviderDriverKind;
   instanceId: string;
   enabled?: boolean;
+  availability?: ServerProvider["availability"];
   displayName?: string;
 }): ServerProvider {
   return {
@@ -19,6 +21,7 @@ function provider(input: {
     installed: true,
     version: null,
     status: "ready",
+    ...(input.availability ? { availability: input.availability } : {}),
     auth: { status: "authenticated" },
     checkedAt: "2026-01-01T00:00:00.000Z",
     models: [],
@@ -38,6 +41,55 @@ describe("deriveProviderInstanceEntries", () => {
     expect(entry?.instanceId).toBe("codex_personal");
     expect(entry?.driverKind).toBe("codex");
     expect(entry?.isDefault).toBe(false);
+  });
+});
+
+describe("resolveSelectableProviderInstance", () => {
+  it("returns the requested instance when it is enabled and available", () => {
+    const requested = ProviderInstanceId.make("claude_work");
+    const providers = [
+      provider({ provider: ProviderDriverKind.make("codex"), instanceId: "codex" }),
+      provider({ provider: ProviderDriverKind.make("claudeAgent"), instanceId: requested }),
+    ];
+
+    expect(resolveSelectableProviderInstance(providers, requested)).toBe(requested);
+  });
+
+  it("falls back to the first enabled and available instance", () => {
+    const disabled = ProviderInstanceId.make("codex");
+    const fallback = ProviderInstanceId.make("claudeAgent");
+    const providers = [
+      provider({
+        provider: ProviderDriverKind.make("codex"),
+        instanceId: disabled,
+        enabled: false,
+      }),
+      provider({ provider: ProviderDriverKind.make("claudeAgent"), instanceId: fallback }),
+    ];
+
+    expect(resolveSelectableProviderInstance(providers, disabled)).toBe(fallback);
+  });
+
+  it("does not return disabled, unavailable, or unknown instances when none are sendable", () => {
+    const disabled = ProviderInstanceId.make("codex");
+    const unavailable = ProviderInstanceId.make("claudeAgent");
+    const unknown = ProviderInstanceId.make("removed_instance");
+    const providers = [
+      provider({
+        provider: ProviderDriverKind.make("codex"),
+        instanceId: disabled,
+        enabled: false,
+      }),
+      provider({
+        provider: ProviderDriverKind.make("claudeAgent"),
+        instanceId: unavailable,
+        availability: "unavailable",
+      }),
+    ];
+
+    expect(resolveSelectableProviderInstance(providers, disabled)).toBeUndefined();
+    expect(resolveSelectableProviderInstance(providers, unavailable)).toBeUndefined();
+    expect(resolveSelectableProviderInstance(providers, unknown)).toBeUndefined();
   });
 });
 

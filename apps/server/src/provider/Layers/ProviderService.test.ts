@@ -91,7 +91,9 @@ function makeFakeCodexAdapter(provider: ProviderDriverKind = CODEX_DRIVER) {
         status: "ready",
         runtimeMode: input.runtimeMode,
         threadId: input.threadId,
-        resumeCursor: input.resumeCursor ?? { opaque: `resume-${String(input.threadId)}` },
+        resumeCursor: input.resumeCursor ?? {
+          opaque: `resume-${String(input.threadId)}`,
+        },
         cwd: input.cwd ?? process.cwd(),
         createdAt: now,
         updatedAt: now,
@@ -262,9 +264,9 @@ function makeProviderServiceLayer() {
   const claude = makeFakeCodexAdapter(CLAUDE_AGENT_DRIVER);
   const cursor = makeFakeCodexAdapter(CURSOR_DRIVER);
   const registry = makeAdapterRegistryMock({
-    codex: codex.adapter,
-    claudeAgent: claude.adapter,
-    cursor: cursor.adapter,
+    [ProviderDriverKind.make("codex")]: codex.adapter,
+    [ProviderDriverKind.make("claudeAgent")]: claude.adapter,
+    [ProviderDriverKind.make("cursor")]: cursor.adapter,
   });
 
   const providerAdapterLayer = Layer.succeed(ProviderAdapterRegistry, registry);
@@ -302,8 +304,8 @@ it.effect("ProviderServiceLive rejects new sessions for disabled providers", () 
     const codex = makeFakeCodexAdapter();
     const claude = makeFakeCodexAdapter(CLAUDE_AGENT_DRIVER);
     const registry = makeAdapterRegistryMock({
-      codex: codex.adapter,
-      claudeAgent: claude.adapter,
+      [ProviderDriverKind.make("codex")]: codex.adapter,
+      [ProviderDriverKind.make("claudeAgent")]: claude.adapter,
     });
     const providerAdapterLayer = Layer.succeed(ProviderAdapterRegistry, registry);
     const serverSettingsLayer = ServerSettingsService.layerTest({
@@ -371,7 +373,6 @@ it.effect("ProviderServiceLive rejects new sessions for disabled custom instance
             })
           : Effect.fail(unsupported()),
       listInstances: () => Effect.succeed([instanceId]),
-      getByProvider: () => Effect.succeed(codex.adapter),
       listProviders: () => Effect.succeed([CODEX_DRIVER] as const),
       streamChanges: Stream.empty,
       subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), (pubsub) =>
@@ -416,7 +417,9 @@ it.effect("ProviderServiceLive writes canonical events to the emitting thread se
     const codex = makeFakeCodexAdapter();
     const canonicalEvents: ProviderRuntimeEvent[] = [];
     const canonicalThreadIds: Array<string | null> = [];
-    const registry = makeAdapterRegistryMock({ codex: codex.adapter });
+    const registry = makeAdapterRegistryMock({
+      [ProviderDriverKind.make("codex")]: codex.adapter,
+    });
     const runtimeRepositoryLayer = ProviderSessionRuntimeRepositoryLive.pipe(
       Layer.provide(SqlitePersistenceMemory),
     );
@@ -467,7 +470,9 @@ it.effect("ProviderServiceLive keeps persisted resumable sessions on startup", (
     const dbPath = path.join(tempDir, "orchestration.sqlite");
 
     const codex = makeFakeCodexAdapter();
-    const registry = makeAdapterRegistryMock({ codex: codex.adapter });
+    const registry = makeAdapterRegistryMock({
+      [ProviderDriverKind.make("codex")]: codex.adapter,
+    });
 
     const persistenceLayer = makeSqlitePersistenceLive(dbPath);
     const runtimeRepositoryLayer = ProviderSessionRuntimeRepositoryLive.pipe(
@@ -504,7 +509,9 @@ it.effect("ProviderServiceLive keeps persisted resumable sessions on startup", (
 
     const runtime = yield* Effect.gen(function* () {
       const repository = yield* ProviderSessionRuntimeRepository;
-      return yield* repository.getByThreadId({ threadId: asThreadId("thread-stale") });
+      return yield* repository.getByThreadId({
+        threadId: asThreadId("thread-stale"),
+      });
     }).pipe(Effect.provide(runtimeRepositoryLayer));
     assert.equal(Option.isSome(runtime), true);
 
@@ -534,7 +541,9 @@ it.effect(
       );
 
       const firstCodex = makeFakeCodexAdapter();
-      const firstRegistry = makeAdapterRegistryMock({ codex: firstCodex.adapter });
+      const firstRegistry = makeAdapterRegistryMock({
+        [ProviderDriverKind.make("codex")]: firstCodex.adapter,
+      });
 
       const firstDirectoryLayer = ProviderSessionDirectoryLive.pipe(
         Layer.provide(runtimeRepositoryLayer),
@@ -574,7 +583,9 @@ it.effect(
 
       const persistedAfterStopAll = yield* Effect.gen(function* () {
         const repository = yield* ProviderSessionRuntimeRepository;
-        return yield* repository.getByThreadId({ threadId: startedSession.threadId });
+        return yield* repository.getByThreadId({
+          threadId: startedSession.threadId,
+        });
       }).pipe(Effect.provide(runtimeRepositoryLayer));
       assert.equal(Option.isSome(persistedAfterStopAll), true);
       if (Option.isSome(persistedAfterStopAll)) {
@@ -583,7 +594,9 @@ it.effect(
       }
 
       const secondCodex = makeFakeCodexAdapter();
-      const secondRegistry = makeAdapterRegistryMock({ codex: secondCodex.adapter });
+      const secondRegistry = makeAdapterRegistryMock({
+        [ProviderDriverKind.make("codex")]: secondCodex.adapter,
+      });
       const secondDirectoryLayer = ProviderSessionDirectoryLive.pipe(
         Layer.provide(runtimeRepositoryLayer),
       );
@@ -1083,7 +1096,9 @@ routing.layer("ProviderServiceLive routing", (it) => {
       );
 
       const firstClaude = makeFakeCodexAdapter(CLAUDE_AGENT_DRIVER);
-      const firstRegistry = makeAdapterRegistryMock({ claudeAgent: firstClaude.adapter });
+      const firstRegistry = makeAdapterRegistryMock({
+        [ProviderDriverKind.make("claudeAgent")]: firstClaude.adapter,
+      });
       const firstDirectoryLayer = ProviderSessionDirectoryLive.pipe(
         Layer.provide(runtimeRepositoryLayer),
       );
@@ -1112,7 +1127,9 @@ routing.layer("ProviderServiceLive routing", (it) => {
       }).pipe(Effect.provide(firstProviderLayer));
 
       const secondClaude = makeFakeCodexAdapter(CLAUDE_AGENT_DRIVER);
-      const secondRegistry = makeAdapterRegistryMock({ claudeAgent: secondClaude.adapter });
+      const secondRegistry = makeAdapterRegistryMock({
+        [ProviderDriverKind.make("claudeAgent")]: secondClaude.adapter,
+      });
       const secondDirectoryLayer = ProviderSessionDirectoryLive.pipe(
         Layer.provide(runtimeRepositoryLayer),
       );
@@ -1169,7 +1186,9 @@ routing.layer("ProviderServiceLive routing", (it) => {
         );
 
         const firstClaude = makeFakeCodexAdapter(CLAUDE_AGENT_DRIVER);
-        const firstRegistry = makeAdapterRegistryMock({ claudeAgent: firstClaude.adapter });
+        const firstRegistry = makeAdapterRegistryMock({
+          [ProviderDriverKind.make("claudeAgent")]: firstClaude.adapter,
+        });
         const firstDirectoryLayer = ProviderSessionDirectoryLive.pipe(
           Layer.provide(runtimeRepositoryLayer),
         );
@@ -1193,7 +1212,9 @@ routing.layer("ProviderServiceLive routing", (it) => {
         }).pipe(Effect.provide(firstProviderLayer));
 
         const secondClaude = makeFakeCodexAdapter(CLAUDE_AGENT_DRIVER);
-        const secondRegistry = makeAdapterRegistryMock({ claudeAgent: secondClaude.adapter });
+        const secondRegistry = makeAdapterRegistryMock({
+          [ProviderDriverKind.make("claudeAgent")]: secondClaude.adapter,
+        });
         const secondDirectoryLayer = ProviderSessionDirectoryLive.pipe(
           Layer.provide(runtimeRepositoryLayer),
         );
