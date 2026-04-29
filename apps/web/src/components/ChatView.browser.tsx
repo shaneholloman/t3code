@@ -9,7 +9,7 @@ import {
   type MessageId,
   type OrchestrationReadModel,
   type ProjectId,
-  ProviderDriverId,
+  ProviderDriverKind,
   ProviderInstanceId,
   type ServerConfig,
   type ServerLifecycleWelcomePayload,
@@ -169,8 +169,7 @@ function createBaseServerConfig(): ServerConfig {
     issues: [],
     providers: [
       {
-        provider: "codex",
-        driver: ProviderDriverId.make("codex"),
+        driver: ProviderDriverKind.make("codex"),
         instanceId: ProviderInstanceId.make("codex"),
         enabled: true,
         installed: true,
@@ -2457,8 +2456,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           providers: [
             ...nextFixture.serverConfig.providers,
             {
-              provider: "claudeAgent",
-              driver: ProviderDriverId.make("claudeAgent"),
+              driver: ProviderDriverKind.make("claudeAgent"),
               instanceId: ProviderInstanceId.make("claudeAgent"),
               enabled: true,
               installed: true,
@@ -2478,8 +2476,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
               skills: [],
             },
             {
-              provider: "claudeAgent",
-              driver: ProviderDriverId.make("claudeAgent"),
+              driver: ProviderDriverKind.make("claudeAgent"),
               instanceId: openRouterInstanceId,
               displayName: "Claude OpenRouter",
               enabled: true,
@@ -2505,7 +2502,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
             providerInstances: {
               ...nextFixture.serverConfig.settings.providerInstances,
               [openRouterInstanceId]: {
-                driver: ProviderDriverId.make("claudeAgent"),
+                driver: ProviderDriverKind.make("claudeAgent"),
                 displayName: "Claude OpenRouter",
                 config: { customModels: ["openai/gpt-5.5"] },
               },
@@ -5786,7 +5783,6 @@ describe("ChatView timeline estimator parity (full app)", () => {
           providers: [
             {
               ...nextFixture.serverConfig.providers[0]!,
-              provider: "codex",
               models: [
                 {
                   slug: "gpt-5.1-codex-max",

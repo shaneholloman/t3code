@@ -1,4 +1,8 @@
-import { DEFAULT_SERVER_SETTINGS, ProviderDriverId, ProviderInstanceId } from "@t3tools/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  ProviderDriverKind,
+  ProviderInstanceId,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
 import { createModelSelection } from "./model.ts";
 import {
@@ -151,7 +155,7 @@ describe("serverSettings helpers", () => {
       ...DEFAULT_SERVER_SETTINGS,
       providerInstances: {
         [codexId]: {
-          driver: ProviderDriverId.make("codex"),
+          driver: ProviderDriverKind.make("codex"),
           displayName: "Codex Work",
           accentColor: "#7c3aed",
           enabled: true,
@@ -164,7 +168,7 @@ describe("serverSettings helpers", () => {
       applyServerSettingsPatch(current, {
         providerInstances: {
           [codexId]: {
-            driver: ProviderDriverId.make("codex"),
+            driver: ProviderDriverKind.make("codex"),
             displayName: "Codex Work",
             enabled: true,
             config: { homePath: "~/.codex" },
@@ -172,7 +176,7 @@ describe("serverSettings helpers", () => {
         },
       }).providerInstances[codexId],
     ).toEqual({
-      driver: ProviderDriverId.make("codex"),
+      driver: ProviderDriverKind.make("codex"),
       displayName: "Codex Work",
       enabled: true,
       config: { homePath: "~/.codex" },

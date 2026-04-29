@@ -8,30 +8,18 @@
  * produces shadow snapshots that satisfy `ServerProvider`'s wire shape
  * while signalling unavailability.
  *
- * The trade-off baked in: `ServerProvider.provider` is the legacy closed
- * `ProviderKind` literal union, but the real driver id may be anything
- * (`ollama`, `gemini-fork`, …). Rather than widen `provider` and break
- * every legacy consumer at once, we pin it to a placeholder built-in
- * (`codex`) and put the real driver in `driver`. Consumers that know
- * about instance-aware snapshots branch on `driver`; legacy consumers
- * still see a well-formed payload.
- *
  * @module unavailableProviderSnapshot
  */
-import { ProviderDriverId, type ProviderInstanceId, type ServerProvider } from "@t3tools/contracts";
+import {
+  ProviderDriverKind,
+  type ProviderInstanceId,
+  type ServerProvider,
+} from "@t3tools/contracts";
 
 import { buildServerProvider } from "./providerSnapshot.ts";
 
-/**
- * Placeholder `ProviderKind` used when the real driver is unknown to this
- * build. Chosen as the canonical built-in so legacy consumers — which
- * still branch on `provider` — never see a value they can't handle.
- * Consumers branching on driver behavior should read `snapshot.driver`.
- */
-const UNAVAILABLE_PROVIDER_PLACEHOLDER = "codex" as const;
-
 export interface UnavailableProviderSnapshotInput {
-  readonly driverId: ProviderDriverId | string;
+  readonly driverKind: ProviderDriverKind | string;
   readonly instanceId: ProviderInstanceId;
   readonly displayName?: string | undefined;
   readonly accentColor?: string | undefined;
@@ -53,10 +41,9 @@ export function buildUnavailableProviderSnapshot(
   input: UnavailableProviderSnapshotInput,
 ): ServerProvider {
   const checkedAt = input.checkedAt ?? new Date().toISOString();
-  const displayName = input.displayName?.trim() || (input.driverId as string);
+  const displayName = input.displayName?.trim() || (input.driverKind as string);
 
   const base = buildServerProvider({
-    provider: UNAVAILABLE_PROVIDER_PLACEHOLDER,
     presentation: { displayName },
     enabled: false,
     checkedAt,
@@ -76,7 +63,9 @@ export function buildUnavailableProviderSnapshot(
     instanceId: input.instanceId,
     ...(input.accentColor ? { accentColor: input.accentColor } : {}),
     driver:
-      typeof input.driverId === "string" ? ProviderDriverId.make(input.driverId) : input.driverId,
+      typeof input.driverKind === "string"
+        ? ProviderDriverKind.make(input.driverKind)
+        : input.driverKind,
     availability: "unavailable",
     unavailableReason: input.reason,
   };

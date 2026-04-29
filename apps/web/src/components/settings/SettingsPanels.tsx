@@ -4,12 +4,12 @@ import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import {
   defaultInstanceIdForDriver,
   type DesktopUpdateChannel,
-  isBuiltInDriverId,
-  ProviderDriverId,
+  isBuiltInDriverKind,
+  ProviderDriverKind,
   type ProviderInstanceConfig,
   type ProviderInstanceId,
   type ScopedThreadRef,
-  type ProviderKind,
+  type BuiltInDriverKind,
 } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime";
 import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
@@ -98,7 +98,7 @@ const TIMESTAMP_FORMAT_LABELS = {
 } as const;
 
 type InstallProviderSettings = {
-  provider: ProviderKind;
+  provider: BuiltInDriverKind;
   title: string;
   badgeLabel?: string;
   binaryPlaceholder: string;
@@ -479,7 +479,7 @@ export function GeneralSettingsPanel() {
   // `Record<string, boolean>` so we don't need to preseed an entry for every
   // configured instance — an absent key reads as collapsed. Default-slot
   // rows share this state: their id is the driver slug
-  // (`defaultInstanceIdForDriver(driver)`), which is also `ProviderKind` at
+  // (`defaultInstanceIdForDriver(driver)`), which is also `BuiltInDriverKind` at
   // runtime, so a pre-existing open key for e.g. "codex" persists across
   // the legacy/unified render swap.
   const [openInstanceDetails, setOpenInstanceDetails] = useState<Record<string, boolean>>({});
@@ -506,9 +506,11 @@ export function GeneralSettingsPanel() {
   const visibleProviderSettings = PROVIDER_SETTINGS.filter(
     (providerSettings) =>
       providerSettings.provider !== "cursor" ||
-      serverProviders.some((provider) => provider.provider === "cursor"),
+      serverProviders.some(
+        (provider) =>
+          provider.instanceId === defaultInstanceIdForDriver(ProviderDriverKind.make("cursor")),
+      ),
   );
-  const codexHomePath = settings.providers.codex.homePath;
   const logsDirectoryPath = observability?.logsDirectoryPath ?? null;
   const diagnosticsDescription = (() => {
     const exports: string[] = [];
@@ -532,9 +534,10 @@ export function GeneralSettingsPanel() {
   const textGenInstanceEntry = gitModelInstanceEntries.find(
     (entry) => entry.instanceId === textGenInstanceId,
   );
-  const textGenProvider: ProviderKind =
-    textGenInstanceEntry?.driverKind ??
-    (isBuiltInDriverId(textGenInstanceId) ? textGenInstanceId : "codex");
+  const textGenProvider: BuiltInDriverKind =
+    (textGenInstanceEntry && isBuiltInDriverKind(textGenInstanceEntry.driverKind)
+      ? textGenInstanceEntry.driverKind
+      : undefined) ?? (isBuiltInDriverKind(textGenInstanceId) ? textGenInstanceId : "codex");
   const gitModelOptionsByInstance = getCustomModelOptionsByInstance(
     settings,
     serverProviders,
@@ -615,7 +618,7 @@ export function GeneralSettingsPanel() {
   interface InstanceRow {
     readonly instanceId: ProviderInstanceId;
     readonly instance: ProviderInstanceConfig;
-    readonly driver: ProviderDriverId;
+    readonly driver: ProviderDriverKind;
     /** True for the slot whose id is `defaultInstanceIdForDriver(driver)`. */
     readonly isDefault: boolean;
     /**
@@ -639,17 +642,17 @@ export function GeneralSettingsPanel() {
 
   const defaultSlotIdsBySource = new Set<string>(
     visibleProviderSettings.map((providerSettings) =>
-      String(defaultInstanceIdForDriver(ProviderDriverId.make(providerSettings.provider))),
+      String(defaultInstanceIdForDriver(ProviderDriverKind.make(providerSettings.provider))),
     ),
   );
 
   const rows: InstanceRow[] = [];
-  const visibleDriverKinds = new Set<ProviderKind>(
+  const visibleDriverKinds = new Set<BuiltInDriverKind>(
     visibleProviderSettings.map((providerSettings) => providerSettings.provider),
   );
 
   for (const providerSettings of visibleProviderSettings) {
-    const driver = ProviderDriverId.make(providerSettings.provider);
+    const driver = ProviderDriverKind.make(providerSettings.provider);
     const defaultInstanceId = defaultInstanceIdForDriver(driver);
     // Prefer an explicit `providerInstances[defaultId]` entry when one
     // exists (every edit via this UI promotes the default slot into
@@ -686,7 +689,7 @@ export function GeneralSettingsPanel() {
   // authored a Cursor instance anyway, or fork drivers not shipped by
   // this build). Preserve insertion order within each driver.
   for (const [driver, list] of instancesByDriver) {
-    if (visibleDriverKinds.has(driver as ProviderKind)) continue;
+    if (visibleDriverKinds.has(driver as BuiltInDriverKind)) continue;
     for (const [id, instance] of list) {
       const isDefaultSlot = defaultSlotIdsBySource.has(String(id));
       rows.push({
@@ -732,8 +735,8 @@ export function GeneralSettingsPanel() {
    * the new map, so hydration re-synthesizes a clean envelope on next
    * load. Safe to call on drivers that have never been edited.
    */
-  const resetDefaultInstance = (driverKind: ProviderKind) => {
-    const defaultInstanceId = defaultInstanceIdForDriver(ProviderDriverId.make(driverKind));
+  const resetDefaultInstance = (driverKind: BuiltInDriverKind) => {
+    const defaultInstanceId = defaultInstanceIdForDriver(ProviderDriverKind.make(driverKind));
     const { [defaultInstanceId]: _removed, ...restInstances } = settings.providerInstances ?? {};
     updateSettings({
       providers: {
@@ -1147,10 +1150,10 @@ export function GeneralSettingsPanel() {
           );
           const resetLabel = driverOption?.label ?? String(row.driver);
           const headerAction =
-            row.isDefault && row.isDirty && isBuiltInDriverId(row.driver) ? (
+            row.isDefault && row.isDirty && isBuiltInDriverKind(row.driver) ? (
               <SettingResetButton
                 label={`${resetLabel} provider settings`}
-                onClick={() => resetDefaultInstance(row.driver as ProviderKind)}
+                onClick={() => resetDefaultInstance(row.driver as BuiltInDriverKind)}
               />
             ) : null;
           return (

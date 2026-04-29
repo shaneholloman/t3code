@@ -36,11 +36,11 @@ export const ClientSettingsSchema = Schema.Struct({
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   diffWordWrap: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
-  // Model favorites. Historically keyed by closed `ProviderKind`, now
+  // Model favorites. Historically keyed by closed `BuiltInDriverKind`, now
   // widened to `ProviderInstanceId` so users can favorite a specific model
   // on a custom provider instance (e.g. "Codex Personal · gpt-5") without
   // the UI collapsing it into the same bucket as the default Codex. The
-  // widening is backward-compatible by construction: every `ProviderKind`
+  // widening is backward-compatible by construction: every `BuiltInDriverKind`
   // literal ("codex", "claudeAgent", …) satisfies the `ProviderInstanceId`
   // slug schema, so previously-persisted favorites decode unchanged and
   // continue to point at the default instance for their kind (because

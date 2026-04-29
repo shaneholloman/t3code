@@ -1,5 +1,5 @@
 import {
-  type ProviderKind,
+  type BuiltInDriverKind,
   type ProviderOptionSelection,
   type ScopedThreadRef,
   type ServerProviderModel,
@@ -17,7 +17,7 @@ import { getProviderModelCapabilities } from "../../providerModels";
 import { shouldRenderTraitsControls, TraitsMenuContent, TraitsPicker } from "./TraitsPicker";
 
 export type ComposerProviderStateInput = {
-  provider: ProviderKind;
+  provider: BuiltInDriverKind;
   model: string;
   models: ReadonlyArray<ServerProviderModel>;
   prompt: string;
@@ -25,7 +25,7 @@ export type ComposerProviderStateInput = {
 };
 
 export type ComposerProviderState = {
-  provider: ProviderKind;
+  provider: BuiltInDriverKind;
   promptEffort: string | null;
   modelOptionsForDispatch: ReadonlyArray<ProviderOptionSelection> | undefined;
   composerFrameClassName?: string;
@@ -34,7 +34,7 @@ export type ComposerProviderState = {
 };
 
 type TraitsRenderInput = {
-  provider: ProviderKind;
+  provider: BuiltInDriverKind;
   threadRef?: ScopedThreadRef;
   draftId?: DraftId;
   model: string;

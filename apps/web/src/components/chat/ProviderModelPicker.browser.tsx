@@ -1,7 +1,7 @@
 import {
-  ProviderDriverId,
+  ProviderDriverKind,
   ProviderInstanceId,
-  type ProviderKind,
+  type BuiltInDriverKind,
   type ServerProvider,
 } from "@t3tools/contracts";
 import { EnvironmentId } from "@t3tools/contracts";
@@ -103,8 +103,7 @@ function booleanDescriptor(id: string, label: string) {
 
 const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
   {
-    provider: "codex",
-    driver: ProviderDriverId.make("codex"),
+    driver: ProviderDriverKind.make("codex"),
     instanceId: ProviderInstanceId.make("codex"),
     displayName: "Codex",
     enabled: true,
@@ -149,8 +148,7 @@ const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
     ],
   },
   {
-    provider: "claudeAgent",
-    driver: ProviderDriverId.make("claudeAgent"),
+    driver: ProviderDriverKind.make("claudeAgent"),
     instanceId: ProviderInstanceId.make("claudeAgent"),
     displayName: "Claude",
     enabled: true,
@@ -215,8 +213,7 @@ const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
 
 function buildCodexProvider(models: ServerProvider["models"]): ServerProvider {
   return {
-    provider: "codex",
-    driver: ProviderDriverId.make("codex"),
+    driver: ProviderDriverKind.make("codex"),
     instanceId: ProviderInstanceId.make("codex"),
     displayName: "Codex",
     enabled: true,
@@ -233,8 +230,7 @@ function buildCodexProvider(models: ServerProvider["models"]): ServerProvider {
 
 function buildOpenCodeProvider(models: ServerProvider["models"]): ServerProvider {
   return {
-    provider: "opencode",
-    driver: ProviderDriverId.make("opencode"),
+    driver: ProviderDriverKind.make("opencode"),
     instanceId: ProviderInstanceId.make("opencode"),
     enabled: true,
     installed: true,
@@ -249,10 +245,10 @@ function buildOpenCodeProvider(models: ServerProvider["models"]): ServerProvider
 }
 
 async function mountPicker(props: {
-  provider: ProviderKind;
+  provider?: BuiltInDriverKind;
   activeInstanceId?: ProviderInstanceId;
   model: string;
-  lockedProvider: ProviderKind | null;
+  lockedProvider: BuiltInDriverKind | null;
   lockedContinuationGroupKey?: string | null;
   providers?: ReadonlyArray<ServerProvider>;
   triggerVariant?: "ghost" | "outline";
@@ -264,8 +260,8 @@ async function mountPicker(props: {
   const instanceEntries = sortProviderInstanceEntries(deriveProviderInstanceEntries(providers));
   // The legacy test shape passes a driver kind; translate to the default
   // instance id for that kind (they're the same string by design).
-  const activeInstanceId =
-    props.activeInstanceId ?? (props.provider as unknown as ProviderInstanceId);
+  const provider = props.provider ?? "codex";
+  const activeInstanceId = props.activeInstanceId ?? (provider as unknown as ProviderInstanceId);
   const modelOptionsByInstance = getCustomModelOptionsByInstance(
     DEFAULT_UNIFIED_SETTINGS,
     providers,
@@ -335,7 +331,6 @@ describe("ProviderModelPicker", () => {
 
   it("shows provider sidebar in unlocked mode", async () => {
     const mounted = await mountPicker({
-      provider: "claudeAgent",
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -356,7 +351,6 @@ describe("ProviderModelPicker", () => {
 
   it("shows favorites first in the provider sidebar", async () => {
     const mounted = await mountPicker({
-      provider: "claudeAgent",
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -378,7 +372,6 @@ describe("ProviderModelPicker", () => {
 
   it("filters models by selected provider in sidebar", async () => {
     const mounted = await mountPicker({
-      provider: "claudeAgent",
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -412,7 +405,6 @@ describe("ProviderModelPicker", () => {
 
   it("focuses the search input after selecting a sidebar provider", async () => {
     const mounted = await mountPicker({
-      provider: "claudeAgent",
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -450,7 +442,6 @@ describe("ProviderModelPicker", () => {
     );
 
     const mounted = await mountPicker({
-      provider: "claudeAgent",
       model: "claude-opus-4-6",
       lockedProvider: "claudeAgent",
     });
@@ -524,7 +515,6 @@ describe("ProviderModelPicker", () => {
       TEST_PROVIDERS[1]!,
     ];
     const mounted = await mountPicker({
-      provider: "codex",
       activeInstanceId: "codex" as ProviderInstanceId,
       model: "gpt-work",
       lockedProvider: "codex",
@@ -624,7 +614,6 @@ describe("ProviderModelPicker", () => {
       ]),
     ];
     const mounted = await mountPicker({
-      provider: "opencode",
       model: "github-copilot/claude-opus-4.5",
       lockedProvider: "opencode",
       providers,
@@ -651,7 +640,6 @@ describe("ProviderModelPicker", () => {
 
   it("searches models by name in flat list", async () => {
     const mounted = await mountPicker({
-      provider: "claudeAgent",
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -681,7 +669,6 @@ describe("ProviderModelPicker", () => {
 
   it("supports arrow-key navigation in the model picker", async () => {
     const mounted = await mountPicker({
-      provider: "claudeAgent",
       model: "claude-opus-4-6",
       lockedProvider: "claudeAgent",
     });
@@ -720,7 +707,6 @@ describe("ProviderModelPicker", () => {
 
   it("hides the provider sidebar while searching", async () => {
     const mounted = await mountPicker({
-      provider: "claudeAgent",
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -744,7 +730,6 @@ describe("ProviderModelPicker", () => {
 
   it("closes the picker when escape is pressed in search", async () => {
     const mounted = await mountPicker({
-      provider: "claudeAgent",
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -772,7 +757,6 @@ describe("ProviderModelPicker", () => {
 
   it("searches models by provider name", async () => {
     const mounted = await mountPicker({
-      provider: "claudeAgent",
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -838,7 +822,6 @@ describe("ProviderModelPicker", () => {
       ]),
     ];
     const mounted = await mountPicker({
-      provider: "opencode",
       model: "github-copilot/claude-opus-4.7",
       lockedProvider: null,
       providers,
@@ -900,7 +883,6 @@ describe("ProviderModelPicker", () => {
       },
     ];
     const mounted = await mountPicker({
-      provider: "opencode",
       model: "github-copilot/claude-opus-4.7",
       lockedProvider: null,
       providers,
@@ -925,7 +907,6 @@ describe("ProviderModelPicker", () => {
     localStorage.removeItem("t3code:client-settings:v1");
 
     const mounted = await mountPicker({
-      provider: "claudeAgent",
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -970,7 +951,6 @@ describe("ProviderModelPicker", () => {
     localStorage.removeItem("t3code:client-settings:v1");
 
     const mounted = await mountPicker({
-      provider: "claudeAgent",
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -1010,7 +990,6 @@ describe("ProviderModelPicker", () => {
     );
 
     const mounted = await mountPicker({
-      provider: "codex",
       model: "gpt-5-codex",
       lockedProvider: null,
     });
@@ -1030,7 +1009,6 @@ describe("ProviderModelPicker", () => {
 
   it("dispatches callback with correct provider and model when selected", async () => {
     const mounted = await mountPicker({
-      provider: "claudeAgent",
       model: "claude-opus-4-6",
       lockedProvider: "claudeAgent",
     });
@@ -1115,7 +1093,6 @@ describe("ProviderModelPicker", () => {
     ];
 
     const hidden = await mountPicker({
-      provider: "codex",
       model: "gpt-5.3-codex",
       lockedProvider: null,
       providers: providersWithoutSpark,
@@ -1134,7 +1111,6 @@ describe("ProviderModelPicker", () => {
     }
 
     const visible = await mountPicker({
-      provider: "codex",
       model: "gpt-5.3-codex",
       lockedProvider: null,
       providers: providersWithSpark,
@@ -1154,7 +1130,7 @@ describe("ProviderModelPicker", () => {
   it("shows disabled providers grayed out in sidebar", async () => {
     const disabledProviders = TEST_PROVIDERS.slice();
     const claudeIndex = disabledProviders.findIndex(
-      (provider) => provider.provider === "claudeAgent",
+      (provider) => provider.instanceId === ProviderInstanceId.make("claudeAgent"),
     );
     if (claudeIndex >= 0) {
       const claudeProvider = disabledProviders[claudeIndex]!;
@@ -1166,7 +1142,6 @@ describe("ProviderModelPicker", () => {
     }
 
     const mounted = await mountPicker({
-      provider: "codex",
       model: "gpt-5-codex",
       lockedProvider: null,
       providers: disabledProviders,
@@ -1188,7 +1163,6 @@ describe("ProviderModelPicker", () => {
 
   it("accepts outline trigger styling", async () => {
     const mounted = await mountPicker({
-      provider: "codex",
       model: "gpt-5-codex",
       lockedProvider: null,
       triggerVariant: "outline",

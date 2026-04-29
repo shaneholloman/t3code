@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { ProviderDriverId, type CodexSettings } from "@t3tools/contracts";
+import { ProviderDriverKind, type CodexSettings } from "@t3tools/contracts";
 import { Effect, Schema } from "effect";
 
 import { expandHomePath } from "../../pathExpansion.ts";
@@ -191,7 +191,7 @@ export const materializeCodexShadowHome = Effect.fn("materializeCodexShadowHome"
 export function codexContinuationIdentity(config: CodexSettings) {
   const layout = resolveCodexHomeLayout(config);
   return {
-    driverId: ProviderDriverId.make("codex"),
+    driverKind: ProviderDriverKind.make("codex"),
     continuationKey: layout.continuationKey,
   };
 }

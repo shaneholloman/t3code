@@ -11,7 +11,7 @@ import {
 import { KeybindingRule, ResolvedKeybindingsConfig } from "./keybindings.ts";
 import { EditorId } from "./editor.ts";
 import { ModelCapabilities } from "./model.ts";
-import { ProviderDriverId, ProviderInstanceId, ProviderKind } from "./providerInstance.ts";
+import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 import { ServerSettings } from "./settings.ts";
 
 const KeybindingsMalformedConfigIssue = Schema.Struct({
@@ -110,21 +110,12 @@ export const ServerProviderContinuation = Schema.Struct({
 export type ServerProviderContinuation = typeof ServerProviderContinuation.Type;
 
 export const ServerProvider = Schema.Struct({
-  provider: ProviderKind,
-  // Routing key for the configured instance this snapshot represents.
-  // Optional only while decoding legacy cache/internal pre-registry
-  // snapshots. Public provider snapshots are stamped by
-  // `ProviderInstanceRegistry` before they are sent over the wire.
-  // Multiple snapshots may share the same `provider` (multiple instances
-  // of the same driver) and disambiguate by `instanceId`.
-  instanceId: Schema.optional(ProviderInstanceId),
-  // Open driver-id slug. Always present on instance-aware snapshots; for
-  // built-in drivers it equals `provider`. For unavailable snapshots
-  // (driver not installed in this build) `provider` is forced to a
-  // placeholder built-in for wire-shape compatibility while `driver`
-  // carries the real fork id — consumers branching on driver behavior
-  // should prefer `driver`.
-  driver: Schema.optional(ProviderDriverId),
+  // Routing key for the configured instance this snapshot represents. This
+  // is the only stable identity consumers may use for provider routing.
+  instanceId: ProviderInstanceId,
+  // Open driver kind slug that selects the implementation handling this
+  // instance. It is metadata/capability context, not a routing key.
+  driver: ProviderDriverKind,
   displayName: Schema.optional(TrimmedNonEmptyString),
   accentColor: Schema.optional(TrimmedNonEmptyString),
   badgeLabel: Schema.optional(TrimmedNonEmptyString),

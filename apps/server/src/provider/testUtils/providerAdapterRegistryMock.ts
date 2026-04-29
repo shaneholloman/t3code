@@ -15,9 +15,9 @@
  */
 import {
   defaultInstanceIdForDriver,
-  ProviderDriverId,
+  ProviderDriverKind,
   type ProviderInstanceId,
-  type ProviderKind,
+  type BuiltInDriverKind,
 } from "@t3tools/contracts";
 import { Effect, PubSub, Stream } from "effect";
 
@@ -26,7 +26,7 @@ import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
 import type { ProviderAdapterRegistryShape } from "../Services/ProviderAdapterRegistry.ts";
 
 export type KindAdapterMap = Partial<
-  Record<ProviderKind, ProviderAdapterShape<ProviderAdapterError>>
+  Record<BuiltInDriverKind, ProviderAdapterShape<ProviderAdapterError>>
 >;
 
 /**
@@ -39,8 +39,8 @@ export const makeAdapterRegistryMock = (adapters: KindAdapterMap): ProviderAdapt
   const byInstanceId = new Map<ProviderInstanceId, ProviderAdapterShape<ProviderAdapterError>>();
   for (const [kind, adapter] of Object.entries(adapters)) {
     if (!adapter) continue;
-    const driverId = ProviderDriverId.make(kind);
-    byInstanceId.set(defaultInstanceIdForDriver(driverId), adapter);
+    const driverKind = ProviderDriverKind.make(kind);
+    byInstanceId.set(defaultInstanceIdForDriver(driverKind), adapter);
   }
 
   const getByInstance: ProviderAdapterRegistryShape["getByInstance"] = (instanceId) => {
@@ -49,7 +49,7 @@ export const makeAdapterRegistryMock = (adapters: KindAdapterMap): ProviderAdapt
       ? Effect.succeed(adapter)
       : Effect.fail(
           new ProviderUnsupportedError({
-            provider: instanceId as unknown as ProviderKind,
+            provider: instanceId as unknown as BuiltInDriverKind,
           }),
         );
   };
@@ -68,17 +68,17 @@ export const makeAdapterRegistryMock = (adapters: KindAdapterMap): ProviderAdapt
       if (!adapter) {
         return Effect.fail(
           new ProviderUnsupportedError({
-            provider: instanceId as unknown as ProviderKind,
+            provider: instanceId as unknown as BuiltInDriverKind,
           }),
         );
       }
       return Effect.succeed({
         instanceId,
-        driverId: ProviderDriverId.make(adapter.provider),
+        driverKind: ProviderDriverKind.make(adapter.provider),
         displayName: undefined,
         enabled: true,
         continuationIdentity: {
-          driverId: ProviderDriverId.make(adapter.provider),
+          driverKind: ProviderDriverKind.make(adapter.provider),
           continuationKey: `${adapter.provider}:instance:${instanceId}`,
         },
       });
@@ -89,7 +89,7 @@ export const makeAdapterRegistryMock = (adapters: KindAdapterMap): ProviderAdapt
       Effect.succeed(
         Object.entries(adapters)
           .filter(([, adapter]) => adapter !== undefined)
-          .map(([kind]) => kind as ProviderKind),
+          .map(([kind]) => kind as BuiltInDriverKind),
       ),
     // Static test fixtures don't reload; an empty stream is enough to
     // satisfy the shape. Tests exercising hot-reload build their own

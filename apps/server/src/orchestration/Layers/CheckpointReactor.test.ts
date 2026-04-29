@@ -4,11 +4,11 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 
 import {
-  ProviderKind,
+  BuiltInDriverKind,
   ProviderRuntimeEvent,
   ProviderSession,
   ProviderInstanceId,
-  ProviderDriverId,
+  ProviderDriverKind,
 } from "@t3tools/contracts";
 import {
   CommandId,
@@ -56,7 +56,7 @@ const asTurnId = (value: string): TurnId => TurnId.make(value);
 type LegacyProviderRuntimeEvent = {
   readonly type: string;
   readonly eventId: EventId;
-  readonly provider: ProviderKind;
+  readonly provider: BuiltInDriverKind;
   readonly createdAt: string;
   readonly threadId: ThreadId;
   readonly turnId?: string | undefined;
@@ -106,11 +106,11 @@ function createProviderServiceHarness(
     getInstanceInfo: (instanceId) =>
       Effect.succeed({
         instanceId,
-        driverId: ProviderDriverId.make(providerName),
+        driverKind: ProviderDriverKind.make(providerName),
         displayName: undefined,
         enabled: true,
         continuationIdentity: {
-          driverId: ProviderDriverId.make(providerName),
+          driverKind: ProviderDriverKind.make(providerName),
           continuationKey: `${providerName}:instance:${instanceId}`,
         },
       }),
@@ -260,7 +260,7 @@ describe("CheckpointReactor", () => {
     readonly projectWorkspaceRoot?: string;
     readonly threadWorktreePath?: string | null;
     readonly providerSessionCwd?: string;
-    readonly providerName?: ProviderKind;
+    readonly providerName?: BuiltInDriverKind;
     readonly gitStatusRefreshCalls?: Array<string>;
   }) {
     const cwd = createGitRepository();

@@ -1,8 +1,8 @@
-import { type ServerProvider } from "@t3tools/contracts";
+import { isBuiltInDriverKind, type ServerProvider } from "@t3tools/contracts";
 import { memo } from "react";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { CircleAlertIcon } from "lucide-react";
-import { formatProviderKindLabel } from "../../providerModels";
+import { formatBuiltInDriverKindLabel } from "../../providerModels";
 
 export const ProviderStatusBanner = memo(function ProviderStatusBanner({
   status,
@@ -13,7 +13,11 @@ export const ProviderStatusBanner = memo(function ProviderStatusBanner({
     return null;
   }
 
-  const providerLabel = status.displayName?.trim() || formatProviderKindLabel(status.provider);
+  const providerLabel =
+    status.displayName?.trim() ||
+    (isBuiltInDriverKind(status.driver)
+      ? formatBuiltInDriverKindLabel(status.driver)
+      : status.driver);
   const defaultMessage =
     status.status === "error"
       ? `${providerLabel} provider is unavailable.`

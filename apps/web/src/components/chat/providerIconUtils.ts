@@ -1,8 +1,8 @@
-import { type ProviderKind } from "@t3tools/contracts";
+import { type BuiltInDriverKind } from "@t3tools/contracts";
 import { ClaudeAI, CursorIcon, Icon, OpenAI, OpenCodeIcon } from "../Icons";
 import { PROVIDER_OPTIONS } from "../../session-logic";
 
-export const PROVIDER_ICON_BY_PROVIDER: Record<ProviderKind, Icon> = {
+export const PROVIDER_ICON_BY_PROVIDER: Record<BuiltInDriverKind, Icon> = {
   codex: OpenAI,
   claudeAgent: ClaudeAI,
   opencode: OpenCodeIcon,
@@ -10,7 +10,7 @@ export const PROVIDER_ICON_BY_PROVIDER: Record<ProviderKind, Icon> = {
 };
 
 function isAvailableProviderOption(option: (typeof PROVIDER_OPTIONS)[number]): option is {
-  value: ProviderKind;
+  value: BuiltInDriverKind;
   label: string;
   available: true;
   pickerSidebarBadge?: "new" | "soon";

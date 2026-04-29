@@ -18,7 +18,7 @@ import type {
   ScopedProjectRef,
   ScopedThreadRef,
 } from "@t3tools/contracts";
-import { isBuiltInDriverId, ProviderKind } from "@t3tools/contracts";
+import { isBuiltInDriverKind, BuiltInDriverKind } from "@t3tools/contracts";
 import type { ThreadId, TurnId } from "@t3tools/contracts";
 import { Schema } from "effect";
 import { resolveModelSlugForProvider } from "@t3tools/shared/model";
@@ -134,7 +134,7 @@ function arraysEqual<T>(left: readonly T[], right: readonly T[]): boolean {
 // pass through unchanged (model slug normalization just no-ops since we
 // only know aliases for built-in drivers).
 function normalizeModelSelection<T extends { instanceId: string; model: string }>(selection: T): T {
-  if (!isBuiltInDriverId(selection.instanceId)) {
+  if (!isBuiltInDriverKind(selection.instanceId)) {
     return selection;
   }
   return {
@@ -1006,8 +1006,8 @@ function toLegacySessionStatus(
   }
 }
 
-function toLegacyProvider(providerName: string | null): ProviderKind {
-  if (Schema.is(ProviderKind)(providerName)) {
+function toLegacyProvider(providerName: string | null): BuiltInDriverKind {
+  if (Schema.is(BuiltInDriverKind)(providerName)) {
     return providerName;
   }
   return "codex";

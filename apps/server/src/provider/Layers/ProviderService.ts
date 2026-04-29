@@ -10,7 +10,7 @@
  * @module ProviderServiceLive
  */
 import {
-  isBuiltInDriverId,
+  isBuiltInDriverKind,
   ModelSelection,
   NonNegativeInt,
   ThreadId,
@@ -21,7 +21,7 @@ import {
   ProviderSessionStartInput,
   ProviderStopSessionInput,
   type ProviderInstanceId,
-  type ProviderKind,
+  type BuiltInDriverKind,
   type ProviderRuntimeEvent,
   type ProviderSession,
 } from "@t3tools/contracts";
@@ -154,7 +154,7 @@ const dieOnMissingBindingInstanceId = (
   operation: string,
   payload: {
     readonly providerInstanceId?: ProviderInstanceId | undefined;
-    readonly provider?: ProviderKind | undefined;
+    readonly provider?: BuiltInDriverKind | undefined;
   },
 ): ProviderInstanceId => {
   if (payload.providerInstanceId !== undefined) {
@@ -170,7 +170,7 @@ const dieOnMissingBindingInstanceId = (
 const correlateRuntimeEventWithInstance = (
   source: {
     readonly instanceId: ProviderInstanceId;
-    readonly provider: ProviderKind;
+    readonly provider: BuiltInDriverKind;
   },
   event: ProviderRuntimeEvent,
 ): ProviderRuntimeEvent => {
@@ -218,7 +218,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     operation: string,
     payload: {
       readonly providerInstanceId?: ProviderInstanceId | undefined;
-      readonly provider?: ProviderKind | undefined;
+      readonly provider?: BuiltInDriverKind | undefined;
     },
   ): Effect.Effect<ProviderInstanceId, ProviderValidationError> =>
     payload.providerInstanceId !== undefined
@@ -260,7 +260,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   const processRuntimeEvent = (
     source: {
       readonly instanceId: ProviderInstanceId;
-      readonly provider: ProviderKind;
+      readonly provider: BuiltInDriverKind;
     },
     event: ProviderRuntimeEvent,
   ): Effect.Effect<void> =>
@@ -508,13 +508,13 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           ),
         );
         const instanceInfo = yield* registry.getInstanceInfo(resolvedInstanceId);
-        if (!isBuiltInDriverId(instanceInfo.driverId)) {
+        if (!isBuiltInDriverKind(instanceInfo.driverKind)) {
           return yield* toValidationError(
             "ProviderService.startSession",
-            `Provider instance '${resolvedInstanceId}' uses unknown provider driver '${instanceInfo.driverId}'.`,
+            `Provider instance '${resolvedInstanceId}' uses unknown provider driver '${instanceInfo.driverKind}'.`,
           );
         }
-        const resolvedProvider = instanceInfo.driverId as ProviderKind;
+        const resolvedProvider = instanceInfo.driverKind as BuiltInDriverKind;
         metricProvider = resolvedProvider;
         if (parsed.provider !== undefined && parsed.provider !== resolvedProvider) {
           return yield* toValidationError(

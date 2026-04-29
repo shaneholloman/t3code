@@ -1,6 +1,6 @@
 import {
   type ProviderInstanceId,
-  type ProviderKind,
+  type BuiltInDriverKind,
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
 import { memo, useEffect, useMemo, useState } from "react";
@@ -27,7 +27,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
    */
   activeInstanceId: ProviderInstanceId;
   model: string;
-  lockedProvider: ProviderKind | null;
+  lockedProvider: BuiltInDriverKind | null;
   lockedContinuationGroupKey?: string | null;
   /** Instance entries rendered in the sidebar + used to resolve display name. */
   instanceEntries: ReadonlyArray<ProviderInstanceEntry>;

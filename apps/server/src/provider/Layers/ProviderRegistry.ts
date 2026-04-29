@@ -24,8 +24,9 @@
  */
 import {
   defaultInstanceIdForDriver,
+  ProviderDriverKind,
   type ProviderInstanceId,
-  type ProviderKind,
+  type BuiltInDriverKind,
   type ServerProvider,
 } from "@t3tools/contracts";
 import { Effect, Equal, FileSystem, Layer, Path, PubSub, Ref, Stream } from "effect";
@@ -105,25 +106,21 @@ const correlateSnapshotWithSource = (
   source: ProviderSnapshotSource,
   snapshot: ServerProvider,
 ): Effect.Effect<ServerProvider> => {
-  if (snapshot.instanceId !== undefined && snapshot.instanceId !== source.instanceId) {
+  if (snapshot.instanceId !== source.instanceId) {
     return Effect.die(
       new Error(
         `Provider snapshot instance mismatch: source '${source.instanceId}' emitted '${snapshot.instanceId}'.`,
       ),
     );
   }
-  if (snapshot.driver !== undefined && snapshot.driver !== source.driverId) {
+  if (snapshot.driver !== source.driverKind) {
     return Effect.die(
       new Error(
-        `Provider snapshot driver mismatch for instance '${source.instanceId}': source '${source.driverId}' emitted '${snapshot.driver}'.`,
+        `Provider snapshot driver mismatch for instance '${source.instanceId}': source '${source.driverKind}' emitted '${snapshot.driver}'.`,
       ),
     );
   }
-  return Effect.succeed({
-    ...snapshot,
-    instanceId: source.instanceId,
-    driver: source.driverId,
-  });
+  return Effect.succeed(snapshot);
 };
 
 /**
@@ -132,11 +129,21 @@ const correlateSnapshotWithSource = (
  * identities are defects, not runtime routing fallbacks.
  */
 const snapshotInstanceKey = (provider: ServerProvider): ProviderInstanceId => {
-  if (provider.instanceId !== undefined) {
-    return provider.instanceId;
-  }
-  throw new Error(`Provider snapshot for '${provider.provider}' is missing instanceId.`);
+  return provider.instanceId;
 };
+
+// Project a live `ProviderInstance` into the aggregator's consumption
+// shape. Each call re-captures the instance's `snapshot` closures, so
+// after `ProviderInstanceRegistry` rebuilds an instance (e.g. because
+// its settings changed), a fresh source rides the new PubSub instead
+// of a closed one.
+const buildSnapshotSource = (instance: ProviderInstance): ProviderSnapshotSource => ({
+  instanceId: instance.instanceId,
+  driverKind: instance.driverKind,
+  getSnapshot: instance.snapshot.getSnapshot,
+  refresh: instance.snapshot.refresh,
+  streamChanges: instance.snapshot.streamChanges,
+});
 
 export const ProviderRegistryLive = Layer.effect(
   ProviderRegistry,
@@ -145,24 +152,6 @@ export const ProviderRegistryLive = Layer.effect(
     const config = yield* ServerConfig;
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-
-    // Project a live `ProviderInstance` into the aggregator's consumption
-    // shape. Each call re-captures the instance's `snapshot` closures, so
-    // after `ProviderInstanceRegistry` rebuilds an instance (e.g. because
-    // its settings changed), a fresh source rides the new PubSub instead
-    // of a closed one.
-    const buildSnapshotSource = (instance: ProviderInstance): ProviderSnapshotSource => ({
-      instanceId: instance.instanceId,
-      driverId: instance.driverId,
-      // Fork drivers may pick an id outside `BuiltInDriverId`; for the
-      // built-in subset the slug matches. Cast narrows an open driver id
-      // brand to the closed kind union — callers that care about fork
-      // ids should use `driverId` directly.
-      provider: instance.driverId as unknown as ProviderKind,
-      getSnapshot: instance.snapshot.getSnapshot,
-      refresh: instance.snapshot.refresh,
-      streamChanges: instance.snapshot.streamChanges,
-    });
 
     // Aggregator PubSub — consumers (WS gateway, etc.) subscribe here for
     // coalesced updates across every instance.
@@ -195,7 +184,7 @@ export const ProviderRegistryLive = Layer.effect(
         // One cache file per configured instance. For the default
         // instance of a built-in kind the path equals `<kind>.json` —
         // identical to the legacy filename. We still require the cache
-        // payload to carry matching instance + driver identity; old
+        // payload to carry matching instance id + driver kind; old
         // identity-less payloads are discarded and the awaited refresh
         // below repopulates the cache.
         const filePath = resolveProviderStatusCachePath({
@@ -221,7 +210,7 @@ export const ProviderRegistryLive = Layer.effect(
                 path: filePath,
                 instanceId: source.instanceId,
                 cachedInstanceId: cachedProvider.instanceId ?? null,
-                driver: source.driverId,
+                driver: source.driverKind,
                 cachedDriver: cachedProvider.driver ?? null,
               }).pipe(Effect.as(undefined as ServerProvider | undefined));
             }
@@ -348,15 +337,12 @@ export const ProviderRegistryLive = Layer.effect(
       }).pipe(Effect.andThen(Ref.get(providersRef)));
     });
 
-    const refresh = Effect.fn("refresh")(function* (provider?: ProviderKind) {
+    const refresh = Effect.fn("refresh")(function* (provider?: BuiltInDriverKind) {
       if (provider === undefined) {
         return yield* refreshAll();
       }
-      // Legacy shim: refresh the *default* instance for this kind. Exact
-      // back-compat with the pre-Slice-D behaviour.
-      const defaultInstanceId = defaultInstanceIdForDriver(
-        provider as unknown as Parameters<typeof defaultInstanceIdForDriver>[0],
-      );
+      // Kind-scoped refreshes target the default instance for that built-in driver.
+      const defaultInstanceId = defaultInstanceIdForDriver(ProviderDriverKind.make(provider));
       const sources = yield* getLiveSources;
       const providerSource = sources.find(
         (candidate) => candidate.instanceId === defaultInstanceId,
@@ -538,7 +524,7 @@ export const ProviderRegistryLive = Layer.effect(
 
     return {
       getProviders: Ref.get(providersRef),
-      refresh: (provider?: ProviderKind) =>
+      refresh: (provider?: BuiltInDriverKind) =>
         refresh(provider).pipe(
           Effect.tapError(Effect.logError),
           Effect.orElseSucceed(() => [] as ReadonlyArray<ServerProvider>),

@@ -16,12 +16,11 @@ import { ServerSettingsError } from "@t3tools/contracts";
 
 import { createModelCapabilities } from "@t3tools/shared/model";
 
-import { buildServerProvider } from "../providerSnapshot.ts";
+import { buildServerProvider, type ServerProviderDraft } from "../providerSnapshot.ts";
 import { expandHomePath } from "../../pathExpansion.ts";
 import { scopedSafeTeardown } from "./scopedSafeTeardown.ts";
 import packageJson from "../../../package.json" with { type: "json" };
 
-const PROVIDER = "codex" as const;
 const PROVIDER_PROBE_TIMEOUT_MS = 8_000;
 const CODEX_PRESENTATION = {
   displayName: "Codex",
@@ -325,13 +324,12 @@ const emptyCodexModelsFromSettings = (codexSettings: CodexSettings): ServerProvi
       capabilities: null,
     }));
 
-const makePendingCodexProvider = (codexSettings: CodexSettings): ServerProvider => {
+const makePendingCodexProvider = (codexSettings: CodexSettings): ServerProviderDraft => {
   const checkedAt = new Date().toISOString();
   const models = emptyCodexModelsFromSettings(codexSettings);
 
   if (!codexSettings.enabled) {
     return buildServerProvider({
-      provider: PROVIDER,
       presentation: CODEX_PRESENTATION,
       enabled: false,
       checkedAt,
@@ -348,7 +346,6 @@ const makePendingCodexProvider = (codexSettings: CodexSettings): ServerProvider 
   }
 
   return buildServerProvider({
-    provider: PROVIDER,
     presentation: CODEX_PRESENTATION,
     enabled: true,
     checkedAt,
@@ -407,13 +404,16 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
     ChildProcessSpawner.ChildProcessSpawner
   > = probeCodexAppServerProvider,
   environment: NodeJS.ProcessEnv = process.env,
-): Effect.fn.Return<ServerProvider, ServerSettingsError, ChildProcessSpawner.ChildProcessSpawner> {
+): Effect.fn.Return<
+  ServerProviderDraft,
+  ServerSettingsError,
+  ChildProcessSpawner.ChildProcessSpawner
+> {
   const checkedAt = DateTime.formatIso(yield* DateTime.now);
   const emptyModels = emptyCodexModelsFromSettings(codexSettings);
 
   if (!codexSettings.enabled) {
     return buildServerProvider({
-      provider: PROVIDER,
       presentation: CODEX_PRESENTATION,
       enabled: false,
       checkedAt,
@@ -441,7 +441,6 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
     const error = probeResult.failure;
     const installed = !Schema.is(CodexErrors.CodexAppServerSpawnError)(error);
     return buildServerProvider({
-      provider: PROVIDER,
       presentation: CODEX_PRESENTATION,
       enabled: codexSettings.enabled,
       checkedAt,
@@ -461,7 +460,6 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
 
   if (Option.isNone(probeResult.success)) {
     return buildServerProvider({
-      provider: PROVIDER,
       presentation: CODEX_PRESENTATION,
       enabled: codexSettings.enabled,
       checkedAt,
@@ -481,7 +479,6 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
   const accountStatus = accountProbeStatus(snapshot.account);
 
   return buildServerProvider({
-    provider: PROVIDER,
     presentation: CODEX_PRESENTATION,
     enabled: codexSettings.enabled,
     checkedAt,

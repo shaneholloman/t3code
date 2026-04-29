@@ -1,6 +1,6 @@
 import {
   type ProjectEntry,
-  type ProviderKind,
+  type BuiltInDriverKind,
   type ServerProviderSkill,
   type ServerProviderSlashCommand,
 } from "@t3tools/contracts";
@@ -39,7 +39,7 @@ export type ComposerCommandItem =
   | {
       id: string;
       type: "provider-slash-command";
-      provider: ProviderKind;
+      provider: BuiltInDriverKind;
       command: ServerProviderSlashCommand;
       label: string;
       description: string;
@@ -47,7 +47,7 @@ export type ComposerCommandItem =
   | {
       id: string;
       type: "skill";
-      provider: ProviderKind;
+      provider: BuiltInDriverKind;
       skill: ServerProviderSkill;
       label: string;
       description: string;

@@ -703,10 +703,8 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
 
       const adapterLayer = Layer.effect(
         OpenCodeAdapter,
-        Effect.gen(function* () {
-          return yield* makeOpenCodeAdapter(openCodeAdapterTestSettings, {
-            nativeEventLogger,
-          });
+        makeOpenCodeAdapter(openCodeAdapterTestSettings, {
+          nativeEventLogger,
         }),
       ).pipe(
         Layer.provideMerge(Layer.succeed(OpenCodeRuntime, OpenCodeRuntimeTestDouble)),

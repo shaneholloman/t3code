@@ -1,7 +1,7 @@
 /**
  * ProviderAdapterRegistryLive — facade over `ProviderInstanceRegistry`.
  *
- * `ProviderAdapterRegistry` historically mapped one `ProviderKind` to one
+ * `ProviderAdapterRegistry` historically mapped one `BuiltInDriverKind` to one
  * adapter via the four `<X>AdapterLive` singleton Layers. The per-instance
  * refactor moved adapter construction inside each `ProviderDriver.create()`:
  * adapters are now bundled on the `ProviderInstance` that the
@@ -22,7 +22,7 @@
 import {
   defaultInstanceIdForDriver,
   ProviderInstanceId,
-  type ProviderKind,
+  type BuiltInDriverKind,
 } from "@t3tools/contracts";
 import { Effect, Layer } from "effect";
 
@@ -42,7 +42,7 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
         instance === undefined
           ? Effect.fail(
               new ProviderUnsupportedError({
-                provider: instanceId as unknown as ProviderKind,
+                provider: instanceId as unknown as BuiltInDriverKind,
               }),
             )
           : Effect.succeed(instance.adapter),
@@ -55,12 +55,12 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
         instance === undefined
           ? Effect.fail(
               new ProviderUnsupportedError({
-                provider: instanceId as unknown as ProviderKind,
+                provider: instanceId as unknown as BuiltInDriverKind,
               }),
             )
           : Effect.succeed({
               instanceId: instance.instanceId,
-              driverId: instance.driverId,
+              driverKind: instance.driverKind,
               displayName: instance.displayName,
               accentColor: instance.accentColor,
               enabled: instance.enabled,
@@ -90,14 +90,14 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
   const listProviders: ProviderAdapterRegistryShape["listProviders"] = () =>
     registry.listInstances.pipe(
       Effect.map((instances) => {
-        const kinds = new Set<ProviderKind>();
+        const kinds = new Set<BuiltInDriverKind>();
         for (const instance of instances) {
-          const defaultId = defaultInstanceIdForDriver(instance.driverId);
+          const defaultId = defaultInstanceIdForDriver(instance.driverKind);
           if (instance.instanceId === defaultId) {
             // Only the default-instance rows show up through the legacy
             // shim — custom instances like `codex_personal` have no
-            // `ProviderKind` equivalent.
-            kinds.add(instance.driverId as unknown as ProviderKind);
+            // `BuiltInDriverKind` equivalent.
+            kinds.add(instance.driverKind as unknown as BuiltInDriverKind);
           }
         }
         return Array.from(kinds);

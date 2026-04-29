@@ -29,7 +29,7 @@ import {
   type CodexSettings,
   type CursorSettings,
   type OpenCodeSettings,
-  ProviderDriverId,
+  ProviderDriverKind,
   type ProviderInstanceConfigMap,
   ProviderInstanceId,
 } from "@t3tools/contracts";
@@ -96,11 +96,11 @@ describe("ProviderInstanceRegistryLive — multi-instance codex slice", () => {
     Effect.gen(function* () {
       const personalId = ProviderInstanceId.make("codex_personal");
       const workId = ProviderInstanceId.make("codex_work");
-      const codexDriverId = ProviderDriverId.make("codex");
+      const codexDriverKind = ProviderDriverKind.make("codex");
 
       const configMap: ProviderInstanceConfigMap = {
         [personalId]: {
-          driver: codexDriverId,
+          driver: codexDriverKind,
           displayName: "Codex (personal)",
           enabled: false,
           config: makeCodexConfig({
@@ -110,7 +110,7 @@ describe("ProviderInstanceRegistryLive — multi-instance codex slice", () => {
           }),
         },
         [workId]: {
-          driver: codexDriverId,
+          driver: codexDriverKind,
           displayName: "Codex (work)",
           enabled: false,
           config: makeCodexConfig({
@@ -130,7 +130,7 @@ describe("ProviderInstanceRegistryLive — multi-instance codex slice", () => {
       expect(instances.map((instance) => instance.instanceId).toSorted()).toEqual(
         [personalId, workId].toSorted(),
       );
-      expect(instances.every((instance) => instance.driverId === codexDriverId)).toBe(true);
+      expect(instances.every((instance) => instance.driverKind === codexDriverKind)).toBe(true);
       expect(instances.map((instance) => instance.displayName).toSorted()).toEqual(
         ["Codex (personal)", "Codex (work)"].toSorted(),
       );
@@ -148,7 +148,7 @@ describe("ProviderInstanceRegistryLive — multi-instance codex slice", () => {
       // what makes per-instance routing distinguishable downstream.
       const personalSnapshot = yield* personal!.snapshot.getSnapshot;
       expect(personalSnapshot.instanceId).toBe(personalId);
-      expect(personalSnapshot.driver).toBe(codexDriverId);
+      expect(personalSnapshot.driver).toBe(codexDriverKind);
       expect(personalSnapshot.enabled).toBe(false);
       expect(personalSnapshot.continuation?.groupKey).toBe(
         "codex:home:/home/julius/.codex_personal",
@@ -156,7 +156,7 @@ describe("ProviderInstanceRegistryLive — multi-instance codex slice", () => {
 
       const workSnapshot = yield* work!.snapshot.getSnapshot;
       expect(workSnapshot.instanceId).toBe(workId);
-      expect(workSnapshot.driver).toBe(codexDriverId);
+      expect(workSnapshot.driver).toBe(codexDriverKind);
       expect(workSnapshot.enabled).toBe(false);
       expect(workSnapshot.continuation?.groupKey).toBe("codex:home:/home/julius/.codex");
 
@@ -175,12 +175,12 @@ describe("ProviderInstanceRegistryLive — multi-instance codex slice", () => {
 
         const configMap: ProviderInstanceConfigMap = {
           [codexId]: {
-            driver: ProviderDriverId.make("codex"),
+            driver: ProviderDriverKind.make("codex"),
             enabled: false,
             config: makeCodexConfig({}),
           },
           [ghostId]: {
-            driver: ProviderDriverId.make("ghostDriver"),
+            driver: ProviderDriverKind.make("ghostDriver"),
             displayName: "A fork-only driver we don't ship",
             enabled: false,
             config: { arbitrary: "payload", preserved: true },
@@ -235,20 +235,20 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
       const cursorId = ProviderInstanceId.make("cursor_default");
       const openCodeId = ProviderInstanceId.make("opencode_default");
 
-      const codexDriverId = ProviderDriverId.make("codex");
-      const claudeDriverId = ProviderDriverId.make("claudeAgent");
-      const cursorDriverId = ProviderDriverId.make("cursor");
-      const openCodeDriverId = ProviderDriverId.make("opencode");
+      const codexDriverKind = ProviderDriverKind.make("codex");
+      const claudeDriverKind = ProviderDriverKind.make("claudeAgent");
+      const cursorDriverKind = ProviderDriverKind.make("cursor");
+      const openCodeDriverKind = ProviderDriverKind.make("opencode");
 
       const configMap: ProviderInstanceConfigMap = {
         [codexId]: {
-          driver: codexDriverId,
+          driver: codexDriverKind,
           displayName: "Codex",
           enabled: false,
           config: makeCodexConfig({ homePath: "/home/julius/.codex" }),
         },
         [claudeId]: {
-          driver: claudeDriverId,
+          driver: claudeDriverKind,
           displayName: "Claude",
           enabled: false,
           config: makeClaudeConfig({
@@ -257,13 +257,13 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
           }),
         },
         [cursorId]: {
-          driver: cursorDriverId,
+          driver: cursorDriverKind,
           displayName: "Cursor",
           enabled: false,
           config: makeCursorConfig({}),
         },
         [openCodeId]: {
-          driver: openCodeDriverId,
+          driver: openCodeDriverKind,
           displayName: "OpenCode",
           enabled: false,
           config: makeOpenCodeConfig({}),
@@ -288,15 +288,15 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
 
       // Instance lookup by id resolves each instance to its own bundle —
       // this is how rest-of-server routes turn/session calls in the new
-      // model. Each driver's bundle carries its advertised `driverId`.
+      // model. Each driver's bundle carries its advertised `driverKind`.
       const codex = yield* registry.getInstance(codexId);
       const claude = yield* registry.getInstance(claudeId);
       const cursor = yield* registry.getInstance(cursorId);
       const openCode = yield* registry.getInstance(openCodeId);
-      expect(codex?.driverId).toBe(codexDriverId);
-      expect(claude?.driverId).toBe(claudeDriverId);
-      expect(cursor?.driverId).toBe(cursorDriverId);
-      expect(openCode?.driverId).toBe(openCodeDriverId);
+      expect(codex?.driverKind).toBe(codexDriverKind);
+      expect(claude?.driverKind).toBe(claudeDriverKind);
+      expect(cursor?.driverKind).toBe(cursorDriverKind);
+      expect(openCode?.driverKind).toBe(openCodeDriverKind);
       expect(codex?.displayName).toBe("Codex");
       expect(claude?.displayName).toBe("Claude");
       expect(cursor?.displayName).toBe("Cursor");
@@ -327,28 +327,30 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
       // spawning real binaries.
       const codexSnapshot = yield* codex!.snapshot.getSnapshot;
       expect(codexSnapshot.instanceId).toBe(codexId);
-      expect(codexSnapshot.driver).toBe(codexDriverId);
+      expect(codexSnapshot.driver).toBe(codexDriverKind);
       expect(codexSnapshot.enabled).toBe(false);
       expect(codexSnapshot.continuation?.groupKey).toBe("codex:home:/home/julius/.codex");
 
       const claudeSnapshot = yield* claude!.snapshot.getSnapshot;
       expect(claudeSnapshot.instanceId).toBe(claudeId);
-      expect(claudeSnapshot.driver).toBe(claudeDriverId);
+      expect(claudeSnapshot.driver).toBe(claudeDriverKind);
       expect(claudeSnapshot.enabled).toBe(false);
       expect(claudeSnapshot.continuation?.groupKey).toBe("claude:home:/home/julius/.claude-work");
 
       const cursorSnapshot = yield* cursor!.snapshot.getSnapshot;
       expect(cursorSnapshot.instanceId).toBe(cursorId);
-      expect(cursorSnapshot.driver).toBe(cursorDriverId);
+      expect(cursorSnapshot.driver).toBe(cursorDriverKind);
       expect(cursorSnapshot.enabled).toBe(false);
-      expect(cursorSnapshot.continuation?.groupKey).toBe(`${cursorDriverId}:instance:${cursorId}`);
+      expect(cursorSnapshot.continuation?.groupKey).toBe(
+        `${cursorDriverKind}:instance:${cursorId}`,
+      );
 
       const openCodeSnapshot = yield* openCode!.snapshot.getSnapshot;
       expect(openCodeSnapshot.instanceId).toBe(openCodeId);
-      expect(openCodeSnapshot.driver).toBe(openCodeDriverId);
+      expect(openCodeSnapshot.driver).toBe(openCodeDriverKind);
       expect(openCodeSnapshot.enabled).toBe(false);
       expect(openCodeSnapshot.continuation?.groupKey).toBe(
-        `${openCodeDriverId}:instance:${openCodeId}`,
+        `${openCodeDriverKind}:instance:${openCodeId}`,
       );
     }).pipe(Effect.provide(testLayer)),
   );

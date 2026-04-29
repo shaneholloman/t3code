@@ -17,6 +17,7 @@ import {
   type OrchestrationEvent,
   ORCHESTRATION_WS_METHODS,
   ProjectId,
+  ProviderDriverKind,
   ProviderInstanceId,
   ResolvedKeybindingRule,
   ThreadId,
@@ -1846,7 +1847,8 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     Effect.gen(function* () {
       const providers = [
         {
-          provider: "codex",
+          instanceId: ProviderInstanceId.make("codex"),
+          driver: ProviderDriverKind.make("codex"),
           enabled: true,
           installed: true,
           version: "1.0.0",
@@ -1916,7 +1918,8 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     Effect.gen(function* () {
       const nextProviders = [
         {
-          provider: "codex",
+          instanceId: ProviderInstanceId.make("codex"),
+          driver: ProviderDriverKind.make("codex"),
           enabled: true,
           installed: true,
           version: "1.0.0",

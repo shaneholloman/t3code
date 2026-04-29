@@ -6,7 +6,7 @@
  *
  * @module ProviderRegistry
  */
-import type { ProviderInstanceId, ProviderKind, ServerProvider } from "@t3tools/contracts";
+import type { ProviderInstanceId, BuiltInDriverKind, ServerProvider } from "@t3tools/contracts";
 import { Context } from "effect";
 import type { Effect, Stream } from "effect";
 
@@ -27,7 +27,7 @@ export interface ProviderRegistryShape {
    *
    * @deprecated prefer `refreshInstance` for new call sites.
    */
-  readonly refresh: (provider?: ProviderKind) => Effect.Effect<ReadonlyArray<ServerProvider>>;
+  readonly refresh: (provider?: BuiltInDriverKind) => Effect.Effect<ReadonlyArray<ServerProvider>>;
 
   /**
    * Refresh the specific configured instance. Returns the updated snapshot

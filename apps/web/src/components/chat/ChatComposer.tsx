@@ -5,7 +5,7 @@ import type {
   ProjectEntry,
   ProviderApprovalDecision,
   ProviderInteractionMode,
-  ProviderKind,
+  BuiltInDriverKind,
   ResolvedKeybindingsConfig,
   RuntimeMode,
   ScopedThreadRef,
@@ -99,7 +99,7 @@ import { proposedPlanTitle } from "../../proposedPlan";
 import { getProviderInteractionModeToggle } from "../../providerModels";
 import {
   deriveProviderInstanceEntries,
-  resolveProviderKindForInstanceSelection,
+  resolveBuiltInDriverKindForInstanceSelection,
   sortProviderInstanceEntries,
   type ProviderInstanceEntry,
 } from "../../providerInstances";
@@ -350,7 +350,7 @@ export interface ChatComposerHandle {
     selectedPromptEffort: string | null;
     selectedModelOptionsForDispatch: unknown;
     selectedModelSelection: ModelSelection;
-    selectedProvider: ProviderKind;
+    selectedProvider: BuiltInDriverKind;
     selectedModel: string;
     selectedProviderModels: ReadonlyArray<ServerProvider["models"][number]>;
   };
@@ -410,7 +410,7 @@ export interface ChatComposerProps {
   interactionMode: ProviderInteractionMode;
 
   // Provider / model
-  lockedProvider: ProviderKind | null;
+  lockedProvider: BuiltInDriverKind | null;
   providerStatuses: ServerProvider[];
   activeProjectDefaultModelSelection: ModelSelection | null | undefined;
   activeThreadModelSelection: ModelSelection | null | undefined;
@@ -586,12 +586,12 @@ export const ChatComposer = memo(
     const explicitSelectedInstanceId = selectedProviderByThreadId ?? threadProvider;
 
     const unlockedSelectedProvider =
-      resolveProviderKindForInstanceSelection(
+      resolveBuiltInDriverKindForInstanceSelection(
         providerInstanceEntries,
         providerStatuses,
         explicitSelectedInstanceId,
       ) ?? "codex";
-    const selectedProvider: ProviderKind = lockedProvider ?? unlockedSelectedProvider;
+    const selectedProvider: BuiltInDriverKind = lockedProvider ?? unlockedSelectedProvider;
     const lockedContinuationGroupKey = useMemo((): string | null => {
       if (!lockedProvider || !activeThread) return null;
       const lockedInstanceId =

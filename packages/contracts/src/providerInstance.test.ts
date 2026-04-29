@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 import { Schema } from "effect";
 
 import {
-  ProviderDriverId,
+  ProviderDriverKind,
   ProviderInstanceConfig,
   ProviderInstanceConfigMap,
   ProviderInstanceId,
   ProviderInstanceRef,
 } from "./providerInstance.ts";
 
-const decodeProviderDriverId = Schema.decodeUnknownSync(ProviderDriverId);
+const decodeProviderDriverKind = Schema.decodeUnknownSync(ProviderDriverKind);
 const decodeProviderInstanceId = Schema.decodeUnknownSync(ProviderInstanceId);
 const decodeProviderInstanceRef = Schema.decodeUnknownSync(ProviderInstanceRef);
 const decodeProviderInstanceConfig = Schema.decodeUnknownSync(ProviderInstanceConfig);
@@ -18,7 +18,7 @@ const decodeProviderInstanceConfigMap = Schema.decodeUnknownSync(ProviderInstanc
 describe("provider slug validation (shared by driver + instance ids)", () => {
   const cases = [
     { schemaName: "ProviderInstanceId", decode: decodeProviderInstanceId },
-    { schemaName: "ProviderDriverId", decode: decodeProviderDriverId },
+    { schemaName: "ProviderDriverKind", decode: decodeProviderDriverKind },
   ] as const;
 
   for (const { schemaName, decode } of cases) {

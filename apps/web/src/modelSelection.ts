@@ -1,10 +1,12 @@
 import {
   DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
   defaultInstanceIdForDriver,
+  isBuiltInDriverKind,
   type ModelSelection,
-  ProviderDriverId,
+  type ProviderDriverKind as ProviderDriverKindType,
+  ProviderDriverKind,
   ProviderInstanceId,
-  type ProviderKind,
+  type BuiltInDriverKind,
   type ServerProvider,
 } from "@t3tools/contracts";
 import {
@@ -44,7 +46,7 @@ export const MAX_CUSTOM_MODEL_LENGTH = 256;
 function readInstanceCustomModels(
   settings: UnifiedSettings,
   instanceId: ProviderInstanceId,
-  driverKind: ProviderKind,
+  driverKind: ProviderDriverKindType | BuiltInDriverKind | string,
 ): ReadonlyArray<string> {
   const instance = settings.providerInstances?.[instanceId];
   const config = instance?.config;
@@ -54,11 +56,15 @@ function readInstanceCustomModels(
       return value.filter((entry): entry is string => typeof entry === "string");
     }
   }
-  const defaultInstanceId = defaultInstanceIdForDriver(ProviderDriverId.make(driverKind));
+  if (!isBuiltInDriverKind(driverKind)) {
+    return [];
+  }
+  const builtInDriver = driverKind as BuiltInDriverKind;
+  const defaultInstanceId = defaultInstanceIdForDriver(ProviderDriverKind.make(builtInDriver));
   if (instanceId !== defaultInstanceId) {
     return [];
   }
-  return settings.providers[driverKind].customModels;
+  return settings.providers[builtInDriver].customModels;
 }
 
 export interface AppModelOption {
@@ -83,7 +89,7 @@ function toAppModelOption(model: ServerProvider["models"][number]): AppModelOpti
 export function normalizeCustomModelSlugs(
   models: Iterable<string | null | undefined>,
   builtInModelSlugs: ReadonlySet<string>,
-  provider: ProviderKind = "codex",
+  provider: BuiltInDriverKind = "codex",
 ): string[] {
   const normalizedModels: string[] = [];
   const seen = new Set<string>();
@@ -112,7 +118,7 @@ export function normalizeCustomModelSlugs(
 export function getAppModelOptions(
   settings: UnifiedSettings,
   providers: ReadonlyArray<ServerProvider>,
-  provider: ProviderKind,
+  provider: BuiltInDriverKind,
   _selectedModel?: string | null,
 ): AppModelOption[] {
   const options: AppModelOption[] = getProviderModels(providers, provider).map(toAppModelOption);
@@ -127,7 +133,7 @@ export function getAppModelOptions(
   // now land), falling back to the legacy per-kind bucket so unmigrated
   // settings and the initial render before the first write both still
   // see the user's authored custom models.
-  const defaultInstanceId = defaultInstanceIdForDriver(ProviderDriverId.make(provider));
+  const defaultInstanceId = defaultInstanceIdForDriver(ProviderDriverKind.make(provider));
   const customModels = readInstanceCustomModels(settings, defaultInstanceId, provider);
   for (const slug of normalizeCustomModelSlugs(customModels, builtInModelSlugs, provider)) {
     if (seen.has(slug)) {
@@ -167,7 +173,10 @@ export function getAppModelOptionsForInstance(
   );
 
   const customModels = readInstanceCustomModels(settings, entry.instanceId, entry.driverKind);
-  for (const slug of normalizeCustomModelSlugs(customModels, builtInModelSlugs, entry.driverKind)) {
+  const normalizer = isBuiltInDriverKind(entry.driverKind)
+    ? (entry.driverKind as BuiltInDriverKind)
+    : "codex";
+  for (const slug of normalizeCustomModelSlugs(customModels, builtInModelSlugs, normalizer)) {
     if (seen.has(slug)) {
       continue;
     }
@@ -180,7 +189,7 @@ export function getAppModelOptionsForInstance(
 }
 
 export function resolveAppModelSelection(
-  provider: ProviderKind,
+  provider: BuiltInDriverKind,
   settings: UnifiedSettings,
   providers: ReadonlyArray<ServerProvider>,
   selectedModel: string | null | undefined,
@@ -205,7 +214,9 @@ export function resolveAppModelSelectionForInstance(
   if (!entry) return null;
   const options = getAppModelOptionsForInstance(settings, entry);
   return (
-    resolveSelectableModel(entry.driverKind, selectedModel, options) ??
+    (isBuiltInDriverKind(entry.driverKind)
+      ? resolveSelectableModel(entry.driverKind, selectedModel, options)
+      : selectedModel) ??
     options[0]?.slug ??
     entry.models[0]?.slug ??
     null
@@ -251,9 +262,17 @@ export function resolveAppModelSelectionState(
     const model =
       resolveAppModelSelectionForInstance(entry.instanceId, settings, providers, selectedModel) ??
       entry.models[0]?.slug ??
-      DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[entry.driverKind];
+      (isBuiltInDriverKind(entry.driverKind)
+        ? DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[entry.driverKind as BuiltInDriverKind]
+        : undefined);
+    if (!model) {
+      return createModelSelection(entry.instanceId, "", []);
+    }
+    const provider = isBuiltInDriverKind(entry.driverKind)
+      ? (entry.driverKind as BuiltInDriverKind)
+      : "codex";
     const { modelOptionsForDispatch } = getComposerProviderState({
-      provider: entry.driverKind,
+      provider,
       model,
       models: entry.models,
       prompt: "",

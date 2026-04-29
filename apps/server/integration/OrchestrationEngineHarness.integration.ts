@@ -4,7 +4,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   ApprovalRequestId,
   CodexSettings,
-  ProviderKind,
+  BuiltInDriverKind,
   type OrchestrationEvent,
   type OrchestrationThread,
 } from "@t3tools/contracts";
@@ -218,7 +218,7 @@ export interface OrchestrationIntegrationHarness {
 }
 
 interface MakeOrchestrationIntegrationHarnessOptions {
-  readonly provider?: ProviderKind;
+  readonly provider?: BuiltInDriverKind;
   readonly realCodex?: boolean;
 }
 

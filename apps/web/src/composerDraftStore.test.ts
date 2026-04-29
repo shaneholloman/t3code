@@ -11,14 +11,14 @@ import {
   ProviderInstanceId,
   ThreadId,
   type ModelSelection,
-  type ProviderKind,
+  type BuiltInDriverKind,
   type ProviderOptionSelection,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 
 // The composer draft's `modelSelectionByProvider` and `stickyModelSelectionByProvider`
 // are keyed by `ProviderInstanceId` (open branded slug) in production.
-// Every built-in `ProviderKind` literal satisfies that brand by contract,
+// Every built-in `BuiltInDriverKind` literal satisfies that brand by contract,
 // so these aliases let the existing kind-focused tests keep reading the
 // map via the closed per-kind keys without sprinkling `ProviderInstanceId.make`
 // everywhere.
@@ -27,7 +27,9 @@ const CLAUDE_AGENT_INSTANCE = ProviderInstanceId.make("claudeAgent");
 const CURSOR_INSTANCE = ProviderInstanceId.make("cursor");
 
 type ProviderOptionSelectionBag = ReadonlyArray<ProviderOptionSelection>;
-type ProviderOptionSelectionsByProvider = Partial<Record<ProviderKind, ProviderOptionSelectionBag>>;
+type ProviderOptionSelectionsByProvider = Partial<
+  Record<BuiltInDriverKind, ProviderOptionSelectionBag>
+>;
 
 function toSelections(
   options: Record<string, string | boolean | undefined> | undefined,
@@ -43,11 +45,11 @@ function toSelections(
 }
 
 function selectionsByProvider(
-  options: Partial<Record<ProviderKind, Record<string, string | boolean | undefined>>>,
+  options: Partial<Record<BuiltInDriverKind, Record<string, string | boolean | undefined>>>,
 ): ProviderOptionSelectionsByProvider {
   const result: ProviderOptionSelectionsByProvider = {};
   for (const [provider, bag] of Object.entries(options) as Array<
-    [ProviderKind, Record<string, string | boolean | undefined>]
+    [BuiltInDriverKind, Record<string, string | boolean | undefined>]
   >) {
     result[provider] = toSelections(bag);
   }
@@ -140,7 +142,7 @@ function modelSelection(
 }
 
 function providerModelOptions(
-  options: Partial<Record<ProviderKind, Record<string, string | boolean | undefined>>>,
+  options: Partial<Record<BuiltInDriverKind, Record<string, string | boolean | undefined>>>,
 ): ProviderOptionSelectionsByProvider {
   return selectionsByProvider(options);
 }

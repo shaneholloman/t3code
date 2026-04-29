@@ -9,7 +9,7 @@ import {
   EventId,
   MessageId,
   ProjectId,
-  ProviderKind,
+  BuiltInDriverKind,
   ThreadId,
   ModelSelection,
   ProviderInstanceId,
@@ -40,7 +40,7 @@ const PROJECT_ID = asProjectId("project-1");
 const THREAD_ID = ThreadId.make("thread-1");
 const FIXTURE_TURN_ID = "fixture-turn";
 const APPROVAL_REQUEST_ID = asApprovalRequestId("req-approval-1");
-type IntegrationProvider = ProviderKind;
+type IntegrationProvider = BuiltInDriverKind;
 
 function nowIso() {
   return new Date().toISOString();

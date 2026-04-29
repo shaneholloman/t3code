@@ -37,7 +37,7 @@ import {
   ProviderInstanceId,
   type ProviderInstanceConfig,
   type ProviderInstanceConfigMap,
-  type ProviderDriverId,
+  type ProviderDriverKind,
   type ServerProvider,
 } from "@t3tools/contracts";
 import { Context, Effect, Equal, Exit, Layer, PubSub, Ref, Schema, Scope, Stream } from "effect";
@@ -98,7 +98,7 @@ const decodedConfigEnabled = (config: unknown): boolean | undefined => {
  * undefined entry — callers dispatch to the appropriate Ref bucket.
  */
 const buildEntry = <R>(input: {
-  readonly driversById: ReadonlyMap<ProviderDriverId, AnyProviderDriver<R>>;
+  readonly driversById: ReadonlyMap<ProviderDriverKind, AnyProviderDriver<R>>;
   readonly parentScope: Scope.Scope;
   readonly instanceId: ProviderInstanceId;
   readonly rawInstanceId: string;
@@ -116,7 +116,7 @@ const buildEntry = <R>(input: {
       return {
         kind: "unavailable" as const,
         snapshot: buildUnavailableProviderSnapshot({
-          driverId: entry.driver,
+          driverKind: entry.driver,
           instanceId,
           displayName: entry.displayName,
           accentColor: entry.accentColor,
@@ -138,7 +138,7 @@ const buildEntry = <R>(input: {
       return {
         kind: "unavailable" as const,
         snapshot: buildUnavailableProviderSnapshot({
-          driverId: entry.driver,
+          driverKind: entry.driver,
           instanceId,
           displayName: entry.displayName,
           accentColor: entry.accentColor,
@@ -176,7 +176,7 @@ const buildEntry = <R>(input: {
       return {
         kind: "unavailable" as const,
         snapshot: buildUnavailableProviderSnapshot({
-          driverId: entry.driver,
+          driverKind: entry.driver,
           instanceId,
           displayName: entry.displayName,
           accentColor: entry.accentColor,
@@ -201,7 +201,7 @@ const buildEntry = <R>(input: {
  */
 const makeReconcile = <R>(input: {
   readonly state: RegistryState;
-  readonly driversById: ReadonlyMap<ProviderDriverId, AnyProviderDriver<R>>;
+  readonly driversById: ReadonlyMap<ProviderDriverKind, AnyProviderDriver<R>>;
   readonly parentScope: Scope.Scope;
 }): ((configMap: ProviderInstanceConfigMap) => Effect.Effect<void, never, R>) => {
   const { state, driversById, parentScope } = input;
@@ -330,8 +330,8 @@ export const makeProviderInstanceRegistry = <R>(input: {
   R | Scope.Scope
 > =>
   Effect.gen(function* () {
-    const driversById = new Map<ProviderDriverId, AnyProviderDriver<R>>(
-      input.drivers.map((driver) => [driver.driverId, driver]),
+    const driversById = new Map<ProviderDriverKind, AnyProviderDriver<R>>(
+      input.drivers.map((driver) => [driver.driverKind, driver]),
     );
 
     // Capture the enclosing scope so per-instance child scopes can be

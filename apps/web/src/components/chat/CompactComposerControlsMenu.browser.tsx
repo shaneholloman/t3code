@@ -1,10 +1,10 @@
 import {
   DEFAULT_MODEL_BY_PROVIDER,
   EnvironmentId,
-  isBuiltInDriverId,
+  isBuiltInDriverKind,
   ModelSelection,
   ProviderInstanceId,
-  ProviderKind,
+  BuiltInDriverKind,
   ThreadId,
 } from "@t3tools/contracts";
 import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime";
@@ -54,12 +54,12 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
   const threadRef = scopeThreadRef(LOCAL_ENVIRONMENT_ID, threadId);
   const threadKey = scopedThreadKey(threadRef);
   // Test fixtures only ever pass built-in drivers; narrow back to
-  // `ProviderKind` to keep the test wiring (which keys into per-driver
+  // `BuiltInDriverKind` to keep the test wiring (which keys into per-driver
   // records) typed. The composer draft now keys by `ProviderInstanceId`;
   // every built-in kind literal is a valid instance id slug, so we brand
   // once and reuse for both the map key and `activeProvider`.
-  const provider: ProviderKind =
-    props?.modelSelection?.instanceId && isBuiltInDriverId(props.modelSelection.instanceId)
+  const provider: BuiltInDriverKind =
+    props?.modelSelection?.instanceId && isBuiltInDriverKind(props.modelSelection.instanceId)
       ? props.modelSelection.instanceId
       : "claudeAgent";
   const instanceId = ProviderInstanceId.make(provider);

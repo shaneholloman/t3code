@@ -28,6 +28,7 @@ import {
   isCommandMissingCause,
   providerModelsFromSettings,
   type CommandResult,
+  type ServerProviderDraft,
 } from "../providerSnapshot.ts";
 import { AcpSessionRuntime } from "../acp/AcpSessionRuntime.ts";
 
@@ -44,7 +45,6 @@ const EMPTY_CAPABILITIES: ModelCapabilities = createModelCapabilities({
 const CURSOR_ACP_MODEL_DISCOVERY_TIMEOUT_MS = 15_000;
 const CURSOR_ACP_MODEL_CAPABILITY_TIMEOUT = "4 seconds";
 const CURSOR_ACP_MODEL_DISCOVERY_CONCURRENCY = 4;
-const CURSOR_REFRESH_INTERVAL = "1 hour";
 const CURSOR_PARAMETERIZED_MODEL_PICKER_MIN_VERSION_DATE = 2026_04_08;
 export const CURSOR_PARAMETERIZED_MODEL_PICKER_CAPABILITIES = {
   _meta: {
@@ -52,13 +52,14 @@ export const CURSOR_PARAMETERIZED_MODEL_PICKER_CAPABILITIES = {
   },
 } satisfies NonNullable<EffectAcpSchema.InitializeRequest["clientCapabilities"]>;
 
-export function buildInitialCursorProviderSnapshot(cursorSettings: CursorSettings): ServerProvider {
+export function buildInitialCursorProviderSnapshot(
+  cursorSettings: CursorSettings,
+): ServerProviderDraft {
   const checkedAt = new Date().toISOString();
   const models = getCursorFallbackModels(cursorSettings);
 
   if (!cursorSettings.enabled) {
     return buildServerProvider({
-      provider: PROVIDER,
       presentation: CURSOR_PRESENTATION,
       enabled: false,
       checkedAt,
@@ -74,7 +75,6 @@ export function buildInitialCursorProviderSnapshot(cursorSettings: CursorSetting
   }
 
   return buildServerProvider({
-    provider: PROVIDER,
     presentation: CURSOR_PRESENTATION,
     enabled: true,
     checkedAt,
@@ -108,7 +108,12 @@ function flattenSessionConfigSelectOptions(
   }
   return configOption.options.flatMap((entry) =>
     "value" in entry
-      ? [{ value: entry.value.trim(), name: entry.name.trim() } satisfies CursorSessionSelectOption]
+      ? [
+          {
+            value: entry.value.trim(),
+            name: entry.name.trim(),
+          } satisfies CursorSessionSelectOption,
+        ]
       : entry.options.map(
           (option) =>
             ({
@@ -465,12 +470,18 @@ export function resolveCursorAcpBaseModelId(model: string | null | undefined): s
 export function resolveCursorAcpConfigUpdates(
   configOptions: ReadonlyArray<EffectAcpSchema.SessionConfigOption> | null | undefined,
   selections: ReadonlyArray<ProviderOptionSelection> | null | undefined,
-): ReadonlyArray<{ readonly configId: string; readonly value: string | boolean }> {
+): ReadonlyArray<{
+  readonly configId: string;
+  readonly value: string | boolean;
+}> {
   if (!configOptions || configOptions.length === 0) {
     return [];
   }
 
-  const updates: Array<{ readonly configId: string; readonly value: string | boolean }> = [];
+  const updates: Array<{
+    readonly configId: string;
+    readonly value: string | boolean;
+  }> = [];
 
   const reasoningOption = findCursorEffortConfigOption(configOptions);
   const requestedReasoning = normalizeCursorReasoningValue(
@@ -709,10 +720,9 @@ export function buildCursorProviderSnapshot(input: {
   readonly parsed: CursorAboutResult;
   readonly discoveredModels?: ReadonlyArray<ServerProviderModel>;
   readonly discoveryWarning?: string;
-}): ServerProvider {
+}): ServerProviderDraft {
   const message = joinProviderMessages(input.parsed.message, input.discoveryWarning);
   return buildServerProvider({
-    provider: PROVIDER,
     presentation: CURSOR_PRESENTATION,
     enabled: input.cursorSettings.enabled,
     checkedAt: input.checkedAt,
@@ -1016,7 +1026,11 @@ export function parseCursorAboutOutput(result: CommandResult): CursorAboutResult
   }
 
   // Any non-empty email value means authenticated.
-  return { version, status: "ready", auth: { status: "authenticated", email: userEmail } };
+  return {
+    version,
+    status: "ready",
+    auth: { status: "authenticated", email: userEmail },
+  };
 }
 
 const runCursorCommand = (
@@ -1063,13 +1077,12 @@ const runCursorAboutCommand = (
 export const checkCursorProviderStatus = Effect.fn("checkCursorProviderStatus")(function* (
   cursorSettings: CursorSettings,
   environment: NodeJS.ProcessEnv = process.env,
-): Effect.fn.Return<ServerProvider, never, ChildProcessSpawner.ChildProcessSpawner> {
+): Effect.fn.Return<ServerProviderDraft, never, ChildProcessSpawner.ChildProcessSpawner> {
   const checkedAt = new Date().toISOString();
   const fallbackModels = getCursorFallbackModels(cursorSettings);
 
   if (!cursorSettings.enabled) {
     return buildServerProvider({
-      provider: PROVIDER,
       presentation: CURSOR_PRESENTATION,
       enabled: false,
       checkedAt,
@@ -1093,7 +1106,6 @@ export const checkCursorProviderStatus = Effect.fn("checkCursorProviderStatus")(
   if (Result.isFailure(aboutProbe)) {
     const error = aboutProbe.failure;
     return buildServerProvider({
-      provider: PROVIDER,
       presentation: CURSOR_PRESENTATION,
       enabled: cursorSettings.enabled,
       checkedAt,
@@ -1112,7 +1124,6 @@ export const checkCursorProviderStatus = Effect.fn("checkCursorProviderStatus")(
 
   if (Option.isNone(aboutProbe.success)) {
     return buildServerProvider({
-      provider: PROVIDER,
       presentation: CURSOR_PRESENTATION,
       enabled: cursorSettings.enabled,
       checkedAt,
@@ -1135,7 +1146,6 @@ export const checkCursorProviderStatus = Effect.fn("checkCursorProviderStatus")(
     });
   if (parameterizedModelPickerUnsupportedMessage) {
     return buildServerProvider({
-      provider: PROVIDER,
       presentation: CURSOR_PRESENTATION,
       enabled: cursorSettings.enabled,
       checkedAt,

@@ -12,7 +12,7 @@
  *
  * @module provider/Drivers/ClaudeDriver
  */
-import { ClaudeSettings, ProviderDriverId, type ServerProvider } from "@t3tools/contracts";
+import { ClaudeSettings, ProviderDriverKind, type ServerProvider } from "@t3tools/contracts";
 import { Cache, Duration, Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
@@ -32,10 +32,11 @@ import {
   type ProviderDriver,
   type ProviderInstance,
 } from "../ProviderDriver.ts";
+import type { ServerProviderDraft } from "../providerSnapshot.ts";
 import { mergeProviderInstanceEnvironment } from "../ProviderInstanceEnvironment.ts";
 import { makeClaudeCapabilitiesCacheKey, makeClaudeContinuationGroupKey } from "./ClaudeHome.ts";
 
-const DRIVER_ID = ProviderDriverId.make("claudeAgent");
+const DRIVER_KIND = ProviderDriverKind.make("claudeAgent");
 const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
 const CAPABILITIES_PROBE_TTL = Duration.minutes(5);
 
@@ -53,17 +54,17 @@ const withInstanceIdentity =
     readonly accentColor: string | undefined;
     readonly continuationGroupKey: string;
   }) =>
-  (snapshot: ServerProvider): ServerProvider => ({
+  (snapshot: ServerProviderDraft): ServerProvider => ({
     ...snapshot,
     instanceId: input.instanceId,
-    driver: DRIVER_ID,
+    driver: DRIVER_KIND,
     ...(input.displayName ? { displayName: input.displayName } : {}),
     ...(input.accentColor ? { accentColor: input.accentColor } : {}),
     continuation: { groupKey: input.continuationGroupKey },
   });
 
 export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
-  driverId: DRIVER_ID,
+  driverKind: DRIVER_KIND,
   metadata: {
     displayName: "Claude",
     supportsMultipleInstances: true,
@@ -76,7 +77,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
       const eventLoggers = yield* ProviderEventLoggers;
       const processEnv = mergeProviderInstanceEnvironment(environment);
       const fallbackContinuationIdentity = defaultProviderContinuationIdentity({
-        driverId: DRIVER_ID,
+        driverKind: DRIVER_KIND,
         instanceId,
       });
       const effectiveConfig = { ...config, enabled } satisfies ClaudeSettings;
@@ -125,7 +126,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
         Effect.mapError(
           (cause) =>
             new ProviderDriverError({
-              driver: DRIVER_ID,
+              driver: DRIVER_KIND,
               instanceId,
               detail: `Failed to build Claude snapshot: ${cause.message ?? String(cause)}`,
               cause,
@@ -135,7 +136,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
 
       return {
         instanceId,
-        driverId: DRIVER_ID,
+        driverKind: DRIVER_KIND,
         continuationIdentity: {
           ...fallbackContinuationIdentity,
           continuationKey: continuationGroupKey,

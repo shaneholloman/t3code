@@ -1,7 +1,7 @@
 import type {
-  ProviderDriverId,
+  ProviderDriverKind,
   ProviderInstanceId,
-  ProviderKind,
+  BuiltInDriverKind,
   ServerProvider,
 } from "@t3tools/contracts";
 import type { Stream } from "effect";
@@ -13,19 +13,17 @@ export type ProviderSnapshotSource = {
   /**
    * Routing key — uniquely identifies this instance in the aggregated
    * snapshot list. Two different snapshot sources may share the same
-   * `provider` kind (multiple instances of the same driver).
+   * driver kind (multiple instances of the same driver).
    */
   readonly instanceId: ProviderInstanceId;
-  /** Driver implementation id. Equal to `provider` for built-in drivers. */
-  readonly driverId: ProviderDriverId;
-  /** Kind for legacy kind-keyed lookup paths (cache files, WS shim). */
-  readonly provider: ProviderKind;
+  /** Driver implementation kind. */
+  readonly driverKind: ProviderDriverKind;
   readonly getSnapshot: ServerProviderShape["getSnapshot"];
   readonly refresh: ServerProviderShape["refresh"];
   readonly streamChanges: Stream.Stream<ServerProvider>;
 };
 
-type BuiltInProviderServiceMap = Record<ProviderKind, ServerProviderShape>;
+type BuiltInProviderServiceMap = Record<BuiltInDriverKind, ServerProviderShape>;
 type BuiltInAdapterMap = {
   readonly codex: ProviderAdapterShape<ProviderAdapterError>;
   readonly claudeAgent: ProviderAdapterShape<ProviderAdapterError>;
@@ -38,7 +36,7 @@ export const BUILT_IN_PROVIDER_ORDER = [
   "claudeAgent",
   "opencode",
   "cursor",
-] as const satisfies ReadonlyArray<ProviderKind>;
+] as const satisfies ReadonlyArray<BuiltInDriverKind>;
 
 export function createBuiltInProviderSources(
   services: BuiltInProviderServiceMap,
@@ -47,11 +45,10 @@ export function createBuiltInProviderSources(
     // For legacy built-in-only callers the default instance id equals the
     // kind slug (that's the invariant `defaultInstanceIdForDriver` preserves).
     const slug = provider as unknown as ProviderInstanceId;
-    const driverId = provider as unknown as ProviderDriverId;
+    const driverKind = provider as unknown as ProviderDriverKind;
     return {
       instanceId: slug,
-      driverId,
-      provider,
+      driverKind,
       getSnapshot: services[provider].getSnapshot,
       refresh: services[provider].refresh,
       streamChanges: services[provider].streamChanges,

@@ -1,4 +1,9 @@
-import { type ProviderInstanceId, type ProviderKind } from "@t3tools/contracts";
+import {
+  isBuiltInDriverKind,
+  type BuiltInDriverKind,
+  type ProviderDriverKind,
+  type ProviderInstanceId,
+} from "@t3tools/contracts";
 import { memo } from "react";
 import { StarIcon } from "lucide-react";
 import {
@@ -18,7 +23,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
   /** Instance the model belongs to — the routing key used in combobox values. */
   instanceId: ProviderInstanceId;
   /** Driver kind of the instance — used for the provider icon glyph. */
-  driverKind: ProviderKind;
+  driverKind: ProviderDriverKind;
   /**
    * Display name to show in the secondary line (provider footer). Usually
    * the instance's configured `displayName` so custom instances like
@@ -34,7 +39,9 @@ export const ModelListRow = memo(function ModelListRow(props: {
   jumpLabel?: string | null;
   onToggleFavorite: () => void;
 }) {
-  const ProviderIcon = PROVIDER_ICON_BY_PROVIDER[props.driverKind];
+  const ProviderIcon = isBuiltInDriverKind(props.driverKind)
+    ? PROVIDER_ICON_BY_PROVIDER[props.driverKind as BuiltInDriverKind]
+    : null;
   const providerLabel = props.model.subProvider
     ? `${props.providerDisplayName} · ${props.model.subProvider}`
     : props.providerDisplayName;
@@ -104,7 +111,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
         </div>
         {props.showProvider && (
           <div className="flex items-center gap-1 mt-0.5">
-            <ProviderIcon className="size-3 shrink-0" />
+            {ProviderIcon ? <ProviderIcon className="size-3 shrink-0" /> : null}
             {props.providerAccentColor ? (
               <span
                 className="size-1.5 shrink-0 rounded-full"

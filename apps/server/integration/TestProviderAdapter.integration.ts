@@ -10,7 +10,7 @@ import {
   ProviderTurnStartResult,
   ThreadId,
   TurnId,
-  ProviderKind,
+  BuiltInDriverKind,
 } from "@t3tools/contracts";
 import { Effect, Queue, Stream } from "effect";
 
@@ -36,7 +36,7 @@ export interface TestTurnResponse {
 export type FixtureProviderRuntimeEvent = {
   readonly type: string;
   readonly eventId: EventId;
-  readonly provider: ProviderKind;
+  readonly provider: BuiltInDriverKind;
   readonly createdAt: string;
   readonly threadId: string;
   readonly turnId?: string | undefined;
@@ -178,7 +178,7 @@ function normalizeFixtureEvent(rawEvent: Record<string, unknown>): ProviderRunti
 
 export interface TestProviderAdapterHarness {
   readonly adapter: ProviderAdapterShape<ProviderAdapterError>;
-  readonly provider: ProviderKind;
+  readonly provider: BuiltInDriverKind;
   readonly queueTurnResponse: (
     threadId: ThreadId,
     response: TestTurnResponse,
@@ -198,7 +198,7 @@ export interface TestProviderAdapterHarness {
 }
 
 interface MakeTestProviderAdapterHarnessOptions {
-  readonly provider?: ProviderKind;
+  readonly provider?: BuiltInDriverKind;
 }
 
 function nowIso(): string {
@@ -206,7 +206,7 @@ function nowIso(): string {
 }
 
 function sessionNotFound(
-  provider: ProviderKind,
+  provider: BuiltInDriverKind,
   threadId: ThreadId,
 ): ProviderAdapterSessionNotFoundError {
   return new ProviderAdapterSessionNotFoundError({
@@ -216,7 +216,7 @@ function sessionNotFound(
 }
 
 function missingSessionEffect(
-  provider: ProviderKind,
+  provider: BuiltInDriverKind,
   threadId: ThreadId,
 ): Effect.Effect<never, ProviderAdapterError> {
   return Effect.fail(sessionNotFound(provider, threadId));

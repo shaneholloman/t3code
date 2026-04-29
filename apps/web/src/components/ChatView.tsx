@@ -1,11 +1,13 @@
 import {
   type ApprovalRequestId,
   DEFAULT_MODEL_BY_PROVIDER,
+  defaultInstanceIdForDriver,
   type EnvironmentId,
+  isBuiltInDriverKind,
   type MessageId,
   type ModelSelection,
   type ProjectScript,
-  type ProviderKind,
+  type BuiltInDriverKind,
   type ProjectId,
   type ProviderApprovalDecision,
   ProviderInstanceId,
@@ -17,6 +19,7 @@ import {
   type KeybindingCommand,
   OrchestrationThreadActivity,
   ProviderInteractionMode,
+  ProviderDriverKind,
   RuntimeMode,
   TerminalOpenInput,
 } from "@t3tools/contracts";
@@ -303,7 +306,7 @@ function useThreadPlanCatalog(threadIds: readonly ThreadId[]): ThreadPlanCatalog
 }
 
 function formatOutgoingPrompt(params: {
-  provider: ProviderKind;
+  provider: BuiltInDriverKind;
   model: string | null;
   models: ReadonlyArray<ServerProvider["models"][number]>;
   effort: string | null;
@@ -1056,7 +1059,7 @@ export default function ChatView(props: ChatViewProps) {
     providerStatuses,
     selectedProviderByThreadId ?? threadProvider ?? "codex",
   );
-  const selectedProvider: ProviderKind = lockedProvider ?? unlockedSelectedProvider;
+  const selectedProvider: BuiltInDriverKind = lockedProvider ?? unlockedSelectedProvider;
   const phase = derivePhase(activeThread?.session ?? null);
   const threadActivities = activeThread?.activities ?? EMPTY_ACTIVITIES;
   const workLogEntries = useMemo(
@@ -1437,14 +1440,15 @@ export default function ChatView(props: ChatViewProps) {
     activeThread?.modelSelection.instanceId ??
     activeProject?.defaultModelSelection?.instanceId ??
     null;
-  const activeProviderStatus = useMemo(
-    () =>
-      activeProviderInstanceId
-        ? (providerStatuses.find((status) => status.instanceId === activeProviderInstanceId) ??
-          null)
-        : (providerStatuses.find((status) => status.provider === selectedProvider) ?? null),
-    [activeProviderInstanceId, providerStatuses, selectedProvider],
-  );
+  const activeProviderStatus = useMemo(() => {
+    if (activeProviderInstanceId) {
+      return (
+        providerStatuses.find((status) => status.instanceId === activeProviderInstanceId) ?? null
+      );
+    }
+    const defaultInstanceId = defaultInstanceIdForDriver(ProviderDriverKind.make(selectedProvider));
+    return providerStatuses.find((status) => status.instanceId === defaultInstanceId) ?? null;
+  }, [activeProviderInstanceId, providerStatuses, selectedProvider]);
   const activeProjectCwd = activeProject?.cwd ?? null;
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
@@ -3150,7 +3154,7 @@ export default function ChatView(props: ChatViewProps) {
       // model lookup stay scoped to that exact instance. Unknown instance ids
       // are rejected by returning early; the server remains authoritative too.
       const entry = providerStatuses.find((snapshot) => snapshot.instanceId === instanceId);
-      const resolvedDriverKind = entry?.provider ?? null;
+      const resolvedDriverKind = entry && isBuiltInDriverKind(entry.driver) ? entry.driver : null;
       if (
         lockedProvider !== null &&
         resolvedDriverKind !== null &&

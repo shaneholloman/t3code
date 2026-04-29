@@ -6,7 +6,7 @@ import {
   ProviderInstanceId,
   type ProviderOptionDescriptor,
   type ProviderOptionSelection,
-  type ProviderKind,
+  type BuiltInDriverKind,
 } from "@t3tools/contracts";
 
 export interface SelectableModelOption {
@@ -231,7 +231,7 @@ export function isClaudeUltrathinkPrompt(text: string | null | undefined): boole
 
 export function normalizeModelSlug(
   model: string | null | undefined,
-  provider: ProviderKind = "codex",
+  provider: BuiltInDriverKind = "codex",
 ): string | null {
   if (typeof model !== "string") {
     return null;
@@ -250,7 +250,7 @@ export function normalizeModelSlug(
 }
 
 export function resolveSelectableModel(
-  provider: ProviderKind,
+  provider: BuiltInDriverKind,
   value: string | null | undefined,
   options: ReadonlyArray<SelectableModelOption>,
 ): string | null {
@@ -282,7 +282,7 @@ export function resolveSelectableModel(
   return resolved ? resolved.slug : null;
 }
 
-function resolveModelSlug(model: string | null | undefined, provider: ProviderKind): string {
+function resolveModelSlug(model: string | null | undefined, provider: BuiltInDriverKind): string {
   const normalized = normalizeModelSlug(model, provider);
   if (!normalized) {
     return DEFAULT_MODEL_BY_PROVIDER[provider];
@@ -291,7 +291,7 @@ function resolveModelSlug(model: string | null | undefined, provider: ProviderKi
 }
 
 export function resolveModelSlugForProvider(
-  provider: ProviderKind,
+  provider: BuiltInDriverKind,
   model: string | null | undefined,
 ): string {
   return resolveModelSlug(model, provider);
@@ -310,18 +310,18 @@ function cloneSelections(
   return selections.map(cloneSelection);
 }
 
-// Accepts both the closed `ProviderKind` (for built-in callers that still
+// Accepts both the closed `BuiltInDriverKind` (for built-in callers that still
 // statically know the driver) and any `string` (post-migration callers pass
 // a `ProviderInstanceId` routing key — see `ModelSelection.instanceId`
 // docstring on why that field is intentionally an open slug).
 //
 // Note: the parameter is named `provider` for back-compat with the many
-// built-in callers that still pass the driver id literally. For built-in
-// drivers the default instance id equals the driver id, so no mapping is
+// built-in callers that still pass the driver kind literally. For built-in
+// drivers the default instance id equals the driver kind slug, so no mapping is
 // needed. Callers targeting a non-default instance should pass its
 // instance id directly.
 export function createModelSelection(
-  provider: ProviderKind | (string & {}),
+  provider: BuiltInDriverKind | (string & {}),
   model: string,
   options?: ReadonlyArray<ProviderOptionSelection> | null,
 ): ModelSelection {

@@ -26,9 +26,9 @@ const makeStubInstance = (
 ): ProviderInstance =>
   ({
     instanceId,
-    driverId: instanceId as unknown as ProviderInstance["driverId"],
+    driverKind: instanceId as unknown as ProviderInstance["driverKind"],
     continuationIdentity: {
-      driverId: instanceId as unknown as ProviderInstance["driverId"],
+      driverKind: instanceId as unknown as ProviderInstance["driverKind"],
       continuationKey: `${instanceId}:test`,
     },
     displayName: undefined,

@@ -1,5 +1,9 @@
 import { type CSSProperties, memo } from "react";
-import { type ProviderKind } from "@t3tools/contracts";
+import {
+  isBuiltInDriverKind,
+  type BuiltInDriverKind,
+  type ProviderDriverKind,
+} from "@t3tools/contracts";
 
 import { PROVIDER_ICON_BY_PROVIDER } from "./providerIconUtils";
 import { cn } from "~/lib/utils";
@@ -15,7 +19,7 @@ export function providerInstanceInitials(label: string): string {
 }
 
 export const ProviderInstanceIcon = memo(function ProviderInstanceIcon(props: {
-  driverKind: ProviderKind;
+  driverKind: ProviderDriverKind | BuiltInDriverKind | string;
   displayName: string;
   accentColor?: string | undefined;
   showBadge?: boolean;
@@ -24,7 +28,9 @@ export const ProviderInstanceIcon = memo(function ProviderInstanceIcon(props: {
   badgeClassName?: string;
   statusDotClassName?: string;
 }) {
-  const Icon = PROVIDER_ICON_BY_PROVIDER[props.driverKind];
+  const Icon = isBuiltInDriverKind(props.driverKind)
+    ? PROVIDER_ICON_BY_PROVIDER[props.driverKind as BuiltInDriverKind]
+    : null;
   const accentStyle = props.accentColor
     ? ({ "--provider-accent": props.accentColor } as CSSProperties)
     : undefined;
@@ -38,7 +44,13 @@ export const ProviderInstanceIcon = memo(function ProviderInstanceIcon(props: {
       style={accentStyle}
       data-provider-accent-color={props.accentColor}
     >
-      <Icon className={cn("size-5 shrink-0", props.iconClassName)} aria-hidden />
+      {Icon ? (
+        <Icon className={cn("size-5 shrink-0", props.iconClassName)} aria-hidden />
+      ) : (
+        <span className={cn("text-[10px] font-semibold leading-none", props.iconClassName)}>
+          {providerInstanceInitials(props.displayName)}
+        </span>
+      )}
       {props.statusDotClassName ? (
         <span
           className={cn(

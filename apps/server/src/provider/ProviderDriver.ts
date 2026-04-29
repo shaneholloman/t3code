@@ -3,7 +3,7 @@
  *
  * `ProviderDriver` is a record, not a Context.Service. The thing it produces
  * (`ProviderInstance`) is also a record — three captured closures
- * (`snapshot`, `adapter`, `textGeneration`), an id, and a driver id. There
+ * (`snapshot`, `adapter`, `textGeneration`), an id, and a driver kind. There
  * are intentionally no per-driver Context tags because tags are
  * singleton-per-runtime and we need many instances of the same driver.
  *
@@ -22,7 +22,7 @@
  * @module provider/ProviderDriver
  */
 import type {
-  ProviderDriverId,
+  ProviderDriverKind,
   ProviderInstanceEnvironment,
   ProviderInstanceId,
 } from "@t3tools/contracts";
@@ -61,7 +61,7 @@ export interface ProviderDriverMetadata {
  */
 export interface ProviderInstance {
   readonly instanceId: ProviderInstanceId;
-  readonly driverId: ProviderDriverId;
+  readonly driverKind: ProviderDriverKind;
   readonly continuationIdentity: ProviderContinuationIdentity;
   readonly displayName: string | undefined;
   readonly accentColor?: string | undefined;
@@ -72,17 +72,17 @@ export interface ProviderInstance {
 }
 
 export interface ProviderContinuationIdentity {
-  readonly driverId: ProviderDriverId;
+  readonly driverKind: ProviderDriverKind;
   readonly continuationKey: string;
 }
 
 export function defaultProviderContinuationIdentity(input: {
-  readonly driverId: ProviderDriverId;
+  readonly driverKind: ProviderDriverKind;
   readonly instanceId: ProviderInstanceId;
 }): ProviderContinuationIdentity {
   return {
-    driverId: input.driverId,
-    continuationKey: `${input.driverId}:instance:${input.instanceId}`,
+    driverKind: input.driverKind,
+    continuationKey: `${input.driverKind}:instance:${input.instanceId}`,
   };
 }
 
@@ -115,7 +115,7 @@ export interface ProviderDriverCreateInput<Config> {
  * `config` MUST yield instances with no shared mutable state.
  */
 export interface ProviderDriver<Config, R = never> {
-  readonly driverId: ProviderDriverId;
+  readonly driverKind: ProviderDriverKind;
   readonly metadata: ProviderDriverMetadata;
   /**
    * Decoder for the opaque `ProviderInstanceConfig.config` envelope. The

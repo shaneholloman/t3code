@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type {
-  ProviderKind,
+  BuiltInDriverKind,
   ProviderOptionDescriptor,
   ProviderOptionSelection,
   ServerProviderModel,
@@ -15,7 +15,7 @@ import {
 // optionDescriptors, so these tests use a single synthetic provider/model and
 // vary only the descriptor shape per scenario.
 
-const PROVIDER: ProviderKind = "codex";
+const PROVIDER: BuiltInDriverKind = "codex";
 const MODEL = "test-model";
 
 function selectDescriptor(

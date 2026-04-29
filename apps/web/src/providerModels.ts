@@ -1,8 +1,10 @@
 import {
   DEFAULT_MODEL_BY_PROVIDER,
-  isBuiltInDriverId,
+  defaultInstanceIdForDriver,
+  isBuiltInDriverKind,
+  ProviderDriverKind,
   type ModelCapabilities,
-  type ProviderKind,
+  type BuiltInDriverKind,
   type ServerProvider,
   type ServerProviderModel,
 } from "@t3tools/contracts";
@@ -12,7 +14,7 @@ const EMPTY_CAPABILITIES: ModelCapabilities = createModelCapabilities({
   optionDescriptors: [],
 });
 
-export function formatProviderKindLabel(provider: ProviderKind): string {
+export function formatBuiltInDriverKindLabel(provider: BuiltInDriverKind): string {
   return provider
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/[_-]+/g, " ")
@@ -22,36 +24,37 @@ export function formatProviderKindLabel(provider: ProviderKind): string {
 
 export function getProviderModels(
   providers: ReadonlyArray<ServerProvider>,
-  provider: ProviderKind,
+  provider: BuiltInDriverKind,
 ): ReadonlyArray<ServerProviderModel> {
-  return providers.find((candidate) => candidate.provider === provider)?.models ?? [];
+  return getProviderSnapshot(providers, provider)?.models ?? [];
 }
 
 export function getProviderSnapshot(
   providers: ReadonlyArray<ServerProvider>,
-  provider: ProviderKind,
+  provider: BuiltInDriverKind,
 ): ServerProvider | undefined {
-  return providers.find((candidate) => candidate.provider === provider);
+  const defaultInstanceId = defaultInstanceIdForDriver(ProviderDriverKind.make(provider));
+  return providers.find((candidate) => candidate.instanceId === defaultInstanceId);
 }
 
 export function getProviderDisplayName(
   providers: ReadonlyArray<ServerProvider>,
-  provider: ProviderKind,
+  provider: BuiltInDriverKind,
 ): string {
   const snapshot = getProviderSnapshot(providers, provider);
-  return snapshot?.displayName?.trim() || formatProviderKindLabel(provider);
+  return snapshot?.displayName?.trim() || formatBuiltInDriverKindLabel(provider);
 }
 
 export function getProviderInteractionModeToggle(
   providers: ReadonlyArray<ServerProvider>,
-  provider: ProviderKind,
+  provider: BuiltInDriverKind,
 ): boolean {
   return getProviderSnapshot(providers, provider)?.showInteractionModeToggle ?? true;
 }
 
 export function isProviderEnabled(
   providers: ReadonlyArray<ServerProvider>,
-  provider: ProviderKind,
+  provider: BuiltInDriverKind,
 ): boolean {
   if (providers.length === 0) {
     return true;
@@ -62,22 +65,26 @@ export function isProviderEnabled(
 // Accepts the open-driver string carried on `ModelSelection.provider` so
 // persisted/threaded selections referencing an unknown driver (rollback /
 // fork case) degrade to the first enabled built-in instead of crashing
-// downstream code that requires a closed `ProviderKind`.
+// downstream code that requires a closed `BuiltInDriverKind`.
 export function resolveSelectableProvider(
   providers: ReadonlyArray<ServerProvider>,
-  provider: ProviderKind | string | null | undefined,
-): ProviderKind {
-  const requested: ProviderKind = provider && isBuiltInDriverId(provider) ? provider : "codex";
+  provider: BuiltInDriverKind | string | null | undefined,
+): BuiltInDriverKind {
+  const requested: BuiltInDriverKind =
+    provider && isBuiltInDriverKind(provider) ? provider : "codex";
   if (isProviderEnabled(providers, requested)) {
     return requested;
   }
-  return providers.find((candidate) => candidate.enabled)?.provider ?? requested;
+  return (
+    (providers.find((candidate) => candidate.enabled && isBuiltInDriverKind(candidate.driver))
+      ?.driver as BuiltInDriverKind | undefined) ?? requested
+  );
 }
 
 export function getProviderModelCapabilities(
   models: ReadonlyArray<ServerProviderModel>,
   model: string | null | undefined,
-  provider: ProviderKind,
+  provider: BuiltInDriverKind,
 ): ModelCapabilities {
   const slug = normalizeModelSlug(model, provider);
   return models.find((candidate) => candidate.slug === slug)?.capabilities ?? EMPTY_CAPABILITIES;
@@ -85,7 +92,7 @@ export function getProviderModelCapabilities(
 
 export function getDefaultServerModel(
   providers: ReadonlyArray<ServerProvider>,
-  provider: ProviderKind,
+  provider: BuiltInDriverKind,
 ): string {
   const models = getProviderModels(providers, provider);
   return (

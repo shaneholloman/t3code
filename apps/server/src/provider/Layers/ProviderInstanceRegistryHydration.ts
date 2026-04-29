@@ -15,7 +15,7 @@
  * This module bridges (2) into (1) and wires the resulting map into a
  * mutable registry. For every built-in driver whose id is not already
  * present in `providerInstances` (keyed on
- * `defaultInstanceIdForDriver(driverId)` — literally the driver id as a
+ * `defaultInstanceIdForDriver(driverKind)` — literally the driver kind as a
  * routing slug), we synthesize an envelope from the legacy field. The
  * registry decodes both flavours through the same `configSchema` and ends
  * up with one uniform `ProviderInstance` per entry.
@@ -74,7 +74,7 @@ export const deriveProviderInstanceConfigMap = (
   const merged: Record<string, ProviderInstanceConfig> = { ...settings.providerInstances };
 
   for (const driver of BUILT_IN_DRIVERS) {
-    const instanceId = defaultInstanceIdForDriver(driver.driverId);
+    const instanceId = defaultInstanceIdForDriver(driver.driverKind);
     if (instanceId in merged) {
       // Explicit `providerInstances` entry for this slot — user-authored
       // config always wins over the legacy mirror.
@@ -83,17 +83,17 @@ export const deriveProviderInstanceConfigMap = (
 
     // Only built-in drivers have a legacy mirror; the registry's
     // `providers` struct is keyed on the same literal slug as
-    // `driverId`. Access is dynamic (the driver id is a branded string),
+    // `driverKind`. Access is dynamic (the driver kind is a branded string),
     // but it's constrained to `keyof settings.providers` by the union of
-    // built-in driver ids.
-    const legacyKey = driver.driverId as keyof ServerSettings["providers"];
+    // built-in driver kinds.
+    const legacyKey = driver.driverKind as keyof ServerSettings["providers"];
     const legacyConfig = settings.providers[legacyKey];
     if (legacyConfig === undefined) {
       continue;
     }
 
     merged[instanceId] = {
-      driver: driver.driverId,
+      driver: driver.driverKind,
       config: legacyConfig,
     };
   }

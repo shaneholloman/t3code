@@ -12,9 +12,9 @@ import type {
 import {
   ApprovalRequestId,
   EventId,
-  ProviderDriverId,
+  ProviderDriverKind,
   ProviderInstanceId,
-  type ProviderKind,
+  type BuiltInDriverKind,
   ProviderSessionStartInput,
   ThreadId,
   TurnId,
@@ -64,7 +64,7 @@ const claudeAgentInstanceId = ProviderInstanceId.make("claudeAgent");
 type LegacyProviderRuntimeEvent = {
   readonly type: string;
   readonly eventId: EventId;
-  readonly provider: ProviderKind;
+  readonly provider: BuiltInDriverKind;
   readonly createdAt: string;
   readonly threadId: ThreadId;
   readonly turnId?: string | undefined;
@@ -74,7 +74,7 @@ type LegacyProviderRuntimeEvent = {
   readonly [key: string]: unknown;
 };
 
-function makeFakeCodexAdapter(provider: ProviderKind = "codex") {
+function makeFakeCodexAdapter(provider: BuiltInDriverKind = "codex") {
   const sessions = new Map<ThreadId, ProviderSession>();
   const runtimeEventPubSub = Effect.runSync(PubSub.unbounded<ProviderRuntimeEvent>());
 
@@ -344,7 +344,7 @@ it.effect("ProviderServiceLive rejects new sessions for disabled providers", () 
 it.effect("ProviderServiceLive rejects new sessions for disabled custom instances", () =>
   Effect.gen(function* () {
     const instanceId = ProviderInstanceId.make("codex_personal");
-    const driverId = ProviderDriverId.make("codex");
+    const driverKind = ProviderDriverKind.make("codex");
     const codex = makeFakeCodexAdapter();
     const unsupported = () =>
       new ProviderUnsupportedError({
@@ -359,11 +359,11 @@ it.effect("ProviderServiceLive rejects new sessions for disabled custom instance
         requestedInstanceId === instanceId
           ? Effect.succeed({
               instanceId,
-              driverId,
+              driverKind,
               displayName: "Codex Personal",
               enabled: false,
               continuationIdentity: {
-                driverId,
+                driverKind,
                 continuationKey: "codex:/Users/example/.codex",
               },
             })

@@ -12,7 +12,7 @@
  *
  * @module provider/Drivers/OpenCodeDriver
  */
-import { OpenCodeSettings, ProviderDriverId, type ServerProvider } from "@t3tools/contracts";
+import { OpenCodeSettings, ProviderDriverKind, type ServerProvider } from "@t3tools/contracts";
 import { Duration, Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
@@ -32,9 +32,10 @@ import {
   type ProviderDriver,
   type ProviderInstance,
 } from "../ProviderDriver.ts";
+import type { ServerProviderDraft } from "../providerSnapshot.ts";
 import { mergeProviderInstanceEnvironment } from "../ProviderInstanceEnvironment.ts";
 
-const DRIVER_ID = ProviderDriverId.make("opencode");
+const DRIVER_KIND = ProviderDriverKind.make("opencode");
 const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
 
 export type OpenCodeDriverEnv =
@@ -52,17 +53,17 @@ const withInstanceIdentity =
     readonly accentColor: string | undefined;
     readonly continuationGroupKey: string;
   }) =>
-  (snapshot: ServerProvider): ServerProvider => ({
+  (snapshot: ServerProviderDraft): ServerProvider => ({
     ...snapshot,
     instanceId: input.instanceId,
-    driver: DRIVER_ID,
+    driver: DRIVER_KIND,
     ...(input.displayName ? { displayName: input.displayName } : {}),
     ...(input.accentColor ? { accentColor: input.accentColor } : {}),
     continuation: { groupKey: input.continuationGroupKey },
   });
 
 export const OpenCodeDriver: ProviderDriver<OpenCodeSettings, OpenCodeDriverEnv> = {
-  driverId: DRIVER_ID,
+  driverKind: DRIVER_KIND,
   metadata: {
     displayName: "OpenCode",
     supportsMultipleInstances: true,
@@ -76,7 +77,7 @@ export const OpenCodeDriver: ProviderDriver<OpenCodeSettings, OpenCodeDriverEnv>
       const eventLoggers = yield* ProviderEventLoggers;
       const processEnv = mergeProviderInstanceEnvironment(environment);
       const continuationIdentity = defaultProviderContinuationIdentity({
-        driverId: DRIVER_ID,
+        driverKind: DRIVER_KIND,
         instanceId,
       });
       const stampIdentity = withInstanceIdentity({
@@ -111,7 +112,7 @@ export const OpenCodeDriver: ProviderDriver<OpenCodeSettings, OpenCodeDriverEnv>
         Effect.mapError(
           (cause) =>
             new ProviderDriverError({
-              driver: DRIVER_ID,
+              driver: DRIVER_KIND,
               instanceId,
               detail: `Failed to build OpenCode snapshot: ${cause.message ?? String(cause)}`,
               cause,
@@ -121,7 +122,7 @@ export const OpenCodeDriver: ProviderDriver<OpenCodeSettings, OpenCodeDriverEnv>
 
       return {
         instanceId,
-        driverId: DRIVER_ID,
+        driverKind: DRIVER_KIND,
         continuationIdentity,
         displayName,
         accentColor,

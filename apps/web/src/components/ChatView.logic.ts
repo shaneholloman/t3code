@@ -1,9 +1,9 @@
 import {
   type EnvironmentId,
-  isBuiltInDriverId,
+  isBuiltInDriverKind,
   ProjectId,
   type ModelSelection,
-  type ProviderKind,
+  type BuiltInDriverKind,
   type ScopedThreadRef,
   type ThreadId,
   type TurnId,
@@ -228,9 +228,9 @@ export function threadHasStarted(thread: Thread | null | undefined): boolean {
 }
 
 // `threadProvider` is typed as the open driver string carried by
-// `ModelSelection.instanceId`; we narrow back to the closed `ProviderKind`
+// `ModelSelection.instanceId`; we narrow back to the closed `BuiltInDriverKind`
 // here since downstream lock-state consumers only deal with built-in
-// drivers. Unknown driver ids degrade to `null` (i.e. "unlocked"), which
+// drivers. Unknown driver kinds degrade to `null` (i.e. "unlocked"), which
 // is the safe rollback / fork behavior — the routing layer is the right
 // place to surface "driver not installed" errors, not the lock state.
 //
@@ -245,7 +245,7 @@ export function deriveLockedProvider(input: {
   thread: Thread | null | undefined;
   selectedProvider: string | null;
   threadProvider: string | null;
-}): ProviderKind | null {
+}): BuiltInDriverKind | null {
   if (!threadHasStarted(input.thread)) {
     return null;
   }
@@ -254,9 +254,9 @@ export function deriveLockedProvider(input: {
     return sessionProvider;
   }
   const narrowedThreadProvider =
-    input.threadProvider && isBuiltInDriverId(input.threadProvider) ? input.threadProvider : null;
+    input.threadProvider && isBuiltInDriverKind(input.threadProvider) ? input.threadProvider : null;
   const narrowedSelectedProvider =
-    input.selectedProvider && isBuiltInDriverId(input.selectedProvider)
+    input.selectedProvider && isBuiltInDriverKind(input.selectedProvider)
       ? input.selectedProvider
       : null;
   return narrowedThreadProvider ?? narrowedSelectedProvider ?? null;

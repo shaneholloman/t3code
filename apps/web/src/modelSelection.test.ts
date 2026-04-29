@@ -1,7 +1,8 @@
 import {
-  ProviderDriverId,
+  isBuiltInDriverKind,
+  ProviderDriverKind,
   ProviderInstanceId,
-  type ProviderKind,
+  type BuiltInDriverKind,
   type ServerProvider,
 } from "@t3tools/contracts";
 import { DEFAULT_UNIFIED_SETTINGS, type UnifiedSettings } from "@t3tools/contracts/settings";
@@ -14,14 +15,20 @@ import {
 } from "./modelSelection";
 
 function provider(input: {
-  provider: ProviderKind;
+  provider?: BuiltInDriverKind;
   instanceId: string;
   models?: ReadonlyArray<string>;
 }): ServerProvider {
+  const driver =
+    input.provider ??
+    (isBuiltInDriverKind(input.instanceId)
+      ? input.instanceId
+      : input.instanceId.startsWith("claude_")
+        ? "claudeAgent"
+        : "codex");
   return {
-    provider: input.provider,
     instanceId: ProviderInstanceId.make(input.instanceId),
-    driver: ProviderDriverId.make(input.provider),
+    driver: ProviderDriverKind.make(driver),
     enabled: true,
     installed: true,
     version: null,
@@ -44,11 +51,11 @@ function settingsWithProviderInstances(): UnifiedSettings {
     ...DEFAULT_UNIFIED_SETTINGS,
     providerInstances: {
       [ProviderInstanceId.make("claudeAgent")]: {
-        driver: ProviderDriverId.make("claudeAgent"),
+        driver: ProviderDriverKind.make("claudeAgent"),
         config: { customModels: [] },
       },
       [ProviderInstanceId.make("claude_openrouter")]: {
-        driver: ProviderDriverId.make("claudeAgent"),
+        driver: ProviderDriverKind.make("claudeAgent"),
         config: { customModels: ["openai/gpt-5.5"] },
       },
     },
@@ -59,12 +66,10 @@ describe("instance-scoped model selection", () => {
   it("keeps custom models on the provider instance that declared them", () => {
     const providers = [
       provider({
-        provider: "claudeAgent",
         instanceId: "claudeAgent",
         models: ["claude-sonnet-4-6"],
       }),
       provider({
-        provider: "claudeAgent",
         instanceId: "claude_openrouter",
         models: ["claude-sonnet-4-6"],
       }),
@@ -104,12 +109,10 @@ describe("instance-scoped model selection", () => {
   it("does not inject an unknown selected slug into the stock instance list", () => {
     const providers = [
       provider({
-        provider: "claudeAgent",
         instanceId: "claudeAgent",
         models: ["claude-sonnet-4-6"],
       }),
       provider({
-        provider: "claudeAgent",
         instanceId: "claude_openrouter",
         models: ["claude-sonnet-4-6"],
       }),
@@ -128,12 +131,10 @@ describe("instance-scoped model selection", () => {
   it("falls back instead of resolving a custom slug against the wrong instance", () => {
     const providers = [
       provider({
-        provider: "claudeAgent",
         instanceId: "claudeAgent",
         models: ["claude-sonnet-4-6"],
       }),
       provider({
-        provider: "claudeAgent",
         instanceId: "claude_openrouter",
         models: ["claude-sonnet-4-6"],
       }),
@@ -152,12 +153,10 @@ describe("instance-scoped model selection", () => {
   it("preserves custom provider instances in settings model selection", () => {
     const providers = [
       provider({
-        provider: "claudeAgent",
         instanceId: "claudeAgent",
         models: ["claude-sonnet-4-6"],
       }),
       provider({
-        provider: "claudeAgent",
         instanceId: "claude_openrouter",
         models: ["claude-sonnet-4-6"],
       }),

@@ -13,11 +13,11 @@
 import {
   DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
   DEFAULT_SERVER_SETTINGS,
-  isBuiltInDriverId,
+  isBuiltInDriverKind,
   type ModelSelection,
   type ProviderInstanceConfig,
   type ProviderInstanceEnvironmentVariable,
-  type ProviderKind,
+  type BuiltInDriverKind,
   ProviderInstanceId,
   ServerSettings,
   ServerSettingsError,
@@ -151,7 +151,7 @@ export class ServerSettingsService extends Context.Service<
 
 const ServerSettingsJson = fromLenientJson(ServerSettings);
 
-const PROVIDER_ORDER: readonly ProviderKind[] = ["codex", "claudeAgent", "opencode", "cursor"];
+const PROVIDER_ORDER: readonly BuiltInDriverKind[] = ["codex", "claudeAgent", "opencode", "cursor"];
 
 /**
  * Ensure the `textGenerationModelSelection` points to an enabled provider.
@@ -167,8 +167,8 @@ function resolveTextGenerationProvider(settings: ServerSettings): ServerSettings
   }
 
   if (
-    isBuiltInDriverId(selection.instanceId) &&
-    settings.providers[selection.instanceId as ProviderKind].enabled
+    isBuiltInDriverKind(selection.instanceId) &&
+    settings.providers[selection.instanceId as BuiltInDriverKind].enabled
   ) {
     return settings;
   }

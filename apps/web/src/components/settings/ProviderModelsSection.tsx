@@ -2,7 +2,11 @@
 
 import { InfoIcon, PlusIcon, XIcon } from "lucide-react";
 import { useRef, useState } from "react";
-import type { ProviderInstanceId, ProviderKind, ServerProviderModel } from "@t3tools/contracts";
+import type {
+  ProviderInstanceId,
+  BuiltInDriverKind,
+  ServerProviderModel,
+} from "@t3tools/contracts";
 import { normalizeModelSlug } from "@t3tools/shared/model";
 
 import { MAX_CUSTOM_MODEL_LENGTH } from "../../modelSelection";
@@ -15,7 +19,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
  * kind. Mirrors the prior hardcoded switch in `SettingsPanels.tsx` so the
  * UX is unchanged — only the owning component has moved.
  */
-const CUSTOM_MODEL_PLACEHOLDER_BY_KIND: Record<ProviderKind, string> = {
+const CUSTOM_MODEL_PLACEHOLDER_BY_KIND: Record<BuiltInDriverKind, string> = {
   codex: "gpt-6.7-codex-ultra-preview",
   claudeAgent: "claude-sonnet-5-0",
   cursor: "claude-sonnet-4-6",
@@ -30,7 +34,7 @@ interface ProviderModelsSectionProps {
    * when the instance uses a fork/unknown driver — the section renders
    * read-only (no add input) in that case.
    */
-  readonly driverKind: ProviderKind | null;
+  readonly driverKind: BuiltInDriverKind | null;
   /**
    * The live model list to display. Includes both built-in (probe-reported)
    * and custom entries, distinguished by `isCustom`.
@@ -74,7 +78,7 @@ export function ProviderModelsSection({
 
   const handleAdd = () => {
     // Unknown fork drivers don't go through `normalizeModelSlug` (the
-    // alias tables are keyed by closed `ProviderKind`), so keep the
+    // alias tables are keyed by closed `BuiltInDriverKind`), so keep the
     // verbatim trimmed slug for forks. Built-in drivers still get alias
     // rewrites ("sonnet" → "claude-sonnet-4-6" etc).
     const normalized = driverKind ? normalizeModelSlug(input, driverKind) : input.trim() || null;

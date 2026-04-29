@@ -1,8 +1,9 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   defaultInstanceIdForDriver,
-  ProviderDriverId,
+  ProviderDriverKind,
   ProviderInstanceId,
+  type BuiltInDriverKind,
   type ServerProvider,
 } from "@t3tools/contracts";
 import { createModelCapabilities } from "@t3tools/shared/model";
@@ -20,12 +21,11 @@ import {
 const emptyCapabilities = createModelCapabilities({ optionDescriptors: [] });
 
 const makeProvider = (
-  provider: ServerProvider["provider"],
+  provider: BuiltInDriverKind,
   overrides?: Partial<ServerProvider>,
 ): ServerProvider => ({
-  provider,
-  instanceId: defaultInstanceIdForDriver(ProviderDriverId.make(provider)),
-  driver: ProviderDriverId.make(provider),
+  instanceId: defaultInstanceIdForDriver(ProviderDriverKind.make(provider)),
+  driver: ProviderDriverKind.make(provider),
   enabled: true,
   installed: true,
   version: "1.0.0",
@@ -54,15 +54,15 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
       });
       const codexPath = resolveProviderStatusCachePath({
         cacheDir: tempDir,
-        instanceId: defaultInstanceIdForDriver(ProviderDriverId.make("codex")),
+        instanceId: defaultInstanceIdForDriver(ProviderDriverKind.make("codex")),
       });
       const claudePath = resolveProviderStatusCachePath({
         cacheDir: tempDir,
-        instanceId: defaultInstanceIdForDriver(ProviderDriverId.make("claudeAgent")),
+        instanceId: defaultInstanceIdForDriver(ProviderDriverKind.make("claudeAgent")),
       });
       const openCodePath = resolveProviderStatusCachePath({
         cacheDir: tempDir,
-        instanceId: defaultInstanceIdForDriver(ProviderDriverId.make("opencode")),
+        instanceId: defaultInstanceIdForDriver(ProviderDriverKind.make("opencode")),
       });
 
       yield* writeProviderStatusCache({
@@ -179,7 +179,7 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
         },
       ],
     });
-    const legacyCachedCodex: ServerProvider = {
+    const legacyCachedCodex = {
       provider: "codex",
       enabled: true,
       installed: true,
@@ -197,7 +197,7 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
       ],
       slashCommands: [],
       skills: [],
-    };
+    } as unknown as ServerProvider;
     const mismatchedCachedCodex = makeProvider("codex", {
       instanceId: ProviderInstanceId.make("codex_personal"),
     });

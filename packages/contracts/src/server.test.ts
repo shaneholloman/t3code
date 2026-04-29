@@ -6,9 +6,10 @@ import { ServerProvider } from "./server.ts";
 const decodeServerProvider = Schema.decodeUnknownSync(ServerProvider);
 
 describe("ServerProvider", () => {
-  it("defaults capability arrays when decoding legacy snapshots", () => {
+  it("defaults capability arrays when decoding provider snapshots", () => {
     const parsed = decodeServerProvider({
-      provider: "codex",
+      instanceId: "codex",
+      driver: "codex",
       enabled: true,
       installed: true,
       version: "1.0.0",
@@ -26,7 +27,6 @@ describe("ServerProvider", () => {
 
   it("decodes continuation group metadata", () => {
     const parsed = decodeServerProvider({
-      provider: "codex",
       instanceId: "codex_personal",
       driver: "codex",
       continuation: { groupKey: "codex:home:/Users/julius/.codex" },

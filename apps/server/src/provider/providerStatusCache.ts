@@ -1,5 +1,7 @@
 import * as nodePath from "node:path";
 import {
+  type BuiltInDriverKind,
+  isBuiltInDriverKind,
   type ProviderInstanceId,
   type ServerProvider,
   ServerProvider as ServerProviderSchema,
@@ -20,14 +22,16 @@ export const PROVIDER_CACHE_IDS = [
   "claudeAgent",
   "opencode",
   "cursor",
-] as const satisfies ReadonlyArray<ServerProvider["provider"]>;
+] as const satisfies ReadonlyArray<BuiltInDriverKind>;
 
 const decodeProviderStatusCache = Schema.decodeUnknownEffect(
   Schema.fromJsonString(ServerProviderSchema),
 );
 
-const providerOrderRank = (provider: ServerProvider["provider"]): number => {
-  const rank = PROVIDER_CACHE_IDS.indexOf(provider);
+const providerOrderRank = (driver: ServerProvider["driver"]): number => {
+  const rank = isBuiltInDriverKind(driver)
+    ? PROVIDER_CACHE_IDS.indexOf(driver)
+    : Number.MAX_SAFE_INTEGER;
   return rank === -1 ? Number.MAX_SAFE_INTEGER : rank;
 };
 
@@ -43,18 +47,14 @@ export const orderProviderSnapshots = (
   providers: ReadonlyArray<ServerProvider>,
 ): ReadonlyArray<ServerProvider> =>
   [...providers].toSorted(
-    (left, right) => providerOrderRank(left.provider) - providerOrderRank(right.provider),
+    (left, right) => providerOrderRank(left.driver) - providerOrderRank(right.driver),
   );
 
 export const isCachedProviderCorrelated = (input: {
   readonly cachedProvider: ServerProvider;
   readonly fallbackProvider: ServerProvider;
 }): boolean =>
-  input.cachedProvider.instanceId !== undefined &&
-  input.fallbackProvider.instanceId !== undefined &&
   input.cachedProvider.instanceId === input.fallbackProvider.instanceId &&
-  input.cachedProvider.driver !== undefined &&
-  input.fallbackProvider.driver !== undefined &&
   input.cachedProvider.driver === input.fallbackProvider.driver;
 
 export const hydrateCachedProvider = (input: {
@@ -111,14 +111,14 @@ export const resolveProviderStatusCachePath = (input: {
 
 /**
  * Legacy kind-keyed path resolver retained for callers that still think in
- * terms of `ProviderKind`. Prefer `resolveProviderStatusCachePath` with an
+ * terms of `BuiltInDriverKind`. Prefer `resolveProviderStatusCachePath` with an
  * `instanceId`; new code should route through the instance registry.
  *
  * @deprecated use `resolveProviderStatusCachePath` with an instance id.
  */
 export const resolveLegacyProviderStatusCachePath = (input: {
   readonly cacheDir: string;
-  readonly provider: ServerProvider["provider"];
+  readonly provider: BuiltInDriverKind;
 }) => nodePath.join(input.cacheDir, `${input.provider}.json`);
 
 export const readProviderStatusCache = (filePath: string) =>

@@ -1,7 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   DEFAULT_SERVER_SETTINGS,
-  ProviderDriverId,
+  ProviderDriverKind,
   ProviderInstanceId,
   ServerSettings,
   ServerSettingsPatch,
@@ -174,7 +174,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       const next = yield* serverSettings.updateSettings({
         providerInstances: {
           [ProviderInstanceId.make("claude_openrouter")]: {
-            driver: ProviderDriverId.make("claudeAgent"),
+            driver: ProviderDriverKind.make("claudeAgent"),
             enabled: true,
             config: { customModels: ["openai/gpt-5.5"] },
           },
@@ -207,7 +207,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           },
           providerInstances: {
             [instanceId]: {
-              driver: ProviderDriverId.make("claudeAgent"),
+              driver: ProviderDriverKind.make("claudeAgent"),
               enabled: true,
               config: { customModels: ["openai/gpt-5.5"] },
             },
@@ -233,7 +233,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       const next = yield* serverSettings.updateSettings({
         providerInstances: {
           [instanceId]: {
-            driver: ProviderDriverId.make("openrouter"),
+            driver: ProviderDriverKind.make("openrouter"),
             enabled: true,
             config: { customModels: ["openai/gpt-5.5"] },
           },
@@ -292,7 +292,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       yield* serverSettings.updateSettings({
         providerInstances: {
           [codexId]: {
-            driver: ProviderDriverId.make("codex"),
+            driver: ProviderDriverKind.make("codex"),
             displayName: "Codex Work",
             accentColor: "#7c3aed",
             enabled: true,
@@ -304,7 +304,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       const next = yield* serverSettings.updateSettings({
         providerInstances: {
           [codexId]: {
-            driver: ProviderDriverId.make("codex"),
+            driver: ProviderDriverKind.make("codex"),
             displayName: "Codex Work",
             enabled: true,
             config: { homePath: "~/.codex" },
@@ -313,7 +313,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       });
 
       assert.deepEqual(next.providerInstances[codexId], {
-        driver: ProviderDriverId.make("codex"),
+        driver: ProviderDriverKind.make("codex"),
         displayName: "Codex Work",
         enabled: true,
         config: { homePath: "~/.codex" },
@@ -460,7 +460,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       const next = yield* serverSettings.updateSettings({
         providerInstances: {
           [instanceId]: {
-            driver: ProviderDriverId.make("codex"),
+            driver: ProviderDriverKind.make("codex"),
             environment: [
               { name: "OPENROUTER_API_KEY", value: "sk-or-secret", sensitive: true },
               { name: "ANTHROPIC_BASE_URL", value: "https://openrouter.ai/api", sensitive: false },
@@ -495,7 +495,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       const roundTripped = yield* serverSettings.updateSettings({
         providerInstances: {
           [instanceId]: {
-            driver: ProviderDriverId.make("codex"),
+            driver: ProviderDriverKind.make("codex"),
             displayName: "Codex Personal",
             environment: [
               { name: "OPENROUTER_API_KEY", value: "", sensitive: true, valueRedacted: true },

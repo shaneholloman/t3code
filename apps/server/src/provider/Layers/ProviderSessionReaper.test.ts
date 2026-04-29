@@ -3,7 +3,7 @@ import {
   ProjectId,
   ThreadId,
   TurnId,
-  ProviderDriverId,
+  ProviderDriverKind,
   ProviderInstanceId,
 } from "@t3tools/contracts";
 import { Effect, Exit, Layer, ManagedRuntime, Option, Scope, Stream } from "effect";
@@ -147,15 +147,15 @@ describe("ProviderSessionReaper", () => {
       listSessions: () => Effect.succeed([]),
       getCapabilities: () => Effect.succeed({ sessionModelSwitch: "in-session" }),
       getInstanceInfo: (instanceId) => {
-        const driverId = ProviderDriverId.make(String(instanceId));
+        const driverKind = ProviderDriverKind.make(String(instanceId));
         return Effect.succeed({
           instanceId,
-          driverId,
+          driverKind,
           displayName: undefined,
           enabled: true,
           continuationIdentity: {
-            driverId,
-            continuationKey: `${driverId}:instance:${instanceId}`,
+            driverKind,
+            continuationKey: `${driverKind}:instance:${instanceId}`,
           },
         });
       },

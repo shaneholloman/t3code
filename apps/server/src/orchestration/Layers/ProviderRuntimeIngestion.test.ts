@@ -4,7 +4,7 @@ import path from "node:path";
 
 import {
   OrchestrationReadModel,
-  ProviderDriverId,
+  ProviderDriverKind,
   ProviderRuntimeEvent,
   ProviderSession,
   ProviderInstanceId,
@@ -101,15 +101,15 @@ function createProviderServiceHarness() {
     listSessions: () => Effect.succeed([...runtimeSessions]),
     getCapabilities: () => Effect.succeed({ sessionModelSwitch: "in-session" }),
     getInstanceInfo: (instanceId) => {
-      const driverId = ProviderDriverId.make(String(instanceId));
+      const driverKind = ProviderDriverKind.make(String(instanceId));
       return Effect.succeed({
         instanceId,
-        driverId,
+        driverKind,
         displayName: undefined,
         enabled: true,
         continuationIdentity: {
-          driverId,
-          continuationKey: `${driverId}:instance:${instanceId}`,
+          driverKind,
+          continuationKey: `${driverKind}:instance:${instanceId}`,
         },
       });
     },

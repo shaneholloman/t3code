@@ -4,9 +4,9 @@ import { Radio as RadioPrimitive } from "@base-ui/react/radio";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ProviderInstanceId,
-  type ProviderDriverId,
+  type ProviderDriverKind,
   type ProviderInstanceConfig,
-  type ProviderKind,
+  type BuiltInDriverKind,
 } from "@t3tools/contracts";
 
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
@@ -52,7 +52,7 @@ function slugifyLabel(value: string): string {
     .slice(0, 48);
 }
 
-function deriveInstanceId(driver: ProviderKind, label: string): string {
+function deriveInstanceId(driver: BuiltInDriverKind, label: string): string {
   const slug = slugifyLabel(label);
   return slug ? `${driver}_${slug}` : "";
 }
@@ -83,7 +83,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
   const settings = useSettings();
   const { updateSettings } = useUpdateSettings();
 
-  const [driver, setDriver] = useState<ProviderKind>("codex");
+  const [driver, setDriver] = useState<BuiltInDriverKind>("codex");
   const [label, setLabel] = useState("");
   const [accentColor, setAccentColor] = useState<string>("");
   const [instanceId, setInstanceId] = useState("");
@@ -152,7 +152,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
     const normalizedAccentColor = normalizeProviderAccentColor(accentColor);
 
     const nextInstance: ProviderInstanceConfig = {
-      driver: driver as ProviderDriverId,
+      driver: driver as ProviderDriverKind,
       enabled: true,
       ...(label.trim().length > 0 ? { displayName: label.trim() } : {}),
       ...(normalizedAccentColor ? { accentColor: normalizedAccentColor } : {}),
@@ -214,7 +214,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
             </span>
             <RadioGroup
               value={driver}
-              onValueChange={(value) => setDriver(value as ProviderKind)}
+              onValueChange={(value) => setDriver(value as BuiltInDriverKind)}
               aria-labelledby="add-instance-driver-label"
               className="grid grid-cols-2 gap-2"
             >

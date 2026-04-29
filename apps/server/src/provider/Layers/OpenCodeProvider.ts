@@ -1,9 +1,4 @@
-import type {
-  ModelCapabilities,
-  OpenCodeSettings,
-  ServerProvider,
-  ServerProviderModel,
-} from "@t3tools/contracts";
+import type { ModelCapabilities, OpenCodeSettings, ServerProviderModel } from "@t3tools/contracts";
 import { Cause, Data, Effect } from "effect";
 
 import { createModelCapabilities } from "@t3tools/shared/model";
@@ -13,6 +8,7 @@ import {
   nonEmptyTrimmed,
   parseGenericCliVersion,
   providerModelsFromSettings,
+  type ServerProviderDraft,
 } from "../providerSnapshot.ts";
 import { compareCliVersions } from "../cliVersion.ts";
 import {
@@ -247,7 +243,9 @@ function flattenOpenCodeModels(input: OpenCodeInventory): ReadonlyArray<ServerPr
   return models.toSorted((left, right) => left.name.localeCompare(right.name));
 }
 
-export const makePendingOpenCodeProvider = (openCodeSettings: OpenCodeSettings): ServerProvider => {
+export const makePendingOpenCodeProvider = (
+  openCodeSettings: OpenCodeSettings,
+): ServerProviderDraft => {
   const checkedAt = new Date().toISOString();
   const models = providerModelsFromSettings(
     [],
@@ -258,7 +256,6 @@ export const makePendingOpenCodeProvider = (openCodeSettings: OpenCodeSettings):
 
   if (!openCodeSettings.enabled) {
     return buildServerProvider({
-      provider: PROVIDER,
       presentation: OPENCODE_PRESENTATION,
       enabled: false,
       checkedAt,
@@ -277,7 +274,6 @@ export const makePendingOpenCodeProvider = (openCodeSettings: OpenCodeSettings):
   }
 
   return buildServerProvider({
-    provider: PROVIDER,
     presentation: OPENCODE_PRESENTATION,
     enabled: true,
     checkedAt,
@@ -296,7 +292,7 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
   openCodeSettings: OpenCodeSettings,
   cwd: string,
   environment: NodeJS.ProcessEnv = process.env,
-): Effect.fn.Return<ServerProvider, never, OpenCodeRuntime> {
+): Effect.fn.Return<ServerProviderDraft, never, OpenCodeRuntime> {
   const openCodeRuntime = yield* OpenCodeRuntime;
   const checkedAt = new Date().toISOString();
   const customModels = openCodeSettings.customModels;
@@ -309,7 +305,6 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
       serverUrl: openCodeSettings.serverUrl,
     });
     return buildServerProvider({
-      provider: PROVIDER,
       presentation: OPENCODE_PRESENTATION,
       enabled: openCodeSettings.enabled,
       checkedAt,
@@ -331,7 +326,6 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
 
   if (!openCodeSettings.enabled) {
     return buildServerProvider({
-      provider: PROVIDER,
       presentation: OPENCODE_PRESENTATION,
       enabled: false,
       checkedAt,
@@ -383,7 +377,6 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
     }
     if (compareCliVersions(version, MINIMUM_OPENCODE_VERSION) < 0) {
       return buildServerProvider({
-        provider: PROVIDER,
         presentation: OPENCODE_PRESENTATION,
         enabled: openCodeSettings.enabled,
         checkedAt,
@@ -450,7 +443,6 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
   );
   const connectedCount = inventoryExit.value.providerList.connected.length;
   return buildServerProvider({
-    provider: PROVIDER,
     presentation: OPENCODE_PRESENTATION,
     enabled: true,
     checkedAt,

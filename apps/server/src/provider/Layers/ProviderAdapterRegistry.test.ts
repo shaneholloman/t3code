@@ -1,7 +1,7 @@
 import {
   defaultInstanceIdForDriver,
-  ProviderDriverId,
-  type ProviderKind,
+  ProviderDriverKind,
+  type BuiltInDriverKind,
   type ServerProvider,
 } from "@t3tools/contracts";
 import { it, assert, vi } from "@effect/vitest";
@@ -91,20 +91,20 @@ const fakeCursorAdapter: CursorAdapterShape = {
 
 // ProviderAdapterRegistryLive is now a facade over ProviderInstanceRegistry —
 // it walks `listInstances` once at boot and surfaces the default-instance
-// adapter keyed by its driver id. To test the facade we supply four fake
-// instances whose `instanceId === defaultInstanceIdForDriver(driverId)` so
+// adapter keyed by its driver kind. To test the facade we supply four fake
+// instances whose `instanceId === defaultInstanceIdForDriver(driverKind)` so
 // they pass the default-instance filter.
 const makeFakeInstance = (
-  driverIdString: "codex" | "claudeAgent" | "cursor" | "opencode",
+  driverKindString: "codex" | "claudeAgent" | "cursor" | "opencode",
   adapter: ProviderInstance["adapter"],
 ): ProviderInstance => {
-  const driverId = ProviderDriverId.make(driverIdString);
+  const driverKind = ProviderDriverKind.make(driverKindString);
   return {
-    instanceId: defaultInstanceIdForDriver(driverId),
-    driverId,
+    instanceId: defaultInstanceIdForDriver(driverKind),
+    driverKind,
     continuationIdentity: {
-      driverId,
-      continuationKey: `${driverId}:instance:${defaultInstanceIdForDriver(driverId)}`,
+      driverKind,
+      continuationKey: `${driverKind}:instance:${defaultInstanceIdForDriver(driverKind)}`,
     },
     displayName: undefined,
     enabled: true,
@@ -164,7 +164,9 @@ layer("ProviderAdapterRegistryLive", (it) => {
   it.effect("fails with ProviderUnsupportedError for unknown providers", () =>
     Effect.gen(function* () {
       const registry = yield* ProviderAdapterRegistry;
-      const adapter = yield* registry.getByProvider("unknown" as ProviderKind).pipe(Effect.result);
+      const adapter = yield* registry
+        .getByProvider("unknown" as BuiltInDriverKind)
+        .pipe(Effect.result);
       assertFailure(adapter, new ProviderUnsupportedError({ provider: "unknown" }));
     }),
   );

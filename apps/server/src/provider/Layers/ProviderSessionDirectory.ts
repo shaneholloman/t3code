@@ -1,7 +1,7 @@
 import {
   defaultInstanceIdForDriver,
-  ProviderDriverId,
-  ProviderKind,
+  ProviderDriverKind,
+  BuiltInDriverKind,
   type ThreadId,
 } from "@t3tools/contracts";
 import { Effect, Layer, Option, Schema } from "effect";
@@ -25,11 +25,11 @@ function toPersistenceError(operation: string) {
     });
 }
 
-function decodeProviderKind(
+function decodeBuiltInDriverKind(
   providerName: string,
   operation: string,
-): Effect.Effect<ProviderKind, ProviderSessionDirectoryPersistenceError> {
-  return Schema.decodeUnknownEffect(ProviderKind)(providerName).pipe(
+): Effect.Effect<BuiltInDriverKind, ProviderSessionDirectoryPersistenceError> {
+  return Schema.decodeUnknownEffect(BuiltInDriverKind)(providerName).pipe(
     Effect.mapError(
       (cause) =>
         new ProviderSessionDirectoryPersistenceError({
@@ -62,7 +62,7 @@ function toRuntimeBinding(
   runtime: ProviderSessionRuntime,
   operation: string,
 ): Effect.Effect<ProviderRuntimeBindingWithMetadata, ProviderSessionDirectoryPersistenceError> {
-  return decodeProviderKind(runtime.providerName, operation).pipe(
+  return decodeBuiltInDriverKind(runtime.providerName, operation).pipe(
     Effect.map(
       (provider) =>
         ({
@@ -74,7 +74,7 @@ function toRuntimeBinding(
           // from a driver kind.
           providerInstanceId:
             runtime.providerInstanceId ??
-            defaultInstanceIdForDriver(ProviderDriverId.make(provider)),
+            defaultInstanceIdForDriver(ProviderDriverKind.make(provider)),
           adapterKey: runtime.adapterKey,
           runtimeMode: runtime.runtimeMode,
           status: runtime.status,

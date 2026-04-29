@@ -4,7 +4,7 @@
  * The wire carries one `ServerProvider` per *configured instance* — the
  * default built-in codex instance, a user-authored `codex_personal`, an
  * unavailable shadow for a fork driver, etc. Legacy UI code collapsed these
- * into a single bucket per `ProviderKind` via `.find((p) => p.provider === kind)`,
+ * into a single bucket per built-in driver via `.find((p) => p.driver === kind)`,
  * which silently dropped every custom instance after the first. This module
  * replaces that pattern with `ProviderInstanceEntry[]`, keyed on
  * `ProviderInstanceId`, so the model picker, settings list, and composer
@@ -14,16 +14,17 @@
  */
 import {
   defaultInstanceIdForDriver,
+  isBuiltInDriverKind,
   PROVIDER_DISPLAY_NAMES,
-  ProviderDriverId,
+  type ProviderDriverKind,
   type ProviderInstanceId,
-  type ProviderKind,
+  type BuiltInDriverKind,
   type ServerProvider,
   type ServerProviderModel,
   type ServerProviderState,
 } from "@t3tools/contracts";
 
-import { formatProviderKindLabel } from "./providerModels";
+import { formatBuiltInDriverKindLabel } from "./providerModels";
 
 /**
  * UI-facing projection of one configured provider instance. Carries the
@@ -33,7 +34,7 @@ import { formatProviderKindLabel } from "./providerModels";
  */
 export interface ProviderInstanceEntry {
   readonly instanceId: ProviderInstanceId;
-  readonly driverKind: ProviderKind;
+  readonly driverKind: ProviderDriverKind;
   readonly displayName: string;
   readonly accentColor?: string | undefined;
   readonly continuationGroupKey?: string | undefined;
@@ -84,8 +85,11 @@ function humanizeInstanceId(instanceId: ProviderInstanceId): string {
  * falls back to the generic title-case of the kind slug for any future /
  * unknown kind that hasn't landed in the map yet.
  */
-function driverKindLabel(driverKind: ProviderKind): string {
-  return PROVIDER_DISPLAY_NAMES[driverKind] ?? formatProviderKindLabel(driverKind);
+function driverKindLabel(driverKind: ProviderDriverKind): string {
+  return isBuiltInDriverKind(driverKind)
+    ? (PROVIDER_DISPLAY_NAMES[driverKind as BuiltInDriverKind] ??
+        formatBuiltInDriverKindLabel(driverKind as BuiltInDriverKind))
+    : humanizeInstanceId(driverKind as unknown as ProviderInstanceId);
 }
 
 export function normalizeProviderAccentColor(value: string | undefined): string | undefined {
@@ -113,7 +117,7 @@ export function normalizeProviderAccentColor(value: string | undefined): string 
 function resolveInstanceDisplayName(
   snapshot: ServerProvider,
   instanceId: ProviderInstanceId,
-  driverKind: ProviderKind,
+  driverKind: ProviderDriverKind,
   isDefault: boolean,
 ): string {
   const trimmedSnapshotName = snapshot.displayName?.trim();
@@ -140,13 +144,8 @@ export function deriveProviderInstanceEntries(
 ): ReadonlyArray<ProviderInstanceEntry> {
   return providers.map((snapshot) => {
     const instanceId = snapshot.instanceId;
-    if (instanceId === undefined) {
-      throw new Error(`Provider snapshot '${snapshot.provider}' is missing instanceId.`);
-    }
-    const driverKind = snapshot.provider;
-    const defaultId = defaultInstanceIdForDriver(
-      snapshot.driver ?? ProviderDriverId.make(driverKind),
-    );
+    const driverKind = snapshot.driver;
+    const defaultId = defaultInstanceIdForDriver(driverKind);
     const isDefault = instanceId === defaultId;
     const displayName = resolveInstanceDisplayName(snapshot, instanceId, driverKind, isDefault);
     return {
@@ -180,7 +179,7 @@ export function sortProviderInstanceEntries(
   // default-first within each kind. Using a Map keeps the "first-seen"
   // semantics for kinds whose default instance is absent (unusual but
   // possible during the migration).
-  const byKind = new Map<ProviderKind, ProviderInstanceEntry[]>();
+  const byKind = new Map<ProviderDriverKind, ProviderInstanceEntry[]>();
   for (const entry of entries) {
     const bucket = byKind.get(entry.driverKind);
     if (bucket) {
@@ -250,17 +249,17 @@ export function resolveSelectableProviderInstance(
 /**
  * Resolve an open model-selection routing key back to a built-in driver kind.
  * Custom instance ids such as `claude_openrouter` are not themselves
- * `ProviderKind` literals, but the composer still needs the owning driver kind
+ * `BuiltInDriverKind` literals, but the composer still needs the owning driver kind
  * for capabilities, options, icons, and turn dispatch metadata.
  */
-export function resolveProviderKindForInstanceSelection(
+export function resolveBuiltInDriverKindForInstanceSelection(
   entries: ReadonlyArray<ProviderInstanceEntry>,
   providers: ReadonlyArray<ServerProvider>,
-  selection: ProviderInstanceId | ProviderKind | string | null | undefined,
-): ProviderKind | undefined {
+  selection: ProviderInstanceId | BuiltInDriverKind | string | null | undefined,
+): BuiltInDriverKind | undefined {
   const matchedEntry = entries.find((entry) => entry.instanceId === selection);
   if (matchedEntry) {
-    return matchedEntry.driverKind;
+    return isBuiltInDriverKind(matchedEntry.driverKind) ? matchedEntry.driverKind : undefined;
   }
   return undefined;
 }

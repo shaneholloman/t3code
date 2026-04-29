@@ -6,7 +6,7 @@ import {
   ModelSelection,
   ProviderRuntimeEvent,
   ProviderSession,
-  ProviderDriverId,
+  ProviderDriverKind,
   ProviderInstanceId,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
@@ -127,7 +127,7 @@ describe("ProviderCommandReactor", () => {
       ).toBe("claude_openrouter");
     });
 
-    it("uses the unknown driver id when the resolved driver is not a built-in provider kind", () => {
+    it("uses the unknown driver kind when the resolved driver is not a built-in provider kind", () => {
       expect(providerErrorLabel("third_party_driver")).toBe("third_party_driver");
     });
   });
@@ -180,7 +180,7 @@ describe("ProviderCommandReactor", () => {
               modelSelection.instanceId) as ProviderSession["provider"]);
       const session: ProviderSession = {
         // Test fixture only ever sets built-in providers; cast back to
-        // the closed `ProviderKind` to satisfy the wire schema (which
+        // the closed `BuiltInDriverKind` to satisfy the wire schema (which
         // still uses the closed union for `ProviderSession.provider`
         // pending slice 2c).
         provider,
@@ -295,20 +295,20 @@ describe("ProviderCommandReactor", () => {
         }),
       getInstanceInfo: (instanceId) => {
         const raw = String(instanceId);
-        const driverId = ProviderDriverId.make(
+        const driverKind = ProviderDriverKind.make(
           raw.startsWith("claude") ? "claudeAgent" : raw.startsWith("codex") ? "codex" : raw,
         );
         return Effect.succeed({
           instanceId,
-          driverId,
+          driverKind,
           displayName: undefined,
           enabled: true,
           continuationIdentity: {
-            driverId,
+            driverKind,
             continuationKey:
-              driverId === ProviderDriverId.make("codex")
+              driverKind === ProviderDriverKind.make("codex")
                 ? "codex:home:/shared-codex"
-                : `${driverId}:instance:${instanceId}`,
+                : `${driverKind}:instance:${instanceId}`,
           },
         });
       },
@@ -1738,7 +1738,7 @@ describe("ProviderCommandReactor", () => {
     harness.respondToRequest.mockImplementation(() =>
       Effect.fail(
         new ProviderAdapterRequestError({
-          provider: ProviderDriverId.make("codex"),
+          provider: ProviderDriverKind.make("codex"),
           method: "session/request_permission",
           detail: "Unknown pending permission request: approval-request-1",
         }),
@@ -1833,7 +1833,7 @@ describe("ProviderCommandReactor", () => {
     harness.respondToUserInput.mockImplementation(() =>
       Effect.fail(
         new ProviderAdapterRequestError({
-          provider: ProviderDriverId.make("claudeAgent"),
+          provider: ProviderDriverKind.make("claudeAgent"),
           method: "item/tool/respondToUserInput",
           detail: "Unknown pending user-input request: user-input-request-1",
         }),

@@ -4,7 +4,7 @@ import {
   EventId,
   type ModelSelection,
   type OrchestrationEvent,
-  ProviderKind,
+  BuiltInDriverKind,
   type OrchestrationSession,
   ThreadId,
   type ProviderSession,
@@ -343,25 +343,25 @@ const make = Effect.gen(function* () {
           }),
       ),
     );
-    const desiredDriverId = desiredInfo.driverId;
-    if (!Schema.is(ProviderKind)(desiredDriverId)) {
+    const desiredDriverKind = desiredInfo.driverKind;
+    if (!Schema.is(BuiltInDriverKind)(desiredDriverKind)) {
       return yield* new ProviderAdapterRequestError({
-        provider: providerErrorLabel(String(desiredDriverId)),
+        provider: providerErrorLabel(String(desiredDriverKind)),
         method: "thread.turn.start",
-        detail: `Requested provider instance '${desiredInstanceId}' uses unknown provider driver '${desiredDriverId}'. The driver is not installed in this build.`,
+        detail: `Requested provider instance '${desiredInstanceId}' uses unknown provider driver '${desiredDriverKind}'. The driver is not installed in this build.`,
       });
     }
-    const preferredProvider: ProviderKind = desiredDriverId;
+    const preferredProvider: BuiltInDriverKind = desiredDriverKind;
     if (
       thread.session !== null &&
       requestedModelSelection !== undefined &&
       requestedModelSelection.instanceId !== currentInstanceId
     ) {
-      if (currentInfo.driverId !== desiredInfo.driverId) {
+      if (currentInfo.driverKind !== desiredInfo.driverKind) {
         return yield* new ProviderAdapterRequestError({
           provider: preferredProvider,
           method: "thread.turn.start",
-          detail: `Thread '${threadId}' is bound to driver '${currentInfo.driverId}' and cannot switch to '${desiredInfo.driverId}'.`,
+          detail: `Thread '${threadId}' is bound to driver '${currentInfo.driverKind}' and cannot switch to '${desiredInfo.driverKind}'.`,
         });
       }
       if (
@@ -382,7 +382,7 @@ const make = Effect.gen(function* () {
 
     const startProviderSession = (input?: {
       readonly resumeCursor?: unknown;
-      readonly provider?: ProviderKind;
+      readonly provider?: BuiltInDriverKind;
     }) =>
       providerService.startSession(threadId, {
         threadId,

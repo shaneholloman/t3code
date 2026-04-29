@@ -21,7 +21,7 @@
  *
  * @module provider/Drivers/CodexDriver
  */
-import { CodexSettings, ProviderDriverId, type ServerProvider } from "@t3tools/contracts";
+import { CodexSettings, ProviderDriverKind, type ServerProvider } from "@t3tools/contracts";
 import { Duration, Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
@@ -33,6 +33,7 @@ import { checkCodexProviderStatus, makePendingCodexProvider } from "../Layers/Co
 import { ProviderEventLoggers } from "../Layers/ProviderEventLoggers.ts";
 import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
 import type { ProviderDriver, ProviderInstance } from "../ProviderDriver.ts";
+import type { ServerProviderDraft } from "../providerSnapshot.ts";
 import { mergeProviderInstanceEnvironment } from "../ProviderInstanceEnvironment.ts";
 import {
   codexContinuationIdentity,
@@ -40,7 +41,7 @@ import {
   resolveCodexHomeLayout,
 } from "./CodexHomeLayout.ts";
 
-const DRIVER_ID = ProviderDriverId.make("codex");
+const DRIVER_KIND = ProviderDriverKind.make("codex");
 const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
 
 /**
@@ -68,17 +69,17 @@ const withInstanceIdentity =
     readonly accentColor: string | undefined;
     readonly continuationGroupKey: string;
   }) =>
-  (snapshot: ServerProvider): ServerProvider => ({
+  (snapshot: ServerProviderDraft): ServerProvider => ({
     ...snapshot,
     instanceId: input.instanceId,
-    driver: DRIVER_ID,
+    driver: DRIVER_KIND,
     ...(input.displayName ? { displayName: input.displayName } : {}),
     ...(input.accentColor ? { accentColor: input.accentColor } : {}),
     continuation: { groupKey: input.continuationGroupKey },
   });
 
 export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
-  driverId: DRIVER_ID,
+  driverKind: DRIVER_KIND,
   metadata: {
     displayName: "Codex",
     supportsMultipleInstances: true,
@@ -102,7 +103,7 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
         Effect.mapError(
           (cause) =>
             new ProviderDriverError({
-              driver: DRIVER_ID,
+              driver: DRIVER_KIND,
               instanceId,
               detail: cause.message,
               cause,
@@ -147,7 +148,7 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
         Effect.mapError(
           (cause) =>
             new ProviderDriverError({
-              driver: DRIVER_ID,
+              driver: DRIVER_KIND,
               instanceId,
               detail: `Failed to build Codex snapshot: ${cause.message ?? String(cause)}`,
               cause,
@@ -157,7 +158,7 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
 
       return {
         instanceId,
-        driverId: DRIVER_ID,
+        driverKind: DRIVER_KIND,
         continuationIdentity,
         displayName,
         accentColor,

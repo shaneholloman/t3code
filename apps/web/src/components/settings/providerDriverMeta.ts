@@ -1,4 +1,4 @@
-import type { ProviderDriverId, ProviderKind } from "@t3tools/contracts";
+import type { ProviderDriverKind, BuiltInDriverKind } from "@t3tools/contracts";
 import { ClaudeAI, CursorIcon, type Icon, OpenAI, OpenCodeIcon } from "../Icons";
 
 /**
@@ -22,7 +22,7 @@ export interface DriverFieldDef {
  * both surfaces offer the same keys for the same driver.
  */
 export interface DriverOption {
-  readonly value: ProviderKind;
+  readonly value: BuiltInDriverKind;
   readonly label: string;
   readonly icon: Icon;
   readonly fields: readonly DriverFieldDef[];
@@ -138,25 +138,25 @@ export const DRIVER_OPTIONS: readonly DriverOption[] = [
 ];
 
 /**
- * Lookup table for built-in drivers. Typed `Record<ProviderKind, DriverOption>`
- * so consumers that already narrowed to the closed `ProviderKind` union — such
+ * Lookup table for built-in drivers. Typed `Record<BuiltInDriverKind, DriverOption>`
+ * so consumers that already narrowed to the closed `BuiltInDriverKind` union — such
  * as the Add-Instance dialog — can index it without an `undefined` guard.
- * Callers operating on the open `ProviderDriverId` slug should go through
+ * Callers operating on the open `ProviderDriverKind` slug should go through
  * `getDriverOption` instead, which returns `DriverOption | undefined`.
  */
-export const DRIVER_OPTION_BY_VALUE: Record<ProviderKind, DriverOption> = Object.fromEntries(
+export const DRIVER_OPTION_BY_VALUE: Record<BuiltInDriverKind, DriverOption> = Object.fromEntries(
   DRIVER_OPTIONS.map((option) => [option.value, option]),
-) as Record<ProviderKind, DriverOption>;
+) as Record<BuiltInDriverKind, DriverOption>;
 
 /**
  * Look up the driver metadata for an instance's `driver` field. Accepts
- * either the branded `ProviderDriverId` slug or the `ProviderKind` literal.
+ * either the branded `ProviderDriverKind` slug or the `BuiltInDriverKind` literal.
  * Returns `undefined` for fork / unknown drivers so callers can decide how
  * to render them — typically by falling back to a generic card.
  */
 export function getDriverOption(
-  driver: ProviderDriverId | ProviderKind | string | undefined,
+  driver: ProviderDriverKind | BuiltInDriverKind | string | undefined,
 ): DriverOption | undefined {
   if (driver === undefined) return undefined;
-  return DRIVER_OPTION_BY_VALUE[driver as ProviderKind];
+  return DRIVER_OPTION_BY_VALUE[driver as BuiltInDriverKind];
 }

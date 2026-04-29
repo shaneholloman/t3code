@@ -1,6 +1,6 @@
 import {
   DEFAULT_SERVER_SETTINGS,
-  ProviderDriverId,
+  ProviderDriverKind,
   ProviderInstanceId,
   type ProviderInstanceConfig,
 } from "@t3tools/contracts";
@@ -11,7 +11,7 @@ describe("buildProviderInstanceUpdatePatch", () => {
   it("promotes an edited default provider into providerInstances and resets the legacy provider", () => {
     const instanceId = ProviderInstanceId.make("codex");
     const nextInstance = {
-      driver: ProviderDriverId.make("codex"),
+      driver: ProviderDriverKind.make("codex"),
       enabled: true,
       config: {
         binaryPath: "/opt/t3/codex",
@@ -31,7 +31,7 @@ describe("buildProviderInstanceUpdatePatch", () => {
       },
       instanceId,
       instance: nextInstance,
-      driver: ProviderDriverId.make("codex"),
+      driver: ProviderDriverKind.make("codex"),
       isDefault: true,
     });
 
@@ -42,7 +42,7 @@ describe("buildProviderInstanceUpdatePatch", () => {
   it("updates custom instances without touching legacy provider settings", () => {
     const instanceId = ProviderInstanceId.make("codex_personal");
     const nextInstance = {
-      driver: ProviderDriverId.make("codex"),
+      driver: ProviderDriverKind.make("codex"),
       enabled: true,
       config: {
         homePath: "/Users/example/.codex-personal",
@@ -53,7 +53,7 @@ describe("buildProviderInstanceUpdatePatch", () => {
       settings: DEFAULT_SERVER_SETTINGS,
       instanceId,
       instance: nextInstance,
-      driver: ProviderDriverId.make("codex"),
+      driver: ProviderDriverKind.make("codex"),
       isDefault: false,
     });
 

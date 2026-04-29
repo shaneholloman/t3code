@@ -623,12 +623,12 @@ it.effect("preserves proposed plan implementation metadata when present", () =>
 
 // ── ModelSelection: instance-keyed wire shape + legacy decoder ────────
 //
-// `ModelSelection` is routing-keyed on `instanceId` — never a driver id.
+// `ModelSelection` is routing-keyed on `instanceId` — never a driver kind.
 // Persisted and in-flight payloads from pre-instance builds carry a
 // `provider` field whose value was a closed literal union of built-in
-// driver ids; those payloads are migrated at the wire boundary by
+// driver kinds; those payloads are migrated at the wire boundary by
 // promoting `provider` to the default instance id for that driver
-// (built-in drivers use the driver id as their default instance id, so
+// (built-in drivers use the driver kind slug as their default instance id, so
 // the migration is a 1:1 rename).
 //
 // These tests pin the rollback/fork tolerance invariant: legacy payloads
@@ -673,7 +673,7 @@ it.effect("ModelSelection prefers explicit instanceId over legacy provider", () 
 );
 
 it.effect(
-  "ModelSelection decodes unknown driver ids via legacy provider (rollback / fork invariant)",
+  "ModelSelection decodes unknown driver kinds via legacy provider (rollback / fork invariant)",
   () =>
     Effect.gen(function* () {
       const parsed = yield* decodeModelSelection({

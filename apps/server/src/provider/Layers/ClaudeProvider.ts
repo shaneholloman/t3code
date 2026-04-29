@@ -2,11 +2,8 @@ import type {
   ClaudeSettings,
   ModelCapabilities,
   ModelSelection,
-  ServerProvider,
   ServerProviderModel,
-  ServerProviderAuth,
   ServerProviderSlashCommand,
-  ServerProviderState,
 } from "@t3tools/contracts";
 import { Effect, Option, Result } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
@@ -28,12 +25,11 @@ import {
   buildServerProvider,
   DEFAULT_TIMEOUT_MS,
   detailFromResult,
-  extractAuthBoolean,
   isCommandMissingCause,
   parseGenericCliVersion,
   providerModelsFromSettings,
   spawnAndCollect,
-  type CommandResult,
+  type ServerProviderDraft,
 } from "../providerSnapshot.ts";
 import { compareCliVersions } from "../cliVersion.ts";
 import { makeClaudeEnvironment } from "../Drivers/ClaudeHome.ts";
@@ -244,42 +240,6 @@ export function resolveClaudeApiModelId(modelSelection: ModelSelection): string 
     default:
       return modelSelection.model;
   }
-}
-
-// ── Subscription type detection ─────────────────────────────────────
-//
-// The SDK probe returns typed `AccountInfo.subscriptionType` directly.
-// This walker is a best-effort fallback for legacy `claude auth status`
-// JSON output whose shape is not guaranteed. Live auth metadata now comes
-// from the SDK initialization result.
-const EMAIL_KEYS = ["email", "userEmail", "user_email"] as const;
-const EMAIL_CONTAINER_KEYS = ["auth", "account", "session", "user", "profile"] as const;
-
-/** Lift an unknown value into `Option<string>` if it is a non-empty string. */
-const asNonEmptyString = (v: unknown): Option.Option<string> =>
-  typeof v === "string" && v.length > 0 ? Option.some(v) : Option.none();
-
-/** Lift an unknown value into `Option<Record>` if it is a plain object. */
-const asRecord = (v: unknown): Option.Option<Record<string, unknown>> =>
-  typeof v === "object" && v !== null && !globalThis.Array.isArray(v)
-    ? Option.some(v as Record<string, unknown>)
-    : Option.none();
-
-function findEmail(value: unknown): Option.Option<string> {
-  if (globalThis.Array.isArray(value)) {
-    return Option.firstSomeOf(value.map(findEmail));
-  }
-
-  return asRecord(value).pipe(
-    Option.flatMap((record) => {
-      const direct = Option.firstSomeOf(EMAIL_KEYS.map((key) => asNonEmptyString(record[key])));
-      if (Option.isSome(direct)) return direct;
-
-      return Option.firstSomeOf(
-        EMAIL_CONTAINER_KEYS.map((key) => asRecord(record[key]).pipe(Option.flatMap(findEmail))),
-      );
-    }),
-  );
 }
 
 function toTitleCaseWords(value: string): string {
@@ -551,7 +511,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     claudeSettings: ClaudeSettings,
   ) => Effect.Effect<ClaudeCapabilitiesProbe | undefined>,
   environment: NodeJS.ProcessEnv = process.env,
-): Effect.fn.Return<ServerProvider, never, ChildProcessSpawner.ChildProcessSpawner> {
+): Effect.fn.Return<ServerProviderDraft, never, ChildProcessSpawner.ChildProcessSpawner> {
   const checkedAt = new Date().toISOString();
   const allModels = providerModelsFromSettings(
     BUILT_IN_MODELS,
@@ -562,7 +522,6 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
 
   if (!claudeSettings.enabled) {
     return buildServerProvider({
-      provider: PROVIDER,
       presentation: CLAUDE_PRESENTATION,
       enabled: false,
       checkedAt,
@@ -585,7 +544,6 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
   if (Result.isFailure(versionProbe)) {
     const error = versionProbe.failure;
     return buildServerProvider({
-      provider: PROVIDER,
       presentation: CLAUDE_PRESENTATION,
       enabled: claudeSettings.enabled,
       checkedAt,
@@ -604,7 +562,6 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
 
   if (Option.isNone(versionProbe.success)) {
     return buildServerProvider({
-      provider: PROVIDER,
       presentation: CLAUDE_PRESENTATION,
       enabled: claudeSettings.enabled,
       checkedAt,
@@ -625,7 +582,6 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
   if (version.code !== 0) {
     const detail = detailFromResult(version);
     return buildServerProvider({
-      provider: PROVIDER,
       presentation: CLAUDE_PRESENTATION,
       enabled: claudeSettings.enabled,
       checkedAt,
@@ -660,7 +616,6 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
 
   if (!capabilities) {
     return buildServerProvider({
-      provider: PROVIDER,
       presentation: CLAUDE_PRESENTATION,
       enabled: claudeSettings.enabled,
       checkedAt,
@@ -681,7 +636,6 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     authMethod: capabilities.tokenSource,
   });
   return buildServerProvider({
-    provider: PROVIDER,
     presentation: CLAUDE_PRESENTATION,
     enabled: claudeSettings.enabled,
     checkedAt,
@@ -701,7 +655,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
   });
 });
 
-export const makePendingClaudeProvider = (claudeSettings: ClaudeSettings): ServerProvider => {
+export const makePendingClaudeProvider = (claudeSettings: ClaudeSettings): ServerProviderDraft => {
   const checkedAt = new Date().toISOString();
   const models = providerModelsFromSettings(
     BUILT_IN_MODELS,
@@ -712,7 +666,6 @@ export const makePendingClaudeProvider = (claudeSettings: ClaudeSettings): Serve
 
   if (!claudeSettings.enabled) {
     return buildServerProvider({
-      provider: PROVIDER,
       presentation: CLAUDE_PRESENTATION,
       enabled: false,
       checkedAt,
@@ -728,7 +681,6 @@ export const makePendingClaudeProvider = (claudeSettings: ClaudeSettings): Serve
   }
 
   return buildServerProvider({
-    provider: PROVIDER,
     presentation: CLAUDE_PRESENTATION,
     enabled: true,
     checkedAt,

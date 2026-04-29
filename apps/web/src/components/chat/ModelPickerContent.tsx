@@ -1,6 +1,8 @@
 import {
+  isBuiltInDriverKind,
+  type ProviderDriverKind,
   type ProviderInstanceId,
-  type ProviderKind,
+  type BuiltInDriverKind,
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
 import { resolveSelectableModel } from "@t3tools/shared/model";
@@ -29,7 +31,7 @@ type ModelPickerItem = {
   shortName?: string;
   subProvider?: string;
   instanceId: ProviderInstanceId;
-  driverKind: ProviderKind;
+  driverKind: ProviderDriverKind;
   instanceDisplayName: string;
   instanceAccentColor?: string | undefined;
   continuationGroupKey?: string | undefined;
@@ -62,7 +64,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
    * remain selectable (e.g. locked to `codex` still lets the user switch
    * between the default Codex and a custom Codex Personal).
    */
-  lockedProvider: ProviderKind | null;
+  lockedProvider: BuiltInDriverKind | null;
   lockedContinuationGroupKey?: string | null;
   /**
    * All configured provider instances in display order. Used to render
@@ -138,7 +140,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   }, [focusSearchInput]);
 
   // Create a Set for efficient lookup. Favorites are keyed by
-  // `${instanceId}:${slug}`; the storage schema widened from ProviderKind
+  // `${instanceId}:${slug}`; the storage schema widened from BuiltInDriverKind
   // to ProviderInstanceId so pre-migration favorites keyed by driver slugs
   // (e.g. `"codex:gpt-5"`) still resolve — the default instance id equals
   // the driver slug.
@@ -163,6 +165,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   const matchesLockedProvider = useCallback(
     (entry: Pick<ProviderInstanceEntry, "driverKind" | "continuationGroupKey">): boolean => {
       if (props.lockedProvider === null) return true;
+      if (!isBuiltInDriverKind(entry.driverKind)) return false;
       if (entry.driverKind !== props.lockedProvider) return false;
       if (!props.lockedContinuationGroupKey) return true;
       return entry.continuationGroupKey === props.lockedContinuationGroupKey;
@@ -181,7 +184,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   }, [instanceEntries]);
 
   // Flatten models into a searchable array. One pass over the
-  // instance-keyed map; each model carries its instance + driver identity
+  // instance-keyed map; each model carries its instance id + driver kind
   // so the list row can render the right icon and display name without
   // another lookup.
   const flatModels = useMemo(() => {
@@ -351,7 +354,9 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       // `resolveSelectableModel` uses the driver kind for normalization
       // (slug casing etc.). Custom instances share their driver's
       // normalization rules, so pass the driver kind here.
-      const resolvedModel = resolveSelectableModel(entry.driverKind, modelSlug, options);
+      const resolvedModel = isBuiltInDriverKind(entry.driverKind)
+        ? resolveSelectableModel(entry.driverKind, modelSlug, options)
+        : modelSlug;
       if (resolvedModel) {
         onInstanceModelChange(instanceId, resolvedModel);
       }
@@ -640,7 +645,10 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                       showProvider={!isLocked || showLockedInstanceSidebar}
                       preferShortName={!isLocked}
                       useTriggerLabel={isLocked && !showLockedInstanceSidebar}
-                      showNewBadge={isModelPickerNewModel(model.driverKind, model.slug)}
+                      showNewBadge={
+                        isBuiltInDriverKind(model.driverKind) &&
+                        isModelPickerNewModel(model.driverKind, model.slug)
+                      }
                       jumpLabel={modelJumpLabelByKey.get(modelKey) ?? null}
                       onToggleFavorite={() => toggleFavorite(model.instanceId, model.slug)}
                     />
