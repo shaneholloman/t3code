@@ -124,8 +124,7 @@ const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 // for a built server entry, for example:
 // "/Users/julius/Development/Work/codething-mvp/apps/server/dist/bin.mjs"
 const DEV_REMOTE_T3_SERVER_ENTRY_PATH =
-  process.env.T3CODE_DEV_REMOTE_T3_SERVER_ENTRY_PATH?.trim() ??
-  "/Users/julius/Developer/t3code/apps/server/dist/bin.mjs";
+  process.env.T3CODE_DEV_REMOTE_T3_SERVER_ENTRY_PATH?.trim() ?? "";
 const desktopAppBranding: DesktopAppBranding = resolveDesktopAppBranding({
   isDevelopment,
   appVersion: app.getVersion(),
