@@ -1108,8 +1108,15 @@ export function makeOpenCodeAdapter(
       const modelSelection =
         input.modelSelection ??
         (context.session.model
-          ? { instanceId: PROVIDER, model: context.session.model }
+          ? { instanceId: boundInstanceId, model: context.session.model }
           : undefined);
+      if (modelSelection?.instanceId !== boundInstanceId) {
+        return yield* new ProviderAdapterValidationError({
+          provider: PROVIDER,
+          operation: "sendTurn",
+          issue: `OpenCode model selection is bound to instance '${modelSelection?.instanceId}', expected '${boundInstanceId}'.`,
+        });
+      }
       const parsedModel = parseOpenCodeModelSlug(modelSelection?.model);
       if (!parsedModel) {
         return yield* new ProviderAdapterValidationError({
@@ -1133,14 +1140,8 @@ export function makeOpenCodeAdapter(
         });
       }
 
-      const agent =
-        input.modelSelection?.instanceId === boundInstanceId
-          ? getModelSelectionStringOptionValue(input.modelSelection, "agent")
-          : undefined;
-      const variant =
-        input.modelSelection?.instanceId === boundInstanceId
-          ? getModelSelectionStringOptionValue(input.modelSelection, "variant")
-          : undefined;
+      const agent = getModelSelectionStringOptionValue(modelSelection, "agent");
+      const variant = getModelSelectionStringOptionValue(modelSelection, "variant");
 
       context.activeTurnId = turnId;
       context.activeAgent = agent ?? (input.interactionMode === "plan" ? "plan" : undefined);

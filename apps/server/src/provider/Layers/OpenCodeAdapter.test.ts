@@ -372,6 +372,95 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
     }).pipe(Effect.provide(adapterLayer));
   });
 
+  it.effect("uses the bound custom instance id for fallback sendTurn model selection", () => {
+    const customInstanceId = ProviderInstanceId.make("opencode_zen");
+    const adapterLayer = Layer.effect(
+      OpenCodeAdapter,
+      Effect.gen(function* () {
+        return yield* makeOpenCodeAdapter(openCodeAdapterTestSettings, {
+          instanceId: customInstanceId,
+        });
+      }),
+    ).pipe(
+      Layer.provideMerge(Layer.succeed(OpenCodeRuntime, OpenCodeRuntimeTestDouble)),
+      Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
+      Layer.provideMerge(ServerSettingsService.layerTest()),
+      Layer.provideMerge(providerSessionDirectoryTestLayer),
+      Layer.provideMerge(NodeServices.layer),
+    );
+
+    return Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-custom-instance-fallback-model");
+      yield* adapter.startSession({
+        provider: "opencode",
+        threadId,
+        runtimeMode: "full-access",
+        modelSelection: createModelSelection("opencode_zen", "anthropic/claude-sonnet-4-5"),
+      });
+
+      yield* adapter.sendTurn({
+        threadId,
+        input: "Fix it",
+      });
+
+      assert.deepEqual(runtimeMock.state.promptCalls.at(-1), {
+        sessionID: "http://127.0.0.1:9999/session",
+        model: {
+          providerID: "anthropic",
+          modelID: "claude-sonnet-4-5",
+        },
+        parts: [{ type: "text", text: "Fix it" }],
+      });
+    }).pipe(Effect.provide(adapterLayer));
+  });
+
+  it.effect("rejects sendTurn model selections for another instance id", () => {
+    const customInstanceId = ProviderInstanceId.make("opencode_zen");
+    const adapterLayer = Layer.effect(
+      OpenCodeAdapter,
+      Effect.gen(function* () {
+        return yield* makeOpenCodeAdapter(openCodeAdapterTestSettings, {
+          instanceId: customInstanceId,
+        });
+      }),
+    ).pipe(
+      Layer.provideMerge(Layer.succeed(OpenCodeRuntime, OpenCodeRuntimeTestDouble)),
+      Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
+      Layer.provideMerge(ServerSettingsService.layerTest()),
+      Layer.provideMerge(providerSessionDirectoryTestLayer),
+      Layer.provideMerge(NodeServices.layer),
+    );
+
+    return Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-custom-instance-wrong-selection");
+      yield* adapter.startSession({
+        provider: "opencode",
+        threadId,
+        runtimeMode: "full-access",
+      });
+
+      const error = yield* adapter
+        .sendTurn({
+          threadId,
+          input: "Fix it",
+          modelSelection: createModelSelection("opencode", "anthropic/claude-sonnet-4-5"),
+        })
+        .pipe(Effect.flip);
+
+      assert.equal(error._tag, "ProviderAdapterValidationError");
+      if (error._tag !== "ProviderAdapterValidationError") {
+        throw new Error("Unexpected error type");
+      }
+      assert.equal(
+        error.issue,
+        "OpenCode model selection is bound to instance 'opencode', expected 'opencode_zen'.",
+      );
+      assert.deepEqual(runtimeMock.state.promptCalls, []);
+    }).pipe(Effect.provide(adapterLayer));
+  });
+
   it.effect("reverts the full thread when rollback removes every assistant turn", () =>
     Effect.gen(function* () {
       const adapter = yield* OpenCodeAdapter;
