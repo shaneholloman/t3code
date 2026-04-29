@@ -1,2 +1,2 @@
 @echo off
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0ssh-askpass.ps1" %*
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0askpass-windows.ps1" %*
