@@ -211,6 +211,10 @@ const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
   },
 ];
 
+const CODEX_INSTANCE_ID = ProviderInstanceId.make("codex");
+const CLAUDE_INSTANCE_ID = ProviderInstanceId.make("claudeAgent");
+const OPENCODE_INSTANCE_ID = ProviderInstanceId.make("opencode");
+
 function buildCodexProvider(models: ServerProvider["models"]): ServerProvider {
   return {
     driver: ProviderDriverKind.make("codex"),
@@ -245,7 +249,6 @@ function buildOpenCodeProvider(models: ServerProvider["models"]): ServerProvider
 }
 
 async function mountPicker(props: {
-  provider?: BuiltInDriverKind;
   activeInstanceId?: ProviderInstanceId;
   model: string;
   lockedProvider: BuiltInDriverKind | null;
@@ -258,10 +261,7 @@ async function mountPicker(props: {
   const onInstanceModelChange = vi.fn();
   const providers = props.providers ?? TEST_PROVIDERS;
   const instanceEntries = sortProviderInstanceEntries(deriveProviderInstanceEntries(providers));
-  // The legacy test shape passes a driver kind; translate to the default
-  // instance id for that kind (they're the same string by design).
-  const provider = props.provider ?? "codex";
-  const activeInstanceId = props.activeInstanceId ?? (provider as unknown as ProviderInstanceId);
+  const activeInstanceId = props.activeInstanceId ?? CODEX_INSTANCE_ID;
   const modelOptionsByInstance = getCustomModelOptionsByInstance(
     DEFAULT_UNIFIED_SETTINGS,
     providers,
@@ -331,6 +331,7 @@ describe("ProviderModelPicker", () => {
 
   it("shows provider sidebar in unlocked mode", async () => {
     const mounted = await mountPicker({
+      activeInstanceId: CLAUDE_INSTANCE_ID,
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -351,6 +352,7 @@ describe("ProviderModelPicker", () => {
 
   it("shows favorites first in the provider sidebar", async () => {
     const mounted = await mountPicker({
+      activeInstanceId: CLAUDE_INSTANCE_ID,
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -372,6 +374,7 @@ describe("ProviderModelPicker", () => {
 
   it("filters models by selected provider in sidebar", async () => {
     const mounted = await mountPicker({
+      activeInstanceId: CLAUDE_INSTANCE_ID,
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -405,6 +408,7 @@ describe("ProviderModelPicker", () => {
 
   it("focuses the search input after selecting a sidebar provider", async () => {
     const mounted = await mountPicker({
+      activeInstanceId: CLAUDE_INSTANCE_ID,
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -442,6 +446,7 @@ describe("ProviderModelPicker", () => {
     );
 
     const mounted = await mountPicker({
+      activeInstanceId: CLAUDE_INSTANCE_ID,
       model: "claude-opus-4-6",
       lockedProvider: "claudeAgent",
     });
@@ -614,6 +619,7 @@ describe("ProviderModelPicker", () => {
       ]),
     ];
     const mounted = await mountPicker({
+      activeInstanceId: OPENCODE_INSTANCE_ID,
       model: "github-copilot/claude-opus-4.5",
       lockedProvider: "opencode",
       providers,
@@ -640,6 +646,7 @@ describe("ProviderModelPicker", () => {
 
   it("searches models by name in flat list", async () => {
     const mounted = await mountPicker({
+      activeInstanceId: CLAUDE_INSTANCE_ID,
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -669,6 +676,7 @@ describe("ProviderModelPicker", () => {
 
   it("supports arrow-key navigation in the model picker", async () => {
     const mounted = await mountPicker({
+      activeInstanceId: CLAUDE_INSTANCE_ID,
       model: "claude-opus-4-6",
       lockedProvider: "claudeAgent",
     });
@@ -707,6 +715,7 @@ describe("ProviderModelPicker", () => {
 
   it("hides the provider sidebar while searching", async () => {
     const mounted = await mountPicker({
+      activeInstanceId: CLAUDE_INSTANCE_ID,
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -730,6 +739,7 @@ describe("ProviderModelPicker", () => {
 
   it("closes the picker when escape is pressed in search", async () => {
     const mounted = await mountPicker({
+      activeInstanceId: CLAUDE_INSTANCE_ID,
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -757,6 +767,7 @@ describe("ProviderModelPicker", () => {
 
   it("searches models by provider name", async () => {
     const mounted = await mountPicker({
+      activeInstanceId: CLAUDE_INSTANCE_ID,
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -822,6 +833,7 @@ describe("ProviderModelPicker", () => {
       ]),
     ];
     const mounted = await mountPicker({
+      activeInstanceId: OPENCODE_INSTANCE_ID,
       model: "github-copilot/claude-opus-4.7",
       lockedProvider: null,
       providers,
@@ -883,6 +895,7 @@ describe("ProviderModelPicker", () => {
       },
     ];
     const mounted = await mountPicker({
+      activeInstanceId: OPENCODE_INSTANCE_ID,
       model: "github-copilot/claude-opus-4.7",
       lockedProvider: null,
       providers,
@@ -907,6 +920,7 @@ describe("ProviderModelPicker", () => {
     localStorage.removeItem("t3code:client-settings:v1");
 
     const mounted = await mountPicker({
+      activeInstanceId: CLAUDE_INSTANCE_ID,
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -951,6 +965,7 @@ describe("ProviderModelPicker", () => {
     localStorage.removeItem("t3code:client-settings:v1");
 
     const mounted = await mountPicker({
+      activeInstanceId: CLAUDE_INSTANCE_ID,
       model: "claude-opus-4-6",
       lockedProvider: null,
     });
@@ -1009,6 +1024,7 @@ describe("ProviderModelPicker", () => {
 
   it("dispatches callback with correct provider and model when selected", async () => {
     const mounted = await mountPicker({
+      activeInstanceId: CLAUDE_INSTANCE_ID,
       model: "claude-opus-4-6",
       lockedProvider: "claudeAgent",
     });
