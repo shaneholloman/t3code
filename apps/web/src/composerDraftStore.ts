@@ -852,11 +852,25 @@ export function deriveEffectiveComposerModelState(input: {
   projectModelSelection: ModelSelection | null | undefined;
   settings: UnifiedSettings;
 }): EffectiveComposerModelState {
+  const baseModelCandidate =
+    input.threadModelSelection?.model ?? input.projectModelSelection?.model ?? null;
   const baseModel =
-    normalizeModelSlug(
-      input.threadModelSelection?.model ?? input.projectModelSelection?.model,
+    (input.selectedInstanceId
+      ? resolveAppModelSelectionForInstance(
+          input.selectedInstanceId,
+          input.settings,
+          input.providers,
+          baseModelCandidate,
+        )
+      : null) ??
+    resolveAppModelSelection(
       input.selectedProvider,
-    ) ?? getDefaultServerModel(input.providers, input.selectedProvider);
+      input.settings,
+      input.providers,
+      baseModelCandidate,
+    ) ??
+    normalizeModelSlug(baseModelCandidate, input.selectedProvider) ??
+    getDefaultServerModel(input.providers, input.selectedProvider);
   // Look up the instance's saved selection first; fall back to the
   // driver-kind bucket so legacy kind-keyed drafts still resolve. Every
   // `ProviderDriverKind` literal is a valid `ProviderInstanceId` slug, so the

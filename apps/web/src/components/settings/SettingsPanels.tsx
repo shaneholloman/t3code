@@ -97,6 +97,22 @@ const TIMESTAMP_FORMAT_LABELS = {
 
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
 
+function withoutProviderInstanceKey<V>(
+  record: Readonly<Record<ProviderInstanceId, V>> | undefined,
+  key: ProviderInstanceId,
+): Record<ProviderInstanceId, V> {
+  const next = { ...record } as Record<ProviderInstanceId, V>;
+  delete next[key];
+  return next;
+}
+
+function withoutProviderInstanceFavorites(
+  favorites: ReadonlyArray<{ readonly provider: ProviderInstanceId; readonly model: string }>,
+  instanceId: ProviderInstanceId,
+) {
+  return favorites.filter((favorite) => favorite.provider !== instanceId);
+}
+
 type InstallProviderSettings = {
   provider: ProviderDriverKind;
   title: string;
@@ -403,7 +419,10 @@ export function useSettingsRestore(onRestored?: () => void) {
       const currentSettings = currentProviders[providerSettings.provider];
       const defaultSettings = defaultProviders[providerSettings.provider];
       return !Equal.equals(currentSettings, defaultSettings);
-    }) || Object.keys(settings.providerInstances ?? {}).length > 0;
+    }) ||
+    Object.keys(settings.providerInstances ?? {}).length > 0 ||
+    Object.keys(settings.providerModelPreferences ?? {}).length > 0 ||
+    (settings.favorites ?? []).length > 0;
 
   const changedSettingLabels = useMemo(
     () => [
@@ -739,9 +758,50 @@ export function GeneralSettingsPanel() {
   };
 
   const deleteProviderInstance = (id: ProviderInstanceId) => {
-    const current = settings.providerInstances ?? {};
-    const { [id]: _removed, ...rest } = current;
-    updateSettings({ providerInstances: rest });
+    updateSettings({
+      providerInstances: withoutProviderInstanceKey(settings.providerInstances, id),
+      providerModelPreferences: withoutProviderInstanceKey(settings.providerModelPreferences, id),
+      favorites: withoutProviderInstanceFavorites(settings.favorites ?? [], id),
+    });
+  };
+
+  const updateProviderModelPreferences = (
+    instanceId: ProviderInstanceId,
+    next: {
+      readonly hiddenModels: ReadonlyArray<string>;
+      readonly modelOrder: ReadonlyArray<string>;
+    },
+  ) => {
+    const hiddenModels = [...new Set(next.hiddenModels.filter((slug) => slug.trim().length > 0))];
+    const modelOrder = [...new Set(next.modelOrder.filter((slug) => slug.trim().length > 0))];
+    const rest = withoutProviderInstanceKey(settings.providerModelPreferences, instanceId);
+    updateSettings({
+      providerModelPreferences:
+        hiddenModels.length === 0 && modelOrder.length === 0
+          ? rest
+          : {
+              ...rest,
+              [instanceId]: {
+                hiddenModels,
+                modelOrder,
+              },
+            },
+    });
+  };
+
+  const updateProviderFavoriteModels = (
+    instanceId: ProviderInstanceId,
+    nextFavoriteModels: ReadonlyArray<string>,
+  ) => {
+    const favoriteModels = [
+      ...new Set(nextFavoriteModels.map((slug) => slug.trim()).filter((slug) => slug.length > 0)),
+    ];
+    updateSettings({
+      favorites: [
+        ...withoutProviderInstanceFavorites(settings.favorites ?? [], instanceId),
+        ...favoriteModels.map((model) => ({ provider: instanceId, model })),
+      ],
+    });
   };
 
   /**
@@ -758,7 +818,6 @@ export function GeneralSettingsPanel() {
       LegacyProviderSettings | undefined
     >;
     const defaultInstanceId = defaultInstanceIdForDriver(driverKind);
-    const { [defaultInstanceId]: _removed, ...restInstances } = settings.providerInstances ?? {};
     const defaultLegacyProvider = defaultLegacyProviders[driverKind];
     if (defaultLegacyProvider === undefined) return;
     updateSettings({
@@ -766,7 +825,12 @@ export function GeneralSettingsPanel() {
         ...settings.providers,
         [driverKind]: defaultLegacyProvider,
       } as typeof settings.providers,
-      providerInstances: restInstances,
+      providerInstances: withoutProviderInstanceKey(settings.providerInstances, defaultInstanceId),
+      providerModelPreferences: withoutProviderInstanceKey(
+        settings.providerModelPreferences,
+        defaultInstanceId,
+      ),
+      favorites: withoutProviderInstanceFavorites(settings.favorites ?? [], defaultInstanceId),
     });
   };
 
@@ -1171,6 +1235,13 @@ export function GeneralSettingsPanel() {
           const liveProvider = serverProviders.find(
             (candidate) => candidate.instanceId === row.instanceId,
           );
+          const modelPreferences = settings.providerModelPreferences?.[row.instanceId] ?? {
+            hiddenModels: [],
+            modelOrder: [],
+          };
+          const favoriteModels = (settings.favorites ?? [])
+            .filter((favorite) => favorite.provider === row.instanceId)
+            .map((favorite) => favorite.model);
           const resetLabel = driverOption?.label ?? String(row.driver);
           const headerAction =
             row.isDefault && row.isDirty ? (
@@ -1215,6 +1286,24 @@ export function GeneralSettingsPanel() {
               }}
               onDelete={row.isDefault ? undefined : () => deleteProviderInstance(row.instanceId)}
               headerAction={headerAction}
+              hiddenModels={modelPreferences.hiddenModels}
+              favoriteModels={favoriteModels}
+              modelOrder={modelPreferences.modelOrder}
+              onHiddenModelsChange={(hiddenModels) =>
+                updateProviderModelPreferences(row.instanceId, {
+                  ...modelPreferences,
+                  hiddenModels,
+                })
+              }
+              onFavoriteModelsChange={(favoriteModels) =>
+                updateProviderFavoriteModels(row.instanceId, favoriteModels)
+              }
+              onModelOrderChange={(modelOrder) =>
+                updateProviderModelPreferences(row.instanceId, {
+                  ...modelPreferences,
+                  modelOrder,
+                })
+              }
             />
           );
         })}

@@ -22,6 +22,7 @@ import { useSettings, useUpdateSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import { TooltipProvider } from "../ui/tooltip";
 import type { ProviderInstanceEntry } from "../../providerInstances";
+import { providerModelKey, sortProviderModelItems } from "../../modelOrdering";
 
 type ModelPickerItem = {
   slug: string;
@@ -143,12 +144,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   // (e.g. `"codex:gpt-5"`) still resolve — the default instance id equals
   // the driver slug.
   const favoritesSet = useMemo(() => {
-    return new Set(favorites.map((fav) => `${fav.provider}:${fav.model}`));
-  }, [favorites]);
-  const favoriteOrder = useMemo(() => {
-    return new Map(
-      favorites.map((favorite, index) => [`${favorite.provider}:${favorite.model}`, index]),
-    );
+    return new Set(favorites.map((fav) => providerModelKey(fav.provider, fav.model)));
   }, [favorites]);
 
   /**
@@ -227,6 +223,10 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   const sidebarInstanceEntries = showLockedInstanceSidebar
     ? lockedInstanceEntries
     : instanceEntries;
+  const instanceOrder = useMemo(
+    () => instanceEntries.map((entry) => entry.instanceId),
+    [instanceEntries],
+  );
 
   // Filter models based on search query and selected instance
   const filteredModels = useMemo(() => {
@@ -244,11 +244,11 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
               ...(model.subProvider ? { subProvider: model.subProvider } : {}),
               driverKind: model.driverKind,
               providerDisplayName: model.instanceDisplayName,
-              isFavorite: favoritesSet.has(`${model.instanceId}:${model.slug}`),
+              isFavorite: favoritesSet.has(providerModelKey(model.instanceId, model.slug)),
             },
             searchQuery,
           ),
-          isFavorite: favoritesSet.has(`${model.instanceId}:${model.slug}`),
+          isFavorite: favoritesSet.has(providerModelKey(model.instanceId, model.slug)),
           tieBreaker: buildModelPickerSearchText({
             name: model.name,
             ...(model.shortName ? { shortName: model.shortName } : {}),
@@ -307,30 +307,20 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
         result = result.filter((m) => m.instanceId === selectedInstanceId);
       }
     } else if (selectedInstanceId === "favorites") {
-      result = result.filter((m) => favoritesSet.has(`${m.instanceId}:${m.slug}`));
+      result = result.filter((m) => favoritesSet.has(providerModelKey(m.instanceId, m.slug)));
     } else {
       result = result.filter((m) => m.instanceId === selectedInstanceId);
     }
 
-    return result.toSorted((a, b) => {
-      const aOrder = favoriteOrder.get(`${a.instanceId}:${a.slug}`);
-      const bOrder = favoriteOrder.get(`${b.instanceId}:${b.slug}`);
-
-      if (aOrder !== undefined && bOrder !== undefined) {
-        return aOrder - bOrder;
-      }
-      if (aOrder !== undefined) {
-        return -1;
-      }
-      if (bOrder !== undefined) {
-        return 1;
-      }
-      return 0;
+    return sortProviderModelItems(result, {
+      favoriteModelKeys: favoritesSet,
+      groupFavorites: selectedInstanceId !== "favorites",
+      instanceOrder: selectedInstanceId === "favorites" ? instanceOrder : [],
     });
   }, [
-    favoriteOrder,
     favoritesSet,
     flatModels,
+    instanceOrder,
     matchesLockedProvider,
     props.lockedProvider,
     searchQuery,

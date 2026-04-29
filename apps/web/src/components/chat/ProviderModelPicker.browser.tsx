@@ -12,7 +12,11 @@ import {
   sortProviderInstanceEntries,
 } from "../../providerInstances";
 import type { ModelEsque } from "./providerIconUtils";
-import { DEFAULT_CLIENT_SETTINGS, DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import {
+  DEFAULT_CLIENT_SETTINGS,
+  DEFAULT_UNIFIED_SETTINGS,
+  type UnifiedSettings,
+} from "@t3tools/contracts/settings";
 import { __resetLocalApiForTests } from "../../localApi";
 
 // Mock the environments/runtime module to provide a mock primary environment connection
@@ -249,6 +253,7 @@ async function mountPicker(props: {
   lockedProvider: ProviderDriverKind | null;
   lockedContinuationGroupKey?: string | null;
   providers?: ReadonlyArray<ServerProvider>;
+  settings?: UnifiedSettings;
   triggerVariant?: "ghost" | "outline";
 }) {
   const host = document.createElement("div");
@@ -258,7 +263,7 @@ async function mountPicker(props: {
   const instanceEntries = sortProviderInstanceEntries(deriveProviderInstanceEntries(providers));
   const activeInstanceId = props.activeInstanceId ?? CODEX_INSTANCE_ID;
   const modelOptionsByInstance = getCustomModelOptionsByInstance(
-    DEFAULT_UNIFIED_SETTINGS,
+    props.settings ?? DEFAULT_UNIFIED_SETTINGS,
     providers,
     activeInstanceId,
     props.model,
@@ -395,6 +400,34 @@ describe("ProviderModelPicker", () => {
         const listText = getModelPickerListText();
         expect(listText).toContain("GPT-5 Codex");
         expect(listText).not.toContain("Claude Opus 4.6");
+      });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("uses client model visibility and ordering preferences", async () => {
+    const mounted = await mountPicker({
+      activeInstanceId: CLAUDE_INSTANCE_ID,
+      model: "claude-opus-4-6",
+      lockedProvider: null,
+      settings: {
+        ...DEFAULT_UNIFIED_SETTINGS,
+        providerModelPreferences: {
+          [CLAUDE_INSTANCE_ID]: {
+            hiddenModels: ["claude-opus-4-6"],
+            modelOrder: ["claude-haiku-4-5", "claude-sonnet-4-6"],
+          },
+        },
+      },
+    });
+
+    try {
+      await page.getByRole("button").click();
+
+      await vi.waitFor(() => {
+        expect(getVisibleModelNames()).toEqual(["Claude Haiku 4.5", "Claude Sonnet 4.6"]);
+        expect(getModelPickerListText()).not.toContain("Claude Opus 4.6");
       });
     } finally {
       await mounted.cleanup();

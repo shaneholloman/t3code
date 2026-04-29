@@ -21,6 +21,7 @@ import {
 } from "./providerModels";
 import { ModelEsque } from "./components/chat/providerIconUtils";
 import { type ProviderInstanceEntry, deriveProviderInstanceEntries } from "./providerInstances";
+import { sortModelsForProviderInstance } from "./modelOrdering";
 
 const MAX_CUSTOM_MODEL_COUNT = 32;
 export const MAX_CUSTOM_MODEL_LENGTH = 256;
@@ -85,6 +86,32 @@ function toAppModelOption(model: ServerProvider["models"][number]): AppModelOpti
   return option;
 }
 
+function readInstanceModelPreferences(
+  settings: UnifiedSettings,
+  instanceId: ProviderInstanceId,
+): { readonly hiddenModels: ReadonlyArray<string>; readonly modelOrder: ReadonlyArray<string> } {
+  return (
+    settings.providerModelPreferences?.[instanceId] ?? {
+      hiddenModels: [],
+      modelOrder: [],
+    }
+  );
+}
+
+function applyInstanceModelPreferences(
+  options: ReadonlyArray<AppModelOption>,
+  preferences: {
+    readonly hiddenModels: ReadonlyArray<string>;
+    readonly modelOrder: ReadonlyArray<string>;
+  },
+): AppModelOption[] {
+  const hiddenModels = new Set(preferences.hiddenModels);
+  return sortModelsForProviderInstance(
+    options.filter((option) => option.isCustom || !hiddenModels.has(option.slug)),
+    { modelOrder: preferences.modelOrder },
+  );
+}
+
 export function normalizeCustomModelSlugs(
   models: Iterable<string | null | undefined>,
   builtInModelSlugs: ReadonlySet<string>,
@@ -147,7 +174,10 @@ export function getAppModelOptions(
     });
   }
 
-  return options;
+  return applyInstanceModelPreferences(
+    options,
+    readInstanceModelPreferences(settings, defaultInstanceId),
+  );
 }
 
 /**
@@ -182,7 +212,10 @@ export function getAppModelOptionsForInstance(
     options.push({ slug, name: slug, isCustom: true });
   }
 
-  return options;
+  return applyInstanceModelPreferences(
+    options,
+    readInstanceModelPreferences(settings, entry.instanceId),
+  );
 }
 
 export function resolveAppModelSelection(

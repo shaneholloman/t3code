@@ -123,6 +123,85 @@ describe("instance-scoped model selection", () => {
     ).not.toContain("openai/gpt-5.5");
   });
 
+  it("hides server models from the instance option list", () => {
+    const providers = [
+      provider({
+        instanceId: "claudeAgent",
+        models: ["claude-opus-4-6", "claude-sonnet-4-6"],
+      }),
+    ];
+    const settings: UnifiedSettings = {
+      ...settingsWithProviderInstances(),
+      providerModelPreferences: {
+        [ProviderInstanceId.make("claudeAgent")]: {
+          hiddenModels: ["claude-opus-4-6"],
+          modelOrder: [],
+        },
+      },
+    };
+    const stock = deriveProviderInstanceEntries(providers).find(
+      (entry) => entry.instanceId === "claudeAgent",
+    )!;
+
+    expect(getAppModelOptionsForInstance(settings, stock).map((option) => option.slug)).toEqual([
+      "claude-sonnet-4-6",
+    ]);
+  });
+
+  it("applies persisted per-instance model ordering", () => {
+    const providers = [
+      provider({
+        instanceId: "claudeAgent",
+        models: ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5"],
+      }),
+    ];
+    const settings: UnifiedSettings = {
+      ...settingsWithProviderInstances(),
+      providerModelPreferences: {
+        [ProviderInstanceId.make("claudeAgent")]: {
+          hiddenModels: [],
+          modelOrder: ["claude-haiku-4-5", "claude-opus-4-6"],
+        },
+      },
+    };
+    const stock = deriveProviderInstanceEntries(providers).find(
+      (entry) => entry.instanceId === "claudeAgent",
+    )!;
+
+    expect(getAppModelOptionsForInstance(settings, stock).map((option) => option.slug)).toEqual([
+      "claude-haiku-4-5",
+      "claude-opus-4-6",
+      "claude-sonnet-4-6",
+    ]);
+  });
+
+  it("falls back when the selected model is hidden", () => {
+    const providers = [
+      provider({
+        instanceId: "claudeAgent",
+        models: ["claude-opus-4-6", "claude-sonnet-4-6"],
+      }),
+    ];
+    const settings: UnifiedSettings = {
+      ...settingsWithProviderInstances(),
+      providerModelPreferences: {
+        [ProviderInstanceId.make("claudeAgent")]: {
+          hiddenModels: ["claude-opus-4-6"],
+          modelOrder: [],
+        },
+      },
+    };
+
+    expect(
+      resolveAppModelSelectionForInstance(
+        ProviderInstanceId.make("claudeAgent"),
+        settings,
+        providers,
+        "claude-opus-4-6",
+      ),
+    ).toBe("claude-sonnet-4-6");
+  });
+
   it("falls back instead of resolving a custom slug against the wrong instance", () => {
     const providers = [
       provider({

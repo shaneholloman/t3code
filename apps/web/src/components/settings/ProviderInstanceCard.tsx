@@ -155,6 +155,28 @@ function nextConfigBlobWithValue(
   return base;
 }
 
+export function deriveProviderModelsForDisplay(input: {
+  readonly liveModels: ReadonlyArray<ServerProviderModel> | undefined;
+  readonly customModels: ReadonlyArray<string>;
+}): ReadonlyArray<ServerProviderModel> {
+  const liveCustomModelsBySlug = new Map(
+    (input.liveModels ?? [])
+      .filter((model) => model.isCustom)
+      .map((model) => [model.slug, model] as const),
+  );
+  const serverModels = input.liveModels?.filter((model) => !model.isCustom) ?? [];
+  const customModels = input.customModels.map(
+    (slug) =>
+      liveCustomModelsBySlug.get(slug) ?? {
+        slug,
+        name: slug,
+        isCustom: true,
+        capabilities: null,
+      },
+  );
+  return [...serverModels, ...customModels];
+}
+
 function ProviderAuthEmail(props: {
   readonly email: string | undefined;
   readonly prefix?: string;
@@ -449,6 +471,12 @@ interface ProviderInstanceCardProps {
    * omit it.
    */
   readonly headerAction?: React.ReactNode | undefined;
+  readonly hiddenModels: ReadonlyArray<string>;
+  readonly favoriteModels: ReadonlyArray<string>;
+  readonly modelOrder: ReadonlyArray<string>;
+  readonly onHiddenModelsChange: (next: ReadonlyArray<string>) => void;
+  readonly onFavoriteModelsChange: (next: ReadonlyArray<string>) => void;
+  readonly onModelOrderChange: (next: ReadonlyArray<string>) => void;
 }
 
 /**
@@ -485,6 +513,12 @@ export function ProviderInstanceCard({
   onUpdate,
   onDelete,
   headerAction,
+  hiddenModels,
+  favoriteModels,
+  modelOrder,
+  onHiddenModelsChange,
+  onFavoriteModelsChange,
+  onModelOrderChange,
 }: ProviderInstanceCardProps) {
   const enabled = instance.enabled ?? true;
   // The server-reported status wins when present; otherwise fall back to
@@ -516,17 +550,13 @@ export function ProviderInstanceCard({
     : null;
 
   const customModels = readConfigStringArray(instance.config, "customModels");
-  // Show live probe models when available; otherwise synthesize from the
-  // persisted customModels so the user can see what they've added even
-  // before the first probe completes.
-  const modelsForDisplay: ReadonlyArray<ServerProviderModel> =
-    liveProvider?.models ??
-    customModels.map((slug) => ({
-      slug,
-      name: slug,
-      isCustom: true,
-      capabilities: null,
-    }));
+  // Server-returned models may lag behind settings writes. Treat probe
+  // models as the source for built-ins only; custom rows come directly
+  // from the current instance config so add/remove reflects immediately.
+  const modelsForDisplay = deriveProviderModelsForDisplay({
+    liveModels: liveProvider?.models,
+    customModels,
+  });
 
   const updateDisplayName = (value: string) => {
     const trimmed = value.trim();
@@ -755,7 +785,13 @@ export function ProviderInstanceCard({
                 driverKind={driverKind}
                 models={modelsForDisplay}
                 customModels={customModels}
+                hiddenModels={hiddenModels}
+                favoriteModels={favoriteModels}
+                modelOrder={modelOrder}
                 onChange={updateCustomModels}
+                onHiddenModelsChange={onHiddenModelsChange}
+                onFavoriteModelsChange={onFavoriteModelsChange}
+                onModelOrderChange={onModelOrderChange}
               />
             ) : (
               <div className="border-t border-border/60 px-4 py-3 sm:px-5">

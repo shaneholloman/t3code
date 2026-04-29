@@ -49,6 +49,15 @@ export const ClientSettingsSchema = Schema.Struct({
       model: TrimmedNonEmptyString,
     }),
   ).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  providerModelPreferences: Schema.Record(
+    ProviderInstanceId,
+    Schema.Struct({
+      hiddenModels: Schema.Array(Schema.String).pipe(
+        Schema.withDecodingDefault(Effect.succeed([])),
+      ),
+      modelOrder: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+    }),
+  ).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   sidebarProjectGroupingMode: SidebarProjectGroupingMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_PROJECT_GROUPING_MODE)),
   ),
@@ -266,6 +275,19 @@ export const ClientSettingsPatch = Schema.Struct({
       Schema.Struct({
         provider: ProviderInstanceId,
         model: TrimmedNonEmptyString,
+      }),
+    ),
+  ),
+  providerModelPreferences: Schema.optionalKey(
+    Schema.Record(
+      ProviderInstanceId,
+      Schema.Struct({
+        hiddenModels: Schema.Array(Schema.String).pipe(
+          Schema.withDecodingDefault(Effect.succeed([])),
+        ),
+        modelOrder: Schema.Array(Schema.String).pipe(
+          Schema.withDecodingDefault(Effect.succeed([])),
+        ),
       }),
     ),
   ),
