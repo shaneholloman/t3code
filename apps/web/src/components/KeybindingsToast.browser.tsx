@@ -7,6 +7,7 @@ import {
   type MessageId,
   type OrchestrationReadModel,
   type ProjectId,
+  ProviderDriverId,
   ProviderInstanceId,
   type ServerConfig,
   type ServerLifecycleWelcomePayload,
@@ -74,6 +75,8 @@ function createBaseServerConfig(): ServerConfig {
     providers: [
       {
         provider: "codex",
+        driver: ProviderDriverId.make("codex"),
+        instanceId: ProviderInstanceId.make("codex"),
         enabled: true,
         installed: true,
         version: "0.116.0",

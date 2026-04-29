@@ -1,5 +1,6 @@
 import {
-  type ProviderInstanceId,
+  ProviderDriverId,
+  ProviderInstanceId,
   type ProviderKind,
   type ServerProvider,
 } from "@t3tools/contracts";
@@ -103,6 +104,8 @@ function booleanDescriptor(id: string, label: string) {
 const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
   {
     provider: "codex",
+    driver: ProviderDriverId.make("codex"),
+    instanceId: ProviderInstanceId.make("codex"),
     displayName: "Codex",
     enabled: true,
     installed: true,
@@ -147,6 +150,8 @@ const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
   },
   {
     provider: "claudeAgent",
+    driver: ProviderDriverId.make("claudeAgent"),
+    instanceId: ProviderInstanceId.make("claudeAgent"),
     displayName: "Claude",
     enabled: true,
     installed: true,
@@ -211,6 +216,8 @@ const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
 function buildCodexProvider(models: ServerProvider["models"]): ServerProvider {
   return {
     provider: "codex",
+    driver: ProviderDriverId.make("codex"),
+    instanceId: ProviderInstanceId.make("codex"),
     displayName: "Codex",
     enabled: true,
     installed: true,
@@ -227,6 +234,8 @@ function buildCodexProvider(models: ServerProvider["models"]): ServerProvider {
 function buildOpenCodeProvider(models: ServerProvider["models"]): ServerProvider {
   return {
     provider: "opencode",
+    driver: ProviderDriverId.make("opencode"),
+    instanceId: ProviderInstanceId.make("opencode"),
     enabled: true,
     installed: true,
     version: "1.0.0",

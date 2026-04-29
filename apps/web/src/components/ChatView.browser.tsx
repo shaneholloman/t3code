@@ -170,6 +170,8 @@ function createBaseServerConfig(): ServerConfig {
     providers: [
       {
         provider: "codex",
+        driver: ProviderDriverId.make("codex"),
+        instanceId: ProviderInstanceId.make("codex"),
         enabled: true,
         installed: true,
         version: "0.116.0",
@@ -3938,7 +3940,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       expect(composerDraftFor(newDraftId)).toMatchObject({
         modelSelectionByProvider: {
           codex: {
-            provider: "codex",
+            instanceId: ProviderInstanceId.make("codex"),
             model: "gpt-5.3-codex",
             options: expect.arrayContaining([{ id: "fastMode", value: true }]),
           },
@@ -4066,7 +4068,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       expect(composerDraftFor(draftId)).toMatchObject({
         modelSelectionByProvider: {
           codex: {
-            provider: "codex",
+            instanceId: ProviderInstanceId.make("codex"),
             model: "gpt-5.3-codex",
             options: expect.arrayContaining([{ id: "fastMode", value: true }]),
           },
