@@ -353,7 +353,7 @@ const make = Effect.gen(function* () {
     }
     const preferredProvider: ProviderKind = desiredDriverId;
     if (
-      thread.session !== null &&
+      activeThreadSession !== null &&
       requestedModelSelection !== undefined &&
       requestedModelSelection.instanceId !== currentInstanceId
     ) {
