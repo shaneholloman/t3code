@@ -14,8 +14,6 @@ import type { ProviderAdapterShape } from "./ProviderAdapter.ts";
 
 /**
  * CursorAdapterShape — per-instance Cursor adapter contract. Carries
- * `provider: "cursor"` as the nominal discriminant.
+ * a branded driver kind as the nominal discriminant.
  */
-export interface CursorAdapterShape extends ProviderAdapterShape<ProviderAdapterError> {
-  readonly provider: "cursor";
-}
+export interface CursorAdapterShape extends ProviderAdapterShape<ProviderAdapterError> {}

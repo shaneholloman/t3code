@@ -3,11 +3,11 @@
 import { ChevronDownIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
-  isBuiltInDriverKind,
+  isProviderDriverKind,
   type ProviderInstanceConfig,
   type ProviderInstanceEnvironmentVariable,
   type ProviderInstanceId,
-  type BuiltInDriverKind,
+  type ProviderDriverKind,
   type ServerProvider,
   type ServerProviderModel,
 } from "@t3tools/contracts";
@@ -508,10 +508,10 @@ export function ProviderInstanceCard({
   const accentColor = normalizeProviderAccentColor(instance.accentColor);
 
   // Narrow `instance.driver` for callers that key on the closed
-  // `BuiltInDriverKind` union (e.g. `normalizeModelSlug`'s alias table). Custom
+  // `ProviderDriverKind` union (e.g. `normalizeModelSlug`'s alias table). Custom
   // fork drivers pass through as `null` and those callers fall back to
   // verbatim behaviour.
-  const driverKind: BuiltInDriverKind | null = isBuiltInDriverKind(instance.driver)
+  const driverKind: ProviderDriverKind | null = isProviderDriverKind(instance.driver)
     ? instance.driver
     : null;
 

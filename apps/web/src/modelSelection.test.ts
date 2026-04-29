@@ -1,10 +1,4 @@
-import {
-  isBuiltInDriverKind,
-  ProviderDriverKind,
-  ProviderInstanceId,
-  type BuiltInDriverKind,
-  type ServerProvider,
-} from "@t3tools/contracts";
+import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@t3tools/contracts";
 import { DEFAULT_UNIFIED_SETTINGS, type UnifiedSettings } from "@t3tools/contracts/settings";
 import { describe, expect, it } from "vitest";
 import { deriveProviderInstanceEntries } from "./providerInstances";
@@ -15,20 +9,18 @@ import {
 } from "./modelSelection";
 
 function provider(input: {
-  provider?: BuiltInDriverKind;
+  provider?: ProviderDriverKind;
   instanceId: string;
   models?: ReadonlyArray<string>;
 }): ServerProvider {
   const driver =
     input.provider ??
-    (isBuiltInDriverKind(input.instanceId)
-      ? input.instanceId
-      : input.instanceId.startsWith("claude_")
-        ? "claudeAgent"
-        : "codex");
+    (input.instanceId.startsWith("claude_")
+      ? ProviderDriverKind.make("claudeAgent")
+      : ProviderDriverKind.make("codex"));
   return {
     instanceId: ProviderInstanceId.make(input.instanceId),
-    driver: ProviderDriverKind.make(driver),
+    driver,
     enabled: true,
     installed: true,
     version: null,
@@ -92,8 +84,11 @@ describe("instance-scoped model selection", () => {
 
   it("resolves a custom slug against the selected custom instance", () => {
     const providers = [
-      provider({ provider: "claudeAgent", instanceId: "claudeAgent" }),
-      provider({ provider: "claudeAgent", instanceId: "claude_openrouter" }),
+      provider({ provider: ProviderDriverKind.make("claudeAgent"), instanceId: "claudeAgent" }),
+      provider({
+        provider: ProviderDriverKind.make("claudeAgent"),
+        instanceId: "claude_openrouter",
+      }),
     ];
 
     expect(

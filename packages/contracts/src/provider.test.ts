@@ -94,6 +94,24 @@ describe("ProviderSessionStartInput", () => {
     expect(parsed.modelSelection?.model).toBe("composer-2");
     expect(getOptionValue(parsed.modelSelection?.options, "fastMode")).toBe(true);
   });
+
+  it("accepts fork-provided driver kinds as branded slugs", () => {
+    const parsed = decodeProviderSessionStartInput({
+      threadId: "thread-1",
+      provider: "ollama",
+      providerInstanceId: "ollama_local",
+      cwd: "/tmp/workspace",
+      runtimeMode: "full-access",
+      modelSelection: {
+        instanceId: "ollama_local",
+        model: "llama3.3",
+      },
+    });
+
+    expect(parsed.provider).toBe("ollama");
+    expect(parsed.providerInstanceId).toBe("ollama_local");
+    expect(parsed.modelSelection?.instanceId).toBe("ollama_local");
+  });
 });
 
 describe("ProviderSendTurnInput", () => {
@@ -166,6 +184,21 @@ describe("providerInstanceId routing key (slice-2 invariant)", () => {
       updatedAt: "2024-01-01T00:00:00Z",
     });
     expect(session.providerInstanceId).toBe("codex_work");
+  });
+
+  it("decodes ProviderSession for fork-provided driver kinds", () => {
+    const session = decodeProviderSession({
+      provider: "ollama",
+      providerInstanceId: "ollama_local",
+      status: "ready",
+      runtimeMode: "full-access",
+      threadId: "thread-1",
+      createdAt: "2024-01-01T00:00:00Z",
+      updatedAt: "2024-01-01T00:00:00Z",
+    });
+
+    expect(session.provider).toBe("ollama");
+    expect(session.providerInstanceId).toBe("ollama_local");
   });
 
   it("decodes a ProviderEvent carrying both legacy provider and new instance routing", () => {

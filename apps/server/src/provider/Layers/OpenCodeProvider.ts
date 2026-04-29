@@ -1,4 +1,9 @@
-import type { ModelCapabilities, OpenCodeSettings, ServerProviderModel } from "@t3tools/contracts";
+import {
+  ProviderDriverKind,
+  type ModelCapabilities,
+  type OpenCodeSettings,
+  type ServerProviderModel,
+} from "@t3tools/contracts";
 import { Cause, Data, Effect } from "effect";
 
 import { createModelCapabilities } from "@t3tools/shared/model";
@@ -18,7 +23,7 @@ import {
 } from "../opencodeRuntime.ts";
 import type { Agent, ProviderListResponse } from "@opencode-ai/sdk/v2";
 
-const PROVIDER = "opencode" as const;
+const PROVIDER = ProviderDriverKind.make("opencode");
 const OPENCODE_PRESENTATION = {
   displayName: "OpenCode",
   showInteractionModeToggle: false,

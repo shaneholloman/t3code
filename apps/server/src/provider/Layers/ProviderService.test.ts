@@ -14,7 +14,6 @@ import {
   EventId,
   ProviderDriverKind,
   ProviderInstanceId,
-  type BuiltInDriverKind,
   ProviderSessionStartInput,
   ThreadId,
   TurnId,
@@ -60,11 +59,14 @@ const asThreadId = (value: string): ThreadId => ThreadId.make(value);
 const asTurnId = (value: string): TurnId => TurnId.make(value);
 const codexInstanceId = ProviderInstanceId.make("codex");
 const claudeAgentInstanceId = ProviderInstanceId.make("claudeAgent");
+const CODEX_DRIVER = ProviderDriverKind.make("codex");
+const CLAUDE_AGENT_DRIVER = ProviderDriverKind.make("claudeAgent");
+const CURSOR_DRIVER = ProviderDriverKind.make("cursor");
 
 type LegacyProviderRuntimeEvent = {
   readonly type: string;
   readonly eventId: EventId;
-  readonly provider: BuiltInDriverKind;
+  readonly provider: ProviderDriverKind;
   readonly createdAt: string;
   readonly threadId: ThreadId;
   readonly turnId?: string | undefined;
@@ -74,7 +76,7 @@ type LegacyProviderRuntimeEvent = {
   readonly [key: string]: unknown;
 };
 
-function makeFakeCodexAdapter(provider: BuiltInDriverKind = "codex") {
+function makeFakeCodexAdapter(provider: ProviderDriverKind = CODEX_DRIVER) {
   const sessions = new Map<ThreadId, ProviderSession>();
   const runtimeEventPubSub = Effect.runSync(PubSub.unbounded<ProviderRuntimeEvent>());
 
@@ -257,8 +259,8 @@ const hasMetricSnapshot = (
 
 function makeProviderServiceLayer() {
   const codex = makeFakeCodexAdapter();
-  const claude = makeFakeCodexAdapter("claudeAgent");
-  const cursor = makeFakeCodexAdapter("cursor");
+  const claude = makeFakeCodexAdapter(CLAUDE_AGENT_DRIVER);
+  const cursor = makeFakeCodexAdapter(CURSOR_DRIVER);
   const registry = makeAdapterRegistryMock({
     codex: codex.adapter,
     claudeAgent: claude.adapter,
@@ -298,7 +300,7 @@ function makeProviderServiceLayer() {
 it.effect("ProviderServiceLive rejects new sessions for disabled providers", () =>
   Effect.gen(function* () {
     const codex = makeFakeCodexAdapter();
-    const claude = makeFakeCodexAdapter("claudeAgent");
+    const claude = makeFakeCodexAdapter(CLAUDE_AGENT_DRIVER);
     const registry = makeAdapterRegistryMock({
       codex: codex.adapter,
       claudeAgent: claude.adapter,
@@ -327,7 +329,7 @@ it.effect("ProviderServiceLive rejects new sessions for disabled providers", () 
       Effect.gen(function* () {
         const provider = yield* ProviderService;
         return yield* provider.startSession(asThreadId("thread-disabled"), {
-          provider: "claudeAgent",
+          provider: ProviderDriverKind.make("claudeAgent"),
           providerInstanceId: claudeAgentInstanceId,
           threadId: asThreadId("thread-disabled"),
           runtimeMode: "full-access",
@@ -348,7 +350,7 @@ it.effect("ProviderServiceLive rejects new sessions for disabled custom instance
     const codex = makeFakeCodexAdapter();
     const unsupported = () =>
       new ProviderUnsupportedError({
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
       });
     const registry: ProviderAdapterRegistryShape = {
       getByInstance: (requestedInstanceId) =>
@@ -370,7 +372,7 @@ it.effect("ProviderServiceLive rejects new sessions for disabled custom instance
           : Effect.fail(unsupported()),
       listInstances: () => Effect.succeed([instanceId]),
       getByProvider: () => Effect.succeed(codex.adapter),
-      listProviders: () => Effect.succeed(["codex"] as const),
+      listProviders: () => Effect.succeed([CODEX_DRIVER] as const),
       streamChanges: Stream.empty,
       subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), (pubsub) =>
         PubSub.subscribe(pubsub),
@@ -393,7 +395,7 @@ it.effect("ProviderServiceLive rejects new sessions for disabled custom instance
       Effect.gen(function* () {
         const provider = yield* ProviderService;
         return yield* provider.startSession(asThreadId("thread-disabled-instance"), {
-          provider: "codex",
+          provider: ProviderDriverKind.make("codex"),
           providerInstanceId: instanceId,
           threadId: asThreadId("thread-disabled-instance"),
           runtimeMode: "full-access",
@@ -442,7 +444,7 @@ it.effect("ProviderServiceLive writes canonical events to the emitting thread se
       yield* sleep(10);
       codex.emit({
         eventId: asEventId("evt-canonical-thread-segment"),
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         threadId: asThreadId("thread-canonical-thread-segment"),
         createdAt: new Date().toISOString(),
         type: "turn.completed",
@@ -476,7 +478,7 @@ it.effect("ProviderServiceLive keeps persisted resumable sessions on startup", (
     yield* Effect.gen(function* () {
       const directory = yield* ProviderSessionDirectory;
       yield* directory.upsert({
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         threadId: ThreadId.make("thread-stale"),
       });
@@ -555,7 +557,7 @@ it.effect(
         const provider = yield* ProviderService;
         const threadId = asThreadId("thread-1");
         const session = yield* provider.startSession(threadId, {
-          provider: "codex",
+          provider: ProviderDriverKind.make("codex"),
           providerInstanceId: codexInstanceId,
           cwd: "/tmp/project",
           runtimeMode: "full-access",
@@ -634,7 +636,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       const provider = yield* ProviderService;
 
       const session = yield* provider.startSession(asThreadId("thread-1"), {
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         threadId: asThreadId("thread-1"),
         cwd: "/tmp/project",
@@ -720,7 +722,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       const provider = yield* ProviderService;
 
       const initial = yield* provider.startSession(asThreadId("thread-1"), {
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         threadId: asThreadId("thread-1"),
         cwd: "/tmp/project",
@@ -762,7 +764,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       const runtimeRepository = yield* ProviderSessionRuntimeRepository;
 
       const initial = yield* provider.startSession(asThreadId("thread-reap-preserve"), {
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         threadId: asThreadId("thread-reap-preserve"),
         cwd: "/tmp/project-reap-preserve",
@@ -813,7 +815,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       const provider = yield* ProviderService;
 
       const session = yield* provider.startSession(asThreadId("thread-claude"), {
-        provider: "claudeAgent",
+        provider: ProviderDriverKind.make("claudeAgent"),
         providerInstanceId: claudeAgentInstanceId,
         threadId: asThreadId("thread-claude"),
         cwd: "/tmp/project-claude",
@@ -844,7 +846,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       const threadId = asThreadId("thread-binding-mismatch");
 
       yield* provider.startSession(threadId, {
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         threadId,
         cwd: "/tmp/project-binding-mismatch",
@@ -852,7 +854,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       });
       yield* directory.upsert({
         threadId,
-        provider: "claudeAgent",
+        provider: ProviderDriverKind.make("claudeAgent"),
         providerInstanceId: claudeAgentInstanceId,
         runtimeMode: "full-access",
       });
@@ -861,7 +863,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       assert.equal(Exit.hasDies(exit), true);
       yield* directory.upsert({
         threadId,
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         runtimeMode: "full-access",
       });
@@ -874,7 +876,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       const threadId = asThreadId("thread-provider-replacement");
 
       const codexSession = yield* provider.startSession(threadId, {
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         threadId,
         cwd: "/tmp/project-provider-replacement",
@@ -885,7 +887,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       routing.claude.stopSession.mockClear();
 
       const claudeSession = yield* provider.startSession(threadId, {
-        provider: "claudeAgent",
+        provider: ProviderDriverKind.make("claudeAgent"),
         providerInstanceId: claudeAgentInstanceId,
         threadId,
         cwd: "/tmp/project-provider-replacement",
@@ -912,7 +914,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       const provider = yield* ProviderService;
 
       const initial = yield* provider.startSession(asThreadId("thread-1"), {
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         threadId: asThreadId("thread-1"),
         cwd: "/tmp/project-send-turn",
@@ -953,13 +955,15 @@ routing.layer("ProviderServiceLive routing", (it) => {
       const provider = yield* ProviderService;
 
       const initial = yield* provider.startSession(asThreadId("thread-claude-send-turn"), {
-        provider: "claudeAgent",
+        provider: ProviderDriverKind.make("claudeAgent"),
         providerInstanceId: claudeAgentInstanceId,
         threadId: asThreadId("thread-claude-send-turn"),
         cwd: "/tmp/project-claude-send-turn",
-        modelSelection: createModelSelection("claudeAgent", "claude-opus-4-6", [
-          { id: "effort", value: "max" },
-        ]),
+        modelSelection: createModelSelection(
+          ProviderInstanceId.make("claudeAgent"),
+          "claude-opus-4-6",
+          [{ id: "effort", value: "max" }],
+        ),
         runtimeMode: "full-access",
       });
 
@@ -988,7 +992,9 @@ routing.layer("ProviderServiceLive routing", (it) => {
         assert.equal(startPayload.cwd, "/tmp/project-claude-send-turn");
         assert.deepEqual(
           startPayload.modelSelection,
-          createModelSelection("claudeAgent", "claude-opus-4-6", [{ id: "effort", value: "max" }]),
+          createModelSelection(ProviderInstanceId.make("claudeAgent"), "claude-opus-4-6", [
+            { id: "effort", value: "max" },
+          ]),
         );
         assert.deepEqual(startPayload.resumeCursor, initial.resumeCursor);
         assert.equal(startPayload.threadId, initial.threadId);
@@ -1002,13 +1008,13 @@ routing.layer("ProviderServiceLive routing", (it) => {
       const provider = yield* ProviderService;
 
       yield* provider.startSession(asThreadId("thread-1"), {
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         threadId: asThreadId("thread-1"),
         runtimeMode: "full-access",
       });
       yield* provider.startSession(asThreadId("thread-2"), {
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         threadId: asThreadId("thread-2"),
         runtimeMode: "full-access",
@@ -1029,7 +1035,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
 
       const threadId = asThreadId("thread-runtime-status");
       const session = yield* provider.startSession(threadId, {
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         threadId,
         runtimeMode: "full-access",
@@ -1076,7 +1082,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
         Layer.provide(persistenceLayer),
       );
 
-      const firstClaude = makeFakeCodexAdapter("claudeAgent");
+      const firstClaude = makeFakeCodexAdapter(CLAUDE_AGENT_DRIVER);
       const firstRegistry = makeAdapterRegistryMock({ claudeAgent: firstClaude.adapter });
       const firstDirectoryLayer = ProviderSessionDirectoryLive.pipe(
         Layer.provide(runtimeRepositoryLayer),
@@ -1092,7 +1098,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       const initial = yield* Effect.gen(function* () {
         const provider = yield* ProviderService;
         return yield* provider.startSession(asThreadId("thread-claude-start"), {
-          provider: "claudeAgent",
+          provider: ProviderDriverKind.make("claudeAgent"),
           providerInstanceId: claudeAgentInstanceId,
           threadId: asThreadId("thread-claude-start"),
           cwd: "/tmp/project-claude-start",
@@ -1105,7 +1111,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
         yield* provider.listSessions();
       }).pipe(Effect.provide(firstProviderLayer));
 
-      const secondClaude = makeFakeCodexAdapter("claudeAgent");
+      const secondClaude = makeFakeCodexAdapter(CLAUDE_AGENT_DRIVER);
       const secondRegistry = makeAdapterRegistryMock({ claudeAgent: secondClaude.adapter });
       const secondDirectoryLayer = ProviderSessionDirectoryLive.pipe(
         Layer.provide(runtimeRepositoryLayer),
@@ -1123,7 +1129,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       yield* Effect.gen(function* () {
         const provider = yield* ProviderService;
         yield* provider.startSession(initial.threadId, {
-          provider: "claudeAgent",
+          provider: ProviderDriverKind.make("claudeAgent"),
           providerInstanceId: claudeAgentInstanceId,
           threadId: initial.threadId,
           cwd: "/tmp/project-claude-start",
@@ -1162,7 +1168,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
           Layer.provide(persistenceLayer),
         );
 
-        const firstClaude = makeFakeCodexAdapter("claudeAgent");
+        const firstClaude = makeFakeCodexAdapter(CLAUDE_AGENT_DRIVER);
         const firstRegistry = makeAdapterRegistryMock({ claudeAgent: firstClaude.adapter });
         const firstDirectoryLayer = ProviderSessionDirectoryLive.pipe(
           Layer.provide(runtimeRepositoryLayer),
@@ -1178,7 +1184,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
         const initial = yield* Effect.gen(function* () {
           const provider = yield* ProviderService;
           return yield* provider.startSession(asThreadId("thread-claude-cwd"), {
-            provider: "claudeAgent",
+            provider: ProviderDriverKind.make("claudeAgent"),
             providerInstanceId: claudeAgentInstanceId,
             threadId: asThreadId("thread-claude-cwd"),
             cwd: "/tmp/project-claude-cwd",
@@ -1186,7 +1192,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
           });
         }).pipe(Effect.provide(firstProviderLayer));
 
-        const secondClaude = makeFakeCodexAdapter("claudeAgent");
+        const secondClaude = makeFakeCodexAdapter(CLAUDE_AGENT_DRIVER);
         const secondRegistry = makeAdapterRegistryMock({ claudeAgent: secondClaude.adapter });
         const secondDirectoryLayer = ProviderSessionDirectoryLive.pipe(
           Layer.provide(runtimeRepositoryLayer),
@@ -1204,7 +1210,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
         yield* Effect.gen(function* () {
           const provider = yield* ProviderService;
           yield* provider.startSession(initial.threadId, {
-            provider: "claudeAgent",
+            provider: ProviderDriverKind.make("claudeAgent"),
             providerInstanceId: claudeAgentInstanceId,
             threadId: initial.threadId,
             runtimeMode: "full-access",
@@ -1238,7 +1244,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
     Effect.gen(function* () {
       const provider = yield* ProviderService;
       const session = yield* provider.startSession(asThreadId("thread-1"), {
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         threadId: asThreadId("thread-1"),
         runtimeMode: "full-access",
@@ -1253,7 +1259,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
       const completedEvent: LegacyProviderRuntimeEvent = {
         type: "turn.completed",
         eventId: asEventId("evt-1"),
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         createdAt: new Date().toISOString(),
         threadId: session.threadId,
         turnId: asTurnId("turn-1"),
@@ -1284,7 +1290,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
     Effect.gen(function* () {
       const provider = yield* ProviderService;
       const session = yield* provider.startSession(asThreadId("thread-seq"), {
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         threadId: asThreadId("thread-seq"),
         runtimeMode: "full-access",
@@ -1300,7 +1306,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
       fanout.codex.emit({
         type: "tool.started",
         eventId: asEventId("evt-seq-1"),
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         createdAt: new Date().toISOString(),
         threadId: session.threadId,
         turnId: asTurnId("turn-1"),
@@ -1310,7 +1316,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
       fanout.codex.emit({
         type: "tool.completed",
         eventId: asEventId("evt-seq-2"),
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         createdAt: new Date().toISOString(),
         threadId: session.threadId,
         turnId: asTurnId("turn-1"),
@@ -1320,7 +1326,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
       fanout.codex.emit({
         type: "turn.completed",
         eventId: asEventId("evt-seq-3"),
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         createdAt: new Date().toISOString(),
         threadId: session.threadId,
         turnId: asTurnId("turn-1"),
@@ -1340,7 +1346,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
     Effect.gen(function* () {
       const provider = yield* ProviderService;
       const session = yield* provider.startSession(asThreadId("thread-1"), {
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         threadId: asThreadId("thread-1"),
         runtimeMode: "full-access",
@@ -1366,7 +1372,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
         {
           type: "tool.completed",
           eventId: asEventId("evt-ordered-1"),
-          provider: "codex",
+          provider: ProviderDriverKind.make("codex"),
           createdAt: new Date().toISOString(),
           threadId: session.threadId,
           turnId: asTurnId("turn-1"),
@@ -1377,7 +1383,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
         {
           type: "message.delta",
           eventId: asEventId("evt-ordered-2"),
-          provider: "codex",
+          provider: ProviderDriverKind.make("codex"),
           createdAt: new Date().toISOString(),
           threadId: session.threadId,
           turnId: asTurnId("turn-1"),
@@ -1386,7 +1392,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
         {
           type: "turn.completed",
           eventId: asEventId("evt-ordered-3"),
-          provider: "codex",
+          provider: ProviderDriverKind.make("codex"),
           createdAt: new Date().toISOString(),
           threadId: session.threadId,
           turnId: asTurnId("turn-1"),
@@ -1413,7 +1419,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
       const provider = yield* ProviderService;
 
       const session = yield* provider.startSession(asThreadId("thread-metrics"), {
-        provider: "claudeAgent",
+        provider: ProviderDriverKind.make("claudeAgent"),
         providerInstanceId: claudeAgentInstanceId,
         threadId: asThreadId("thread-metrics"),
         cwd: "/tmp/project",
@@ -1443,7 +1449,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
 
       assert.equal(
         hasMetricSnapshot(snapshots, "t3_provider_turns_total", {
-          provider: "claudeAgent",
+          provider: ProviderDriverKind.make("claudeAgent"),
           operation: "interrupt",
           outcome: "success",
         }),
@@ -1451,7 +1457,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
       );
       assert.equal(
         hasMetricSnapshot(snapshots, "t3_provider_turns_total", {
-          provider: "claudeAgent",
+          provider: ProviderDriverKind.make("claudeAgent"),
           operation: "approval-response",
           outcome: "success",
         }),
@@ -1459,7 +1465,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
       );
       assert.equal(
         hasMetricSnapshot(snapshots, "t3_provider_turns_total", {
-          provider: "claudeAgent",
+          provider: ProviderDriverKind.make("claudeAgent"),
           operation: "user-input-response",
           outcome: "success",
         }),
@@ -1467,7 +1473,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
       );
       assert.equal(
         hasMetricSnapshot(snapshots, "t3_provider_turns_total", {
-          provider: "claudeAgent",
+          provider: ProviderDriverKind.make("claudeAgent"),
           operation: "rollback",
           outcome: "success",
         }),
@@ -1475,7 +1481,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
       );
       assert.equal(
         hasMetricSnapshot(snapshots, "t3_provider_sessions_total", {
-          provider: "claudeAgent",
+          provider: ProviderDriverKind.make("claudeAgent"),
           operation: "stop",
           outcome: "success",
         }),
@@ -1491,7 +1497,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
         const provider = yield* ProviderService;
 
         const session = yield* provider.startSession(asThreadId("thread-send-metrics"), {
-          provider: "claudeAgent",
+          provider: ProviderDriverKind.make("claudeAgent"),
           providerInstanceId: claudeAgentInstanceId,
           threadId: asThreadId("thread-send-metrics"),
           cwd: "/tmp/project-send-metrics",
@@ -1508,7 +1514,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
 
         assert.equal(
           hasMetricSnapshot(snapshots, "t3_provider_turns_total", {
-            provider: "claudeAgent",
+            provider: ProviderDriverKind.make("claudeAgent"),
             operation: "send",
             outcome: "success",
           }),
@@ -1516,7 +1522,7 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
         );
         assert.equal(
           hasMetricSnapshot(snapshots, "t3_provider_turn_duration", {
-            provider: "claudeAgent",
+            provider: ProviderDriverKind.make("claudeAgent"),
             operation: "send",
           }),
           true,
@@ -1534,7 +1540,7 @@ validation.layer("ProviderServiceLive validation", (it) => {
       validation.codex.startSession.mockClear();
       const failure = yield* Effect.flip(
         provider.startSession(asThreadId("thread-missing-instance-id"), {
-          provider: "codex",
+          provider: ProviderDriverKind.make("codex"),
           threadId: asThreadId("thread-missing-instance-id"),
           runtimeMode: "full-access",
         }),
@@ -1554,7 +1560,7 @@ validation.layer("ProviderServiceLive validation", (it) => {
       validation.claude.startSession.mockClear();
       const failure = yield* Effect.flip(
         provider.startSession(asThreadId("thread-instance-mismatch"), {
-          provider: "codex",
+          provider: ProviderDriverKind.make("codex"),
           providerInstanceId: claudeAgentInstanceId,
           threadId: asThreadId("thread-instance-mismatch"),
           runtimeMode: "full-access",
@@ -1605,7 +1611,7 @@ validation.layer("ProviderServiceLive validation", (it) => {
         Effect.sync(() => {
           const now = new Date().toISOString();
           return {
-            provider: "codex",
+            provider: ProviderDriverKind.make("codex"),
             status: "ready",
             threadId: input.threadId,
             runtimeMode: input.runtimeMode,
@@ -1617,7 +1623,7 @@ validation.layer("ProviderServiceLive validation", (it) => {
       );
 
       const session = yield* provider.startSession(asThreadId("thread-missing"), {
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         threadId: asThreadId("thread-missing"),
         cwd: "/tmp/project",

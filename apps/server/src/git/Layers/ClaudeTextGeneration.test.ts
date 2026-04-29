@@ -206,7 +206,7 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGenerationLive", (it) => {
             stagedSummary: "M README.md",
             stagedPatch: "diff --git a/README.md b/README.md",
             modelSelection: {
-              ...createModelSelection("claudeAgent", "claude-haiku-4-5", [
+              ...createModelSelection(ProviderInstanceId.make("claudeAgent"), "claude-haiku-4-5", [
                 { id: "thinking", value: false },
                 { id: "effort", value: "high" },
               ]),
@@ -239,7 +239,7 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGenerationLive", (it) => {
             diffSummary: "1 file changed",
             diffPatch: "diff --git a/README.md b/README.md",
             modelSelection: {
-              ...createModelSelection("claudeAgent", "claude-opus-4-6", [
+              ...createModelSelection(ProviderInstanceId.make("claudeAgent"), "claude-opus-4-6", [
                 { id: "effort", value: "max" },
                 { id: "fastMode", value: true },
               ]),

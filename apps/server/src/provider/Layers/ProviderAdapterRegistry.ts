@@ -1,7 +1,7 @@
 /**
  * ProviderAdapterRegistryLive — facade over `ProviderInstanceRegistry`.
  *
- * `ProviderAdapterRegistry` historically mapped one `BuiltInDriverKind` to one
+ * `ProviderAdapterRegistry` historically mapped one `ProviderDriverKind` to one
  * adapter via the four `<X>AdapterLive` singleton Layers. The per-instance
  * refactor moved adapter construction inside each `ProviderDriver.create()`:
  * adapters are now bundled on the `ProviderInstance` that the
@@ -22,7 +22,7 @@
 import {
   defaultInstanceIdForDriver,
   ProviderInstanceId,
-  type BuiltInDriverKind,
+  type ProviderDriverKind,
 } from "@t3tools/contracts";
 import { Effect, Layer } from "effect";
 
@@ -42,7 +42,7 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
         instance === undefined
           ? Effect.fail(
               new ProviderUnsupportedError({
-                provider: instanceId as unknown as BuiltInDriverKind,
+                provider: instanceId,
               }),
             )
           : Effect.succeed(instance.adapter),
@@ -55,7 +55,7 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
         instance === undefined
           ? Effect.fail(
               new ProviderUnsupportedError({
-                provider: instanceId as unknown as BuiltInDriverKind,
+                provider: instanceId,
               }),
             )
           : Effect.succeed({
@@ -77,11 +77,7 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
   // Legacy kind-keyed shim: translate `kind` into the default instance
   // id for that driver (the kind literal itself, as a slug) and delegate.
   const getByProvider: ProviderAdapterRegistryShape["getByProvider"] = (provider) =>
-    getByInstance(
-      defaultInstanceIdForDriver(
-        provider as unknown as Parameters<typeof defaultInstanceIdForDriver>[0],
-      ),
-    ).pipe(
+    getByInstance(defaultInstanceIdForDriver(provider)).pipe(
       // Re-shape the failure so callers still see `ProviderUnsupportedError`
       // carrying the *kind* they asked about, not the derived instance id.
       Effect.mapError(() => new ProviderUnsupportedError({ provider })),
@@ -90,14 +86,14 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
   const listProviders: ProviderAdapterRegistryShape["listProviders"] = () =>
     registry.listInstances.pipe(
       Effect.map((instances) => {
-        const kinds = new Set<BuiltInDriverKind>();
+        const kinds = new Set<ProviderDriverKind>();
         for (const instance of instances) {
           const defaultId = defaultInstanceIdForDriver(instance.driverKind);
           if (instance.instanceId === defaultId) {
             // Only the default-instance rows show up through the legacy
             // shim — custom instances like `codex_personal` have no
-            // `BuiltInDriverKind` equivalent.
-            kinds.add(instance.driverKind as unknown as BuiltInDriverKind);
+            // `ProviderDriverKind` equivalent.
+            kinds.add(instance.driverKind);
           }
         }
         return Array.from(kinds);

@@ -1,24 +1,19 @@
-import {
-  ProviderDriverKind,
-  ProviderInstanceId,
-  type BuiltInDriverKind,
-  type ServerProvider,
-} from "@t3tools/contracts";
+import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
 import {
   deriveProviderInstanceEntries,
-  resolveBuiltInDriverKindForInstanceSelection,
+  resolveProviderDriverKindForInstanceSelection,
 } from "./providerInstances";
 
 function provider(input: {
-  provider: BuiltInDriverKind;
+  provider: ProviderDriverKind;
   instanceId: string;
   enabled?: boolean;
   displayName?: string;
 }): ServerProvider {
   return {
     instanceId: ProviderInstanceId.make(input.instanceId),
-    driver: ProviderDriverKind.make(input.provider),
+    driver: input.provider,
     ...(input.displayName ? { displayName: input.displayName } : {}),
     enabled: input.enabled ?? true,
     installed: true,
@@ -34,7 +29,10 @@ function provider(input: {
 
 describe("deriveProviderInstanceEntries", () => {
   it("uses explicit instance id and driver kind from the snapshot", () => {
-    const snapshot = provider({ provider: "codex", instanceId: "codex_personal" });
+    const snapshot = provider({
+      provider: ProviderDriverKind.make("codex"),
+      instanceId: "codex_personal",
+    });
     const [entry] = deriveProviderInstanceEntries([snapshot]);
 
     expect(entry?.instanceId).toBe("codex_personal");
@@ -43,12 +41,12 @@ describe("deriveProviderInstanceEntries", () => {
   });
 });
 
-describe("resolveBuiltInDriverKindForInstanceSelection", () => {
+describe("resolveProviderDriverKindForInstanceSelection", () => {
   it("maps custom provider instance ids back to their driver kind", () => {
     const providers = [
-      provider({ provider: "codex", instanceId: "codex" }),
+      provider({ provider: ProviderDriverKind.make("codex"), instanceId: "codex" }),
       provider({
-        provider: "claudeAgent",
+        provider: ProviderDriverKind.make("claudeAgent"),
         instanceId: "claude_openrouter",
         displayName: "Claude OpenRouter",
       }),
@@ -56,7 +54,7 @@ describe("resolveBuiltInDriverKindForInstanceSelection", () => {
     const entries = deriveProviderInstanceEntries(providers);
 
     expect(
-      resolveBuiltInDriverKindForInstanceSelection(
+      resolveProviderDriverKindForInstanceSelection(
         entries,
         providers,
         ProviderInstanceId.make("claude_openrouter"),
@@ -66,13 +64,13 @@ describe("resolveBuiltInDriverKindForInstanceSelection", () => {
 
   it("does not guess a provider kind when the instance selection is unknown", () => {
     const providers = [
-      provider({ provider: "codex", instanceId: "codex", enabled: false }),
-      provider({ provider: "claudeAgent", instanceId: "claudeAgent" }),
+      provider({ provider: ProviderDriverKind.make("codex"), instanceId: "codex", enabled: false }),
+      provider({ provider: ProviderDriverKind.make("claudeAgent"), instanceId: "claudeAgent" }),
     ];
     const entries = deriveProviderInstanceEntries(providers);
 
     expect(
-      resolveBuiltInDriverKindForInstanceSelection(
+      resolveProviderDriverKindForInstanceSelection(
         entries,
         providers,
         ProviderInstanceId.make("removed_instance"),

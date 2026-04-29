@@ -1,6 +1,6 @@
 import type {
   ProviderInstanceId,
-  BuiltInDriverKind,
+  ProviderDriverKind,
   ProviderSessionRuntimeStatus,
   RuntimeMode,
   ThreadId,
@@ -15,7 +15,7 @@ import type {
 
 export interface ProviderRuntimeBinding {
   readonly threadId: ThreadId;
-  readonly provider: BuiltInDriverKind;
+  readonly provider: ProviderDriverKind;
   /**
    * Routing key for the configured provider instance that owns this
    * session. The persistence layer promotes legacy null rows before
@@ -46,7 +46,7 @@ export interface ProviderSessionDirectoryShape {
 
   readonly getProvider: (
     threadId: ThreadId,
-  ) => Effect.Effect<BuiltInDriverKind, ProviderSessionDirectoryReadError>;
+  ) => Effect.Effect<ProviderDriverKind, ProviderSessionDirectoryReadError>;
 
   readonly getBinding: (
     threadId: ThreadId,

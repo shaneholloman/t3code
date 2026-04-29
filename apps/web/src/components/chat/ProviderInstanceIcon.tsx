@@ -1,9 +1,5 @@
 import { type CSSProperties, memo } from "react";
-import {
-  isBuiltInDriverKind,
-  type BuiltInDriverKind,
-  type ProviderDriverKind,
-} from "@t3tools/contracts";
+import { type ProviderDriverKind } from "@t3tools/contracts";
 
 import { PROVIDER_ICON_BY_PROVIDER } from "./providerIconUtils";
 import { cn } from "~/lib/utils";
@@ -19,7 +15,7 @@ export function providerInstanceInitials(label: string): string {
 }
 
 export const ProviderInstanceIcon = memo(function ProviderInstanceIcon(props: {
-  driverKind: ProviderDriverKind | BuiltInDriverKind | string;
+  driverKind: ProviderDriverKind;
   displayName: string;
   accentColor?: string | undefined;
   showBadge?: boolean;
@@ -28,9 +24,7 @@ export const ProviderInstanceIcon = memo(function ProviderInstanceIcon(props: {
   badgeClassName?: string;
   statusDotClassName?: string;
 }) {
-  const Icon = isBuiltInDriverKind(props.driverKind)
-    ? PROVIDER_ICON_BY_PROVIDER[props.driverKind as BuiltInDriverKind]
-    : null;
+  const Icon = PROVIDER_ICON_BY_PROVIDER[props.driverKind] ?? null;
   const accentStyle = props.accentColor
     ? ({ "--provider-accent": props.accentColor } as CSSProperties)
     : undefined;

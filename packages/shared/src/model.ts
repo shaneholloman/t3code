@@ -1,13 +1,16 @@
 import {
+  DEFAULT_MODEL,
   DEFAULT_MODEL_BY_PROVIDER,
   MODEL_SLUG_ALIASES_BY_PROVIDER,
   type ModelCapabilities,
   type ModelSelection,
+  ProviderDriverKind,
   ProviderInstanceId,
   type ProviderOptionDescriptor,
   type ProviderOptionSelection,
-  type BuiltInDriverKind,
 } from "@t3tools/contracts";
+
+const DEFAULT_PROVIDER_DRIVER_KIND = ProviderDriverKind.make("codex");
 
 export interface SelectableModelOption {
   slug: string;
@@ -231,7 +234,7 @@ export function isClaudeUltrathinkPrompt(text: string | null | undefined): boole
 
 export function normalizeModelSlug(
   model: string | null | undefined,
-  provider: BuiltInDriverKind = "codex",
+  provider: ProviderDriverKind = DEFAULT_PROVIDER_DRIVER_KIND,
 ): string | null {
   if (typeof model !== "string") {
     return null;
@@ -242,7 +245,7 @@ export function normalizeModelSlug(
     return null;
   }
 
-  const aliases = MODEL_SLUG_ALIASES_BY_PROVIDER[provider] as Record<string, string>;
+  const aliases = MODEL_SLUG_ALIASES_BY_PROVIDER[provider] ?? {};
   const aliased = Object.prototype.hasOwnProperty.call(aliases, trimmed)
     ? aliases[trimmed]
     : undefined;
@@ -250,7 +253,7 @@ export function normalizeModelSlug(
 }
 
 export function resolveSelectableModel(
-  provider: BuiltInDriverKind,
+  provider: ProviderDriverKind,
   value: string | null | undefined,
   options: ReadonlyArray<SelectableModelOption>,
 ): string | null {
@@ -282,16 +285,16 @@ export function resolveSelectableModel(
   return resolved ? resolved.slug : null;
 }
 
-function resolveModelSlug(model: string | null | undefined, provider: BuiltInDriverKind): string {
+function resolveModelSlug(model: string | null | undefined, provider: ProviderDriverKind): string {
   const normalized = normalizeModelSlug(model, provider);
   if (!normalized) {
-    return DEFAULT_MODEL_BY_PROVIDER[provider];
+    return DEFAULT_MODEL_BY_PROVIDER[provider] ?? DEFAULT_MODEL;
   }
   return normalized;
 }
 
 export function resolveModelSlugForProvider(
-  provider: BuiltInDriverKind,
+  provider: ProviderDriverKind,
   model: string | null | undefined,
 ): string {
   return resolveModelSlug(model, provider);
@@ -310,24 +313,14 @@ function cloneSelections(
   return selections.map(cloneSelection);
 }
 
-// Accepts both the closed `BuiltInDriverKind` (for built-in callers that still
-// statically know the driver) and any `string` (post-migration callers pass
-// a `ProviderInstanceId` routing key — see `ModelSelection.instanceId`
-// docstring on why that field is intentionally an open slug).
-//
-// Note: the parameter is named `provider` for back-compat with the many
-// built-in callers that still pass the driver kind literally. For built-in
-// drivers the default instance id equals the driver kind slug, so no mapping is
-// needed. Callers targeting a non-default instance should pass its
-// instance id directly.
 export function createModelSelection(
-  provider: BuiltInDriverKind | (string & {}),
+  instanceId: ProviderInstanceId,
   model: string,
   options?: ReadonlyArray<ProviderOptionSelection> | null,
 ): ModelSelection {
   const selections = options ? cloneSelections(options) : [];
   const base: ModelSelection = {
-    instanceId: ProviderInstanceId.make(provider),
+    instanceId,
     model,
   };
   return selections.length > 0 ? { ...base, options: selections } : base;

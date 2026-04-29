@@ -3901,10 +3901,14 @@ describe("ChatView timeline estimator parity (full app)", () => {
   it("snapshots sticky codex settings into a new draft thread", async () => {
     useComposerDraftStore.setState({
       stickyModelSelectionByProvider: {
-        [ProviderInstanceId.make("codex")]: createModelSelection("codex", "gpt-5.3-codex", [
-          { id: "reasoningEffort", value: "medium" },
-          { id: "fastMode", value: true },
-        ]),
+        [ProviderInstanceId.make("codex")]: createModelSelection(
+          ProviderInstanceId.make("codex"),
+          "gpt-5.3-codex",
+          [
+            { id: "reasoningEffort", value: "medium" },
+            { id: "fastMode", value: true },
+          ],
+        ),
       },
       stickyActiveProvider: ProviderInstanceId.make("codex"),
     });
@@ -3953,7 +3957,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     useComposerDraftStore.setState({
       stickyModelSelectionByProvider: {
         [ProviderInstanceId.make("claudeAgent")]: createModelSelection(
-          "claudeAgent",
+          ProviderInstanceId.make("claudeAgent"),
           "claude-opus-4-6",
           [
             { id: "effort", value: "max" },
@@ -3987,10 +3991,14 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       expect(composerDraftFor(newDraftId)).toMatchObject({
         modelSelectionByProvider: {
-          claudeAgent: createModelSelection("claudeAgent", "claude-opus-4-6", [
-            { id: "effort", value: "max" },
-            { id: "fastMode", value: true },
-          ]),
+          claudeAgent: createModelSelection(
+            ProviderInstanceId.make("claudeAgent"),
+            "claude-opus-4-6",
+            [
+              { id: "effort", value: "max" },
+              { id: "fastMode", value: true },
+            ],
+          ),
         },
         activeProvider: "claudeAgent",
       });
@@ -4030,10 +4038,14 @@ describe("ChatView timeline estimator parity (full app)", () => {
   it("prefers draft state over sticky composer settings and defaults", async () => {
     useComposerDraftStore.setState({
       stickyModelSelectionByProvider: {
-        [ProviderInstanceId.make("codex")]: createModelSelection("codex", "gpt-5.3-codex", [
-          { id: "reasoningEffort", value: "medium" },
-          { id: "fastMode", value: true },
-        ]),
+        [ProviderInstanceId.make("codex")]: createModelSelection(
+          ProviderInstanceId.make("codex"),
+          "gpt-5.3-codex",
+          [
+            { id: "reasoningEffort", value: "medium" },
+            { id: "fastMode", value: true },
+          ],
+        ),
       },
       stickyActiveProvider: ProviderInstanceId.make("codex"),
     });
@@ -4075,7 +4087,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       useComposerDraftStore.getState().setModelSelection(
         draftId,
-        createModelSelection("codex", "gpt-5.4", [
+        createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.4", [
           { id: "reasoningEffort", value: "low" },
           { id: "fastMode", value: true },
         ]),
@@ -4090,7 +4102,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
       expect(composerDraftFor(draftId)).toMatchObject({
         modelSelectionByProvider: {
-          codex: createModelSelection("codex", "gpt-5.4", [
+          codex: createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.4", [
             { id: "reasoningEffort", value: "low" },
             { id: "fastMode", value: true },
           ]),

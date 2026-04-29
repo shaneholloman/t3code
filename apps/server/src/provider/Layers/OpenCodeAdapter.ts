@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
   EventId,
   type OpenCodeSettings,
+  ProviderDriverKind,
   ProviderInstanceId,
   type ProviderRuntimeEvent,
   type ProviderSession,
@@ -42,7 +43,7 @@ import {
   type OpenCodeServerConnection,
 } from "../opencodeRuntime.ts";
 
-const PROVIDER = "opencode" as const;
+const PROVIDER = ProviderDriverKind.make("opencode");
 
 interface OpenCodeTurnSnapshot {
   readonly id: TurnId;

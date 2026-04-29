@@ -1,5 +1,5 @@
 import type { ProviderRuntimeEvent } from "@t3tools/contracts";
-import { ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import { ProviderDriverKind, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 import { DEFAULT_SERVER_SETTINGS } from "@t3tools/contracts/settings";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it, assert } from "@effect/vitest";
@@ -125,7 +125,7 @@ it.live("replays typed runtime fixture events", () =>
       const provider = yield* ProviderService;
       const session = yield* provider.startSession(ThreadId.make("thread-integration-typed"), {
         threadId: ThreadId.make("thread-integration-typed"),
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         cwd: fixture.cwd,
         runtimeMode: "full-access",
@@ -162,7 +162,7 @@ it.live("replays file-changing fixture turn events", () =>
       const provider = yield* ProviderService;
       const session = yield* provider.startSession(ThreadId.make("thread-integration-tools"), {
         threadId: ThreadId.make("thread-integration-tools"),
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         cwd: fixture.cwd,
         runtimeMode: "full-access",
@@ -199,7 +199,7 @@ it.live("runs multi-turn tool/approval flow", () =>
       const provider = yield* ProviderService;
       const session = yield* provider.startSession(ThreadId.make("thread-integration-multi"), {
         threadId: ThreadId.make("thread-integration-multi"),
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         cwd: fixture.cwd,
         runtimeMode: "full-access",
@@ -251,7 +251,7 @@ it.live("rolls back provider conversation state only", () =>
       const provider = yield* ProviderService;
       const session = yield* provider.startSession(ThreadId.make("thread-integration-rollback"), {
         threadId: ThreadId.make("thread-integration-rollback"),
-        provider: "codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         cwd: fixture.cwd,
         runtimeMode: "full-access",

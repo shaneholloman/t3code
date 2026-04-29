@@ -4,13 +4,16 @@ import { Effect, FileSystem, Layer, Path, Result, Schema } from "effect";
 import { createModelSelection } from "@t3tools/shared/model";
 import { expect } from "vitest";
 
-import { CodexSettings, TextGenerationError } from "@t3tools/contracts";
+import { CodexSettings, ProviderInstanceId, TextGenerationError } from "@t3tools/contracts";
 
 import { ServerConfig } from "../../config.ts";
 import { type TextGenerationShape } from "../Services/TextGeneration.ts";
 import { makeCodexTextGeneration } from "./CodexTextGeneration.ts";
 
-const DEFAULT_TEST_MODEL_SELECTION = createModelSelection("codex", "gpt-5.4-mini");
+const DEFAULT_TEST_MODEL_SELECTION = createModelSelection(
+  ProviderInstanceId.make("codex"),
+  "gpt-5.4-mini",
+);
 
 const CodexTextGenerationTestLayer = ServerConfig.layerTest(process.cwd(), {
   prefix: "t3code-codex-text-generation-test-",
@@ -213,7 +216,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
             branch: "feature/codex-effect",
             stagedSummary: "M README.md",
             stagedPatch: "diff --git a/README.md b/README.md",
-            modelSelection: createModelSelection("codex", "gpt-5.4", [
+            modelSelection: createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.4", [
               { id: "reasoningEffort", value: "xhigh" },
               { id: "fastMode", value: true },
             ]),

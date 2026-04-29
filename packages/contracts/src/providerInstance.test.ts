@@ -57,7 +57,7 @@ describe("provider slug validation (shared by driver + instance ids)", () => {
 });
 
 describe("ProviderInstanceRef", () => {
-  it("decodes a built-in driver ref", () => {
+  it("decodes a driver ref", () => {
     const ref = decodeProviderInstanceRef({
       instanceId: "codex_work",
       driver: "codex",
@@ -86,7 +86,7 @@ describe("ProviderInstanceRef", () => {
 });
 
 describe("ProviderInstanceConfig", () => {
-  it("accepts a minimal config envelope for a built-in driver", () => {
+  it("accepts a minimal config envelope for a driver", () => {
     const decoded = decodeProviderInstanceConfig({ driver: "codex" });
     expect(decoded.driver).toBe("codex");
     expect(decoded.displayName).toBeUndefined();
@@ -158,7 +158,7 @@ describe("ProviderInstanceConfig", () => {
 });
 
 describe("ProviderInstanceConfigMap", () => {
-  it("decodes a multi-instance map mixing built-in and fork drivers", () => {
+  it("decodes a multi-instance map mixing first-party and fork drivers", () => {
     const decoded = decodeProviderInstanceConfigMap({
       codex_personal: {
         driver: "codex",

@@ -18,7 +18,7 @@ import type {
   ScopedProjectRef,
   ScopedThreadRef,
 } from "@t3tools/contracts";
-import { isBuiltInDriverKind, BuiltInDriverKind } from "@t3tools/contracts";
+import { isProviderDriverKind, ProviderDriverKind } from "@t3tools/contracts";
 import type { ThreadId, TurnId } from "@t3tools/contracts";
 import { Schema } from "effect";
 import { resolveModelSlugForProvider } from "@t3tools/shared/model";
@@ -129,12 +129,11 @@ function arraysEqual<T>(left: readonly T[], right: readonly T[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-// Accepts the open `instanceId` string carried on `ModelSelection` so threads
-// or projects whose persisted selection references a fork/unknown driver
-// pass through unchanged (model slug normalization just no-ops since we
-// only know aliases for built-in drivers).
+// Accepts the open `instanceId` string carried on `ModelSelection`; malformed
+// values pass through unchanged, while valid slugs use any registered alias
+// table for model normalization.
 function normalizeModelSelection<T extends { instanceId: string; model: string }>(selection: T): T {
-  if (!isBuiltInDriverKind(selection.instanceId)) {
+  if (!isProviderDriverKind(selection.instanceId)) {
     return selection;
   }
   return {
@@ -1006,11 +1005,11 @@ function toLegacySessionStatus(
   }
 }
 
-function toLegacyProvider(providerName: string | null): BuiltInDriverKind {
-  if (Schema.is(BuiltInDriverKind)(providerName)) {
+function toLegacyProvider(providerName: string | null): ProviderDriverKind {
+  if (Schema.is(ProviderDriverKind)(providerName)) {
     return providerName;
   }
-  return "codex";
+  return ProviderDriverKind.make("codex");
 }
 
 function attachmentPreviewRoutePath(attachmentId: string): string {

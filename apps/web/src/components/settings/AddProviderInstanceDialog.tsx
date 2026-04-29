@@ -4,9 +4,8 @@ import { Radio as RadioPrimitive } from "@base-ui/react/radio";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ProviderInstanceId,
-  type ProviderDriverKind,
+  ProviderDriverKind,
   type ProviderInstanceConfig,
-  type BuiltInDriverKind,
 } from "@t3tools/contracts";
 
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
@@ -52,12 +51,14 @@ function slugifyLabel(value: string): string {
     .slice(0, 48);
 }
 
-function deriveInstanceId(driver: BuiltInDriverKind, label: string): string {
+function deriveInstanceId(driver: ProviderDriverKind, label: string): string {
   const slug = slugifyLabel(label);
   return slug ? `${driver}_${slug}` : "";
 }
 
 const INSTANCE_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
+const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
+const DEFAULT_DRIVER_OPTION = DRIVER_OPTIONS[0]!;
 
 /**
  * Validate an instance id against the same slug rules the server applies in
@@ -83,7 +84,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
   const settings = useSettings();
   const { updateSettings } = useUpdateSettings();
 
-  const [driver, setDriver] = useState<BuiltInDriverKind>("codex");
+  const [driver, setDriver] = useState<ProviderDriverKind>(DEFAULT_DRIVER_KIND);
   const [label, setLabel] = useState("");
   const [accentColor, setAccentColor] = useState<string>("");
   const [instanceId, setInstanceId] = useState("");
@@ -105,7 +106,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
   // from a clean slate.
   useEffect(() => {
     if (!open) return;
-    setDriver("codex");
+    setDriver(DEFAULT_DRIVER_KIND);
     setLabel("");
     setAccentColor("");
     setInstanceId("");
@@ -121,7 +122,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
     setInstanceId(deriveInstanceId(driver, label));
   }, [driver, label, instanceIdDirty]);
 
-  const driverOption = DRIVER_OPTION_BY_VALUE[driver];
+  const driverOption = DRIVER_OPTION_BY_VALUE[driver] ?? DEFAULT_DRIVER_OPTION;
   const instanceIdError = validateInstanceId(instanceId, existingIds);
   const showInstanceIdError = hasAttemptedSubmit && instanceIdError !== null;
 
@@ -152,7 +153,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
     const normalizedAccentColor = normalizeProviderAccentColor(accentColor);
 
     const nextInstance: ProviderInstanceConfig = {
-      driver: driver as ProviderDriverKind,
+      driver,
       enabled: true,
       ...(label.trim().length > 0 ? { displayName: label.trim() } : {}),
       ...(normalizedAccentColor ? { accentColor: normalizedAccentColor } : {}),
@@ -214,7 +215,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
             </span>
             <RadioGroup
               value={driver}
-              onValueChange={(value) => setDriver(value as BuiltInDriverKind)}
+              onValueChange={(value) => setDriver(ProviderDriverKind.make(value))}
               aria-labelledby="add-instance-driver-label"
               className="grid grid-cols-2 gap-2"
             >

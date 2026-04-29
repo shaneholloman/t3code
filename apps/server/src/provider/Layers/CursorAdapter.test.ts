@@ -11,6 +11,7 @@ import { createModelSelection } from "@t3tools/shared/model";
 import {
   ApprovalRequestId,
   CursorSettings,
+  ProviderDriverKind,
   type ProviderRuntimeEvent,
   ThreadId,
   ProviderInstanceId,
@@ -154,7 +155,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       const session = yield* adapter.startSession({
         threadId,
-        provider: "cursor",
+        provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "full-access",
         modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
@@ -239,7 +240,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       yield* adapter.startSession({
         threadId,
-        provider: "cursor",
+        provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "full-access",
         modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
@@ -278,14 +279,14 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
           [
             adapter.startSession({
               threadId,
-              provider: "cursor",
+              provider: ProviderDriverKind.make("cursor"),
               cwd: process.cwd(),
               runtimeMode: "full-access",
               modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
             }),
             adapter.startSession({
               threadId,
-              provider: "cursor",
+              provider: ProviderDriverKind.make("cursor"),
               cwd: process.cwd(),
               runtimeMode: "full-access",
               modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
@@ -310,7 +311,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       const result = yield* adapter
         .startSession({
           threadId: ThreadId.make("bad-provider"),
-          provider: "codex",
+          provider: ProviderDriverKind.make("codex"),
           cwd: process.cwd(),
           runtimeMode: "full-access",
         })
@@ -336,7 +337,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       yield* adapter.startSession({
         threadId,
-        provider: "cursor",
+        provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "full-access",
         modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "composer-2" },
@@ -392,7 +393,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
           providers: { cursor: { binaryPath: wrapperPath } },
         });
 
-        const modelSelection = createModelSelection("cursor", "gpt-5.4", [
+        const modelSelection = createModelSelection(ProviderInstanceId.make("cursor"), "gpt-5.4", [
           { id: "reasoning", value: "xhigh" },
           { id: "contextWindow", value: "1m" },
           { id: "fastMode", value: true },
@@ -400,7 +401,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
         yield* adapter.startSession({
           threadId,
-          provider: "cursor",
+          provider: ProviderDriverKind.make("cursor"),
           cwd: process.cwd(),
           runtimeMode: "full-access",
           modelSelection,
@@ -494,7 +495,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         const program = Effect.gen(function* () {
           yield* adapter.startSession({
             threadId,
-            provider: "cursor",
+            provider: ProviderDriverKind.make("cursor"),
             cwd: process.cwd(),
             runtimeMode: "approval-required",
             modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
@@ -656,7 +657,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
         yield* adapter.startSession({
           threadId,
-          provider: "cursor",
+          provider: ProviderDriverKind.make("cursor"),
           cwd: process.cwd(),
           runtimeMode: "full-access",
           modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
@@ -755,7 +756,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       yield* adapter.startSession({
         threadId,
-        provider: "cursor",
+        provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "full-access",
         modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
@@ -877,7 +878,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       yield* adapter.startSession({
         threadId,
-        provider: "cursor",
+        provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "approval-required",
         modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
@@ -947,7 +948,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       yield* adapter.startSession({
         threadId,
-        provider: "cursor",
+        provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "approval-required",
         modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
@@ -990,7 +991,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       yield* adapter.startSession({
         threadId,
-        provider: "cursor",
+        provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "full-access",
         modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
@@ -1033,7 +1034,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       yield* adapter.startSession({
         threadId,
-        provider: "cursor",
+        provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "full-access",
         modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
@@ -1076,7 +1077,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       yield* adapter.startSession({
         threadId,
-        provider: "cursor",
+        provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "full-access",
         modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
@@ -1114,7 +1115,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       yield* adapter.startSession({
         threadId,
-        provider: "cursor",
+        provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "full-access",
         modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "composer-2" },
@@ -1130,7 +1131,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         threadId,
         input: "second turn after switching model",
         attachments: [],
-        modelSelection: createModelSelection("cursor", "composer-2", [
+        modelSelection: createModelSelection(ProviderInstanceId.make("cursor"), "composer-2", [
           { id: "fastMode", value: true },
         ]),
       });
@@ -1177,7 +1178,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       yield* adapter.startSession({
         threadId,
-        provider: "cursor",
+        provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "full-access",
         modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "composer-2" },
@@ -1187,7 +1188,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         threadId,
         input: "first turn with fast mode",
         attachments: [],
-        modelSelection: createModelSelection("cursor", "composer-2", [
+        modelSelection: createModelSelection(ProviderInstanceId.make("cursor"), "composer-2", [
           { id: "fastMode", value: true },
         ]),
       });
@@ -1196,7 +1197,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         threadId,
         input: "second turn without fast mode",
         attachments: [],
-        modelSelection: createModelSelection("cursor", "composer-2", [
+        modelSelection: createModelSelection(ProviderInstanceId.make("cursor"), "composer-2", [
           { id: "fastMode", value: false },
         ]),
       });
@@ -1263,7 +1264,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
         yield* adapter.startSession({
           threadId,
-          provider: "cursor",
+          provider: ProviderDriverKind.make("cursor"),
           cwd: process.cwd(),
           runtimeMode: "full-access",
           modelSelection: {
@@ -1277,7 +1278,9 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
           input: "first turn with fast mode",
           attachments: [],
           modelSelection: {
-            ...createModelSelection("cursor", "composer-2", [{ id: "fastMode", value: true }]),
+            ...createModelSelection(ProviderInstanceId.make("cursor"), "composer-2", [
+              { id: "fastMode", value: true },
+            ]),
             instanceId: customInstanceId,
           },
         });

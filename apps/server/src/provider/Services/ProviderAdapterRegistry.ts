@@ -2,7 +2,7 @@
  * ProviderAdapterRegistry - Lookup boundary for provider adapter implementations.
  *
  * Maps a `ProviderInstanceId` (the new per-instance routing key) or a
- * `BuiltInDriverKind` (legacy single-instance-per-driver key) to the concrete
+ * `ProviderDriverKind` (legacy single-instance-per-driver key) to the concrete
  * adapter service (Codex, Claude, etc). It does not own session lifecycle
  * or routing rules; `ProviderService` uses this registry together with
  * `ProviderSessionDirectory`.
@@ -21,7 +21,7 @@
  *
  * @module ProviderAdapterRegistry
  */
-import type { ProviderDriverKind, ProviderInstanceId, BuiltInDriverKind } from "@t3tools/contracts";
+import type { ProviderDriverKind, ProviderInstanceId } from "@t3tools/contracts";
 import { Context } from "effect";
 import type { Effect, PubSub, Scope, Stream } from "effect";
 
@@ -72,7 +72,7 @@ export interface ProviderAdapterRegistryShape {
    * sites (legacy persisted rows, WS refresh RPC).
    */
   readonly getByProvider: (
-    provider: BuiltInDriverKind,
+    provider: ProviderDriverKind,
   ) => Effect.Effect<ProviderAdapterShape<ProviderAdapterError>, ProviderUnsupportedError>;
 
   /**
@@ -82,7 +82,7 @@ export interface ProviderAdapterRegistryShape {
    * @deprecated Prefer `listInstances`. Retained for migration-era call
    * sites that iterate providers to build UI/metrics.
    */
-  readonly listProviders: () => Effect.Effect<ReadonlyArray<BuiltInDriverKind>>;
+  readonly listProviders: () => Effect.Effect<ReadonlyArray<ProviderDriverKind>>;
 
   /**
    * Change notification stream mirroring `ProviderInstanceRegistry.streamChanges`.

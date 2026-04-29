@@ -1,5 +1,12 @@
 import { scopeThreadRef } from "@t3tools/client-runtime";
-import { EnvironmentId, ProjectId, ProviderInstanceId, ThreadId, TurnId } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ProjectId,
+  ProviderDriverKind,
+  ProviderInstanceId,
+  ThreadId,
+  TurnId,
+} from "@t3tools/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type EnvironmentState, useStore } from "../store";
 import { type Thread } from "../types";
@@ -452,7 +459,7 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
   };
 
   const previousSession = {
-    provider: "codex" as const,
+    provider: ProviderDriverKind.make("codex"),
     status: "ready" as const,
     createdAt: "2026-03-29T00:00:00.000Z",
     updatedAt: "2026-03-29T00:00:10.000Z",

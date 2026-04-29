@@ -1,13 +1,11 @@
 import {
   type ApprovalRequestId,
-  DEFAULT_MODEL_BY_PROVIDER,
+  DEFAULT_MODEL,
   defaultInstanceIdForDriver,
   type EnvironmentId,
-  isBuiltInDriverKind,
   type MessageId,
   type ModelSelection,
   type ProjectScript,
-  type BuiltInDriverKind,
   type ProjectId,
   type ProviderApprovalDecision,
   ProviderInstanceId,
@@ -306,7 +304,7 @@ function useThreadPlanCatalog(threadIds: readonly ThreadId[]): ThreadPlanCatalog
 }
 
 function formatOutgoingPrompt(params: {
-  provider: BuiltInDriverKind;
+  provider: ProviderDriverKind;
   model: string | null;
   models: ReadonlyArray<ServerProvider["models"][number]>;
   effort: string | null;
@@ -782,7 +780,7 @@ export default function ChatView(props: ChatViewProps) {
             draftThread,
             fallbackDraftProject?.defaultModelSelection ?? {
               instanceId: ProviderInstanceId.make("codex"),
-              model: DEFAULT_MODEL_BY_PROVIDER.codex,
+              model: DEFAULT_MODEL,
             },
             localDraftError,
           )
@@ -1057,9 +1055,9 @@ export default function ChatView(props: ChatViewProps) {
   const providerStatuses = serverConfig?.providers ?? EMPTY_PROVIDERS;
   const unlockedSelectedProvider = resolveSelectableProvider(
     providerStatuses,
-    selectedProviderByThreadId ?? threadProvider ?? "codex",
+    selectedProviderByThreadId ?? threadProvider ?? ProviderDriverKind.make("codex"),
   );
-  const selectedProvider: BuiltInDriverKind = lockedProvider ?? unlockedSelectedProvider;
+  const selectedProvider: ProviderDriverKind = lockedProvider ?? unlockedSelectedProvider;
   const phase = derivePhase(activeThread?.session ?? null);
   const threadActivities = activeThread?.activities ?? EMPTY_ACTIVITIES;
   const workLogEntries = useMemo(
@@ -1446,7 +1444,7 @@ export default function ChatView(props: ChatViewProps) {
         providerStatuses.find((status) => status.instanceId === activeProviderInstanceId) ?? null
       );
     }
-    const defaultInstanceId = defaultInstanceIdForDriver(ProviderDriverKind.make(selectedProvider));
+    const defaultInstanceId = defaultInstanceIdForDriver(selectedProvider);
     return providerStatuses.find((status) => status.instanceId === defaultInstanceId) ?? null;
   }, [activeProviderInstanceId, providerStatuses, selectedProvider]);
   const activeProjectCwd = activeProject?.cwd ?? null;
@@ -2580,9 +2578,7 @@ export default function ChatView(props: ChatViewProps) {
       const title = truncate(titleSeed);
       const threadCreateModelSelection = createModelSelection(
         ctxSelectedModelSelection.instanceId,
-        ctxSelectedModel ||
-          activeProject.defaultModelSelection?.model ||
-          DEFAULT_MODEL_BY_PROVIDER.codex,
+        ctxSelectedModel || activeProject.defaultModelSelection?.model || DEFAULT_MODEL,
         ctxSelectedModelSelection.options,
       );
 
@@ -3154,7 +3150,7 @@ export default function ChatView(props: ChatViewProps) {
       // model lookup stay scoped to that exact instance. Unknown instance ids
       // are rejected by returning early; the server remains authoritative too.
       const entry = providerStatuses.find((snapshot) => snapshot.instanceId === instanceId);
-      const resolvedDriverKind = entry && isBuiltInDriverKind(entry.driver) ? entry.driver : null;
+      const resolvedDriverKind = entry?.driver ?? null;
       if (
         lockedProvider !== null &&
         resolvedDriverKind !== null &&

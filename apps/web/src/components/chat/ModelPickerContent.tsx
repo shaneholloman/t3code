@@ -1,8 +1,6 @@
 import {
-  isBuiltInDriverKind,
-  type ProviderDriverKind,
   type ProviderInstanceId,
-  type BuiltInDriverKind,
+  type ProviderDriverKind,
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
 import { resolveSelectableModel } from "@t3tools/shared/model";
@@ -64,7 +62,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
    * remain selectable (e.g. locked to `codex` still lets the user switch
    * between the default Codex and a custom Codex Personal).
    */
-  lockedProvider: BuiltInDriverKind | null;
+  lockedProvider: ProviderDriverKind | null;
   lockedContinuationGroupKey?: string | null;
   /**
    * All configured provider instances in display order. Used to render
@@ -140,7 +138,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   }, [focusSearchInput]);
 
   // Create a Set for efficient lookup. Favorites are keyed by
-  // `${instanceId}:${slug}`; the storage schema widened from BuiltInDriverKind
+  // `${instanceId}:${slug}`; the storage schema widened from ProviderDriverKind
   // to ProviderInstanceId so pre-migration favorites keyed by driver slugs
   // (e.g. `"codex:gpt-5"`) still resolve — the default instance id equals
   // the driver slug.
@@ -165,7 +163,6 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   const matchesLockedProvider = useCallback(
     (entry: Pick<ProviderInstanceEntry, "driverKind" | "continuationGroupKey">): boolean => {
       if (props.lockedProvider === null) return true;
-      if (!isBuiltInDriverKind(entry.driverKind)) return false;
       if (entry.driverKind !== props.lockedProvider) return false;
       if (!props.lockedContinuationGroupKey) return true;
       return entry.continuationGroupKey === props.lockedContinuationGroupKey;
@@ -354,9 +351,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       // `resolveSelectableModel` uses the driver kind for normalization
       // (slug casing etc.). Custom instances share their driver's
       // normalization rules, so pass the driver kind here.
-      const resolvedModel = isBuiltInDriverKind(entry.driverKind)
-        ? resolveSelectableModel(entry.driverKind, modelSlug, options)
-        : modelSlug;
+      const resolvedModel = resolveSelectableModel(entry.driverKind, modelSlug, options);
       if (resolvedModel) {
         onInstanceModelChange(instanceId, resolvedModel);
       }
@@ -645,10 +640,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                       showProvider={!isLocked || showLockedInstanceSidebar}
                       preferShortName={!isLocked}
                       useTriggerLabel={isLocked && !showLockedInstanceSidebar}
-                      showNewBadge={
-                        isBuiltInDriverKind(model.driverKind) &&
-                        isModelPickerNewModel(model.driverKind, model.slug)
-                      }
+                      showNewBadge={isModelPickerNewModel(model.driverKind, model.slug)}
                       jumpLabel={modelJumpLabelByKey.get(modelKey) ?? null}
                       onToggleFavorite={() => toggleFavorite(model.instanceId, model.slug)}
                     />

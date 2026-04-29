@@ -4,12 +4,10 @@ import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import {
   defaultInstanceIdForDriver,
   type DesktopUpdateChannel,
-  isBuiltInDriverKind,
   ProviderDriverKind,
   type ProviderInstanceConfig,
   type ProviderInstanceId,
   type ScopedThreadRef,
-  type BuiltInDriverKind,
 } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime";
 import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
@@ -97,8 +95,10 @@ const TIMESTAMP_FORMAT_LABELS = {
   "24-hour": "24-hour",
 } as const;
 
+const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
+
 type InstallProviderSettings = {
-  provider: BuiltInDriverKind;
+  provider: ProviderDriverKind;
   title: string;
   badgeLabel?: string;
   binaryPlaceholder: string;
@@ -114,7 +114,7 @@ type InstallProviderSettings = {
 
 const PROVIDER_SETTINGS: readonly InstallProviderSettings[] = [
   {
-    provider: "codex",
+    provider: ProviderDriverKind.make("codex"),
     title: "Codex",
     binaryPlaceholder: "Codex binary path",
     binaryDescription: "Path to the Codex binary",
@@ -123,20 +123,20 @@ const PROVIDER_SETTINGS: readonly InstallProviderSettings[] = [
     homeDescription: "Optional custom Codex home and config directory.",
   },
   {
-    provider: "claudeAgent",
+    provider: ProviderDriverKind.make("claudeAgent"),
     title: "Claude",
     binaryPlaceholder: "Claude binary path",
     binaryDescription: "Path to the Claude binary",
   },
   {
-    provider: "cursor",
+    provider: ProviderDriverKind.make("cursor"),
     title: "Cursor",
     badgeLabel: "Early Access",
     binaryPlaceholder: "Cursor agent binary path",
     binaryDescription: "Path to the Cursor agent binary",
   },
   {
-    provider: "opencode",
+    provider: ProviderDriverKind.make("opencode"),
     title: "OpenCode",
     binaryPlaceholder: "OpenCode binary path",
     binaryDescription: "Path to the OpenCode binary",
@@ -391,8 +391,17 @@ export function useSettingsRestore(onRestored?: () => void) {
   // Defaults chip accurate throughout the legacy→instance migration.
   const areProviderSettingsDirty =
     PROVIDER_SETTINGS.some((providerSettings) => {
-      const currentSettings = settings.providers[providerSettings.provider];
-      const defaultSettings = DEFAULT_UNIFIED_SETTINGS.providers[providerSettings.provider];
+      type LegacyProviderSettings = (typeof settings.providers)[keyof typeof settings.providers];
+      const currentProviders = settings.providers as Record<
+        string,
+        LegacyProviderSettings | undefined
+      >;
+      const defaultProviders = DEFAULT_UNIFIED_SETTINGS.providers as Record<
+        string,
+        LegacyProviderSettings | undefined
+      >;
+      const currentSettings = currentProviders[providerSettings.provider];
+      const defaultSettings = defaultProviders[providerSettings.provider];
       return !Equal.equals(currentSettings, defaultSettings);
     }) || Object.keys(settings.providerInstances ?? {}).length > 0;
 
@@ -479,7 +488,7 @@ export function GeneralSettingsPanel() {
   // `Record<string, boolean>` so we don't need to preseed an entry for every
   // configured instance — an absent key reads as collapsed. Default-slot
   // rows share this state: their id is the driver slug
-  // (`defaultInstanceIdForDriver(driver)`), which is also `BuiltInDriverKind` at
+  // (`defaultInstanceIdForDriver(driver)`), which is also `ProviderDriverKind` at
   // runtime, so a pre-existing open key for e.g. "codex" persists across
   // the legacy/unified render swap.
   const [openInstanceDetails, setOpenInstanceDetails] = useState<Record<string, boolean>>({});
@@ -534,10 +543,8 @@ export function GeneralSettingsPanel() {
   const textGenInstanceEntry = gitModelInstanceEntries.find(
     (entry) => entry.instanceId === textGenInstanceId,
   );
-  const textGenProvider: BuiltInDriverKind =
-    (textGenInstanceEntry && isBuiltInDriverKind(textGenInstanceEntry.driverKind)
-      ? textGenInstanceEntry.driverKind
-      : undefined) ?? (isBuiltInDriverKind(textGenInstanceId) ? textGenInstanceId : "codex");
+  const textGenProvider: ProviderDriverKind =
+    textGenInstanceEntry?.driverKind ?? DEFAULT_DRIVER_KIND;
   const gitModelOptionsByInstance = getCustomModelOptionsByInstance(
     settings,
     serverProviders,
@@ -632,9 +639,12 @@ export function GeneralSettingsPanel() {
     readonly isDirty?: boolean;
   }
 
-  const instancesByDriver = new Map<string, Array<[ProviderInstanceId, ProviderInstanceConfig]>>();
+  const instancesByDriver = new Map<
+    ProviderDriverKind,
+    Array<[ProviderInstanceId, ProviderInstanceConfig]>
+  >();
   for (const [rawId, instance] of Object.entries(settings.providerInstances ?? {})) {
-    const driver = String(instance.driver);
+    const driver = instance.driver;
     const list = instancesByDriver.get(driver) ?? [];
     list.push([rawId as ProviderInstanceId, instance]);
     instancesByDriver.set(driver, list);
@@ -642,17 +652,23 @@ export function GeneralSettingsPanel() {
 
   const defaultSlotIdsBySource = new Set<string>(
     visibleProviderSettings.map((providerSettings) =>
-      String(defaultInstanceIdForDriver(ProviderDriverKind.make(providerSettings.provider))),
+      String(defaultInstanceIdForDriver(providerSettings.provider)),
     ),
   );
 
   const rows: InstanceRow[] = [];
-  const visibleDriverKinds = new Set<BuiltInDriverKind>(
+  const visibleDriverKinds = new Set<ProviderDriverKind>(
     visibleProviderSettings.map((providerSettings) => providerSettings.provider),
   );
 
   for (const providerSettings of visibleProviderSettings) {
-    const driver = ProviderDriverKind.make(providerSettings.provider);
+    type LegacyProviderSettings = (typeof settings.providers)[keyof typeof settings.providers];
+    const legacyProviders = settings.providers as Record<string, LegacyProviderSettings>;
+    const defaultLegacyProviders = DEFAULT_UNIFIED_SETTINGS.providers as Record<
+      string,
+      LegacyProviderSettings
+    >;
+    const driver = providerSettings.provider;
     const defaultInstanceId = defaultInstanceIdForDriver(driver);
     // Prefer an explicit `providerInstances[defaultId]` entry when one
     // exists (every edit via this UI promotes the default slot into
@@ -660,8 +676,8 @@ export function GeneralSettingsPanel() {
     // `settings.providers[kind]` struct so first-time viewers still see
     // their persisted config.
     const explicitInstance = settings.providerInstances?.[defaultInstanceId];
-    const legacyConfig = settings.providers[providerSettings.provider];
-    const defaultLegacyConfig = DEFAULT_UNIFIED_SETTINGS.providers[providerSettings.provider];
+    const legacyConfig = legacyProviders[providerSettings.provider]!;
+    const defaultLegacyConfig = defaultLegacyProviders[providerSettings.provider]!;
     const effectiveInstance: ProviderInstanceConfig =
       explicitInstance ??
       ({
@@ -689,7 +705,7 @@ export function GeneralSettingsPanel() {
   // authored a Cursor instance anyway, or fork drivers not shipped by
   // this build). Preserve insertion order within each driver.
   for (const [driver, list] of instancesByDriver) {
-    if (visibleDriverKinds.has(driver as BuiltInDriverKind)) continue;
+    if (visibleDriverKinds.has(driver)) continue;
     for (const [id, instance] of list) {
       const isDefaultSlot = defaultSlotIdsBySource.has(String(id));
       rows.push({
@@ -735,14 +751,21 @@ export function GeneralSettingsPanel() {
    * the new map, so hydration re-synthesizes a clean envelope on next
    * load. Safe to call on drivers that have never been edited.
    */
-  const resetDefaultInstance = (driverKind: BuiltInDriverKind) => {
-    const defaultInstanceId = defaultInstanceIdForDriver(ProviderDriverKind.make(driverKind));
+  const resetDefaultInstance = (driverKind: ProviderDriverKind) => {
+    type LegacyProviderSettings = (typeof settings.providers)[keyof typeof settings.providers];
+    const defaultLegacyProviders = DEFAULT_UNIFIED_SETTINGS.providers as Record<
+      string,
+      LegacyProviderSettings | undefined
+    >;
+    const defaultInstanceId = defaultInstanceIdForDriver(driverKind);
     const { [defaultInstanceId]: _removed, ...restInstances } = settings.providerInstances ?? {};
+    const defaultLegacyProvider = defaultLegacyProviders[driverKind];
+    if (defaultLegacyProvider === undefined) return;
     updateSettings({
       providers: {
         ...settings.providers,
-        [driverKind]: DEFAULT_UNIFIED_SETTINGS.providers[driverKind],
-      },
+        [driverKind]: defaultLegacyProvider,
+      } as typeof settings.providers,
       providerInstances: restInstances,
     });
   };
@@ -1150,10 +1173,10 @@ export function GeneralSettingsPanel() {
           );
           const resetLabel = driverOption?.label ?? String(row.driver);
           const headerAction =
-            row.isDefault && row.isDirty && isBuiltInDriverKind(row.driver) ? (
+            row.isDefault && row.isDirty ? (
               <SettingResetButton
                 label={`${resetLabel} provider settings`}
-                onClick={() => resetDefaultInstance(row.driver as BuiltInDriverKind)}
+                onClick={() => resetDefaultInstance(row.driver)}
               />
             ) : null;
           return (

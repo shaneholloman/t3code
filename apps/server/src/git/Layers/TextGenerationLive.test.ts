@@ -83,7 +83,7 @@ describe("makeTextGenerationFromRegistry", () => {
       const result = yield* tg.generateBranchName({
         cwd: process.cwd(),
         message: "Refactor the routing layer",
-        modelSelection: createModelSelection("codex_personal", "gpt-5"),
+        modelSelection: createModelSelection(ProviderInstanceId.make("codex_personal"), "gpt-5"),
       });
 
       expect(result.branch).toBe("personal-branch");
@@ -99,7 +99,10 @@ describe("makeTextGenerationFromRegistry", () => {
         .generateBranchName({
           cwd: process.cwd(),
           message: "anything",
-          modelSelection: createModelSelection("missing_instance", "gpt-5"),
+          modelSelection: createModelSelection(
+            ProviderInstanceId.make("missing_instance"),
+            "gpt-5",
+          ),
         })
         .pipe(Effect.result);
 

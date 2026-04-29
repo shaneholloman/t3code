@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ProviderDriverKind } from "@t3tools/contracts";
 
 import {
   createThreadJumpHintVisibilityController,
@@ -480,7 +481,7 @@ describe("resolveThreadStatusPill", () => {
     latestTurn: null,
     lastVisitedAt: undefined,
     session: {
-      provider: "codex" as const,
+      provider: ProviderDriverKind.make("codex"),
       status: "running" as const,
       createdAt: "2026-03-09T10:00:00.000Z",
       updatedAt: "2026-03-09T10:00:00.000Z",

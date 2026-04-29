@@ -1,11 +1,9 @@
-import {
-  isBuiltInDriverKind,
-  type ProviderDriverKind,
-  type ProviderInstanceConfig,
-  type ProviderInstanceId,
-  type BuiltInDriverKind,
-  type ServerSettings,
-  type UnifiedSettings,
+import type {
+  ProviderDriverKind,
+  ProviderInstanceConfig,
+  ProviderInstanceId,
+  ServerSettings,
+  UnifiedSettings,
 } from "@t3tools/contracts";
 import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
 
@@ -19,14 +17,19 @@ export function buildProviderInstanceUpdatePatch(input: {
     | ServerSettings["textGenerationModelSelection"]
     | undefined;
 }): Partial<UnifiedSettings> {
-  const shouldResetLegacyProvider = input.isDefault && isBuiltInDriverKind(input.driver);
+  type LegacyProviderSettings = ServerSettings["providers"][keyof ServerSettings["providers"]];
+  const legacyProviderDefaults = DEFAULT_UNIFIED_SETTINGS.providers as Record<
+    string,
+    LegacyProviderSettings | undefined
+  >;
+  const legacyProviderDefault = input.isDefault ? legacyProviderDefaults[input.driver] : undefined;
   return {
-    ...(shouldResetLegacyProvider
+    ...(legacyProviderDefault !== undefined
       ? {
           providers: {
             ...input.settings.providers,
-            [input.driver]: DEFAULT_UNIFIED_SETTINGS.providers[input.driver as BuiltInDriverKind],
-          },
+            [input.driver]: legacyProviderDefault,
+          } as ServerSettings["providers"],
         }
       : {}),
     providerInstances: {

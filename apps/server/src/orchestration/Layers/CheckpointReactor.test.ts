@@ -4,11 +4,10 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 
 import {
-  BuiltInDriverKind,
+  ProviderDriverKind,
   ProviderRuntimeEvent,
   ProviderSession,
   ProviderInstanceId,
-  ProviderDriverKind,
 } from "@t3tools/contracts";
 import {
   CommandId,
@@ -56,7 +55,7 @@ const asTurnId = (value: string): TurnId => TurnId.make(value);
 type LegacyProviderRuntimeEvent = {
   readonly type: string;
   readonly eventId: EventId;
-  readonly provider: BuiltInDriverKind;
+  readonly provider: ProviderDriverKind;
   readonly createdAt: string;
   readonly threadId: ThreadId;
   readonly turnId?: string | undefined;
@@ -70,7 +69,7 @@ function createProviderServiceHarness(
   cwd: string,
   hasSession = true,
   sessionCwd = cwd,
-  providerName: ProviderSession["provider"] = "codex",
+  providerName: ProviderSession["provider"] = ProviderDriverKind.make("codex"),
 ) {
   const now = new Date().toISOString();
   const runtimeEventPubSub = Effect.runSync(PubSub.unbounded<ProviderRuntimeEvent>());
@@ -260,7 +259,7 @@ describe("CheckpointReactor", () => {
     readonly projectWorkspaceRoot?: string;
     readonly threadWorktreePath?: string | null;
     readonly providerSessionCwd?: string;
-    readonly providerName?: BuiltInDriverKind;
+    readonly providerName?: ProviderDriverKind;
     readonly gitStatusRefreshCalls?: Array<string>;
   }) {
     const cwd = createGitRepository();
@@ -269,7 +268,7 @@ describe("CheckpointReactor", () => {
       cwd,
       options?.hasSession ?? true,
       options?.providerSessionCwd ?? cwd,
-      options?.providerName ?? "codex",
+      options?.providerName ?? ProviderDriverKind.make("codex"),
     );
     const orchestrationLayer = OrchestrationEngineLive.pipe(
       Layer.provide(OrchestrationProjectionSnapshotQueryLive),
@@ -413,7 +412,7 @@ describe("CheckpointReactor", () => {
     harness.provider.emit({
       type: "turn.started",
       eventId: EventId.make("evt-turn-started-1"),
-      provider: "codex",
+      provider: ProviderDriverKind.make("codex"),
 
       createdAt: new Date().toISOString(),
       threadId: ThreadId.make("thread-1"),
@@ -428,7 +427,7 @@ describe("CheckpointReactor", () => {
     harness.provider.emit({
       type: "turn.completed",
       eventId: EventId.make("evt-turn-completed-1"),
-      provider: "codex",
+      provider: ProviderDriverKind.make("codex"),
 
       createdAt: new Date().toISOString(),
       threadId: ThreadId.make("thread-1"),
@@ -474,7 +473,7 @@ describe("CheckpointReactor", () => {
     harness.provider.emit({
       type: "turn.completed",
       eventId: EventId.make("evt-turn-completed-refresh-local-status"),
-      provider: "codex",
+      provider: ProviderDriverKind.make("codex"),
       createdAt: new Date().toISOString(),
       threadId: ThreadId.make("thread-1"),
       turnId: asTurnId("turn-refresh-local-status"),
@@ -511,7 +510,7 @@ describe("CheckpointReactor", () => {
     harness.provider.emit({
       type: "turn.started",
       eventId: EventId.make("evt-turn-started-main"),
-      provider: "codex",
+      provider: ProviderDriverKind.make("codex"),
 
       createdAt: new Date().toISOString(),
       threadId: ThreadId.make("thread-1"),
@@ -527,7 +526,7 @@ describe("CheckpointReactor", () => {
     harness.provider.emit({
       type: "turn.completed",
       eventId: EventId.make("evt-turn-completed-aux"),
-      provider: "codex",
+      provider: ProviderDriverKind.make("codex"),
 
       createdAt: new Date().toISOString(),
       threadId: ThreadId.make("thread-1"),
@@ -543,7 +542,7 @@ describe("CheckpointReactor", () => {
     harness.provider.emit({
       type: "turn.completed",
       eventId: EventId.make("evt-turn-completed-main"),
-      provider: "codex",
+      provider: ProviderDriverKind.make("codex"),
 
       createdAt: new Date().toISOString(),
       threadId: ThreadId.make("thread-1"),
@@ -561,7 +560,7 @@ describe("CheckpointReactor", () => {
   it("captures pre-turn and completion checkpoints for claude runtime events", async () => {
     const harness = await createHarness({
       seedFilesystemCheckpoints: false,
-      providerName: "claudeAgent",
+      providerName: ProviderDriverKind.make("claudeAgent"),
     });
     const createdAt = new Date().toISOString();
 
@@ -586,7 +585,7 @@ describe("CheckpointReactor", () => {
     harness.provider.emit({
       type: "turn.started",
       eventId: EventId.make("evt-turn-started-claude-1"),
-      provider: "claudeAgent",
+      provider: ProviderDriverKind.make("claudeAgent"),
       createdAt: new Date().toISOString(),
       threadId: ThreadId.make("thread-1"),
       turnId: asTurnId("turn-claude-1"),
@@ -600,7 +599,7 @@ describe("CheckpointReactor", () => {
     harness.provider.emit({
       type: "turn.completed",
       eventId: EventId.make("evt-turn-completed-claude-1"),
-      provider: "claudeAgent",
+      provider: ProviderDriverKind.make("claudeAgent"),
       createdAt: new Date().toISOString(),
       threadId: ThreadId.make("thread-1"),
       turnId: asTurnId("turn-claude-1"),
@@ -644,7 +643,7 @@ describe("CheckpointReactor", () => {
     harness.provider.emit({
       type: "turn.completed",
       eventId: EventId.make("evt-turn-completed-missing-baseline"),
-      provider: "codex",
+      provider: ProviderDriverKind.make("codex"),
 
       createdAt: new Date().toISOString(),
       threadId: ThreadId.make("thread-1"),
@@ -733,7 +732,7 @@ describe("CheckpointReactor", () => {
     harness.provider.emit({
       type: "turn.completed",
       eventId: EventId.make("evt-turn-completed-missing-provider-cwd"),
-      provider: "codex",
+      provider: ProviderDriverKind.make("codex"),
 
       createdAt: new Date().toISOString(),
       threadId: ThreadId.make("thread-1"),
@@ -779,7 +778,7 @@ describe("CheckpointReactor", () => {
     harness.provider.emit({
       type: "checkpoint.captured",
       eventId: EventId.make("evt-checkpoint-captured-3"),
-      provider: "codex",
+      provider: ProviderDriverKind.make("codex"),
 
       createdAt: new Date().toISOString(),
       threadId: ThreadId.make("thread-1"),
@@ -829,7 +828,7 @@ describe("CheckpointReactor", () => {
     harness.provider.emit({
       type: "turn.completed",
       eventId: EventId.make("evt-runtime-capture-failure"),
-      provider: "codex",
+      provider: ProviderDriverKind.make("codex"),
 
       createdAt: new Date().toISOString(),
       threadId: ThreadId.make("thread-1"),
@@ -840,7 +839,7 @@ describe("CheckpointReactor", () => {
     harness.provider.emit({
       type: "turn.started",
       eventId: EventId.make("evt-turn-started-after-runtime-failure"),
-      provider: "codex",
+      provider: ProviderDriverKind.make("codex"),
 
       createdAt: new Date().toISOString(),
       threadId: ThreadId.make("thread-1"),
@@ -935,7 +934,7 @@ describe("CheckpointReactor", () => {
   });
 
   it("executes provider revert and emits thread.reverted for claude sessions", async () => {
-    const harness = await createHarness({ providerName: "claudeAgent" });
+    const harness = await createHarness({ providerName: ProviderDriverKind.make("claudeAgent") });
     const createdAt = new Date().toISOString();
 
     await Effect.runPromise(

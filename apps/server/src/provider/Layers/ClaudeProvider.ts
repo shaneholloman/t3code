@@ -1,9 +1,10 @@
-import type {
-  ClaudeSettings,
-  ModelCapabilities,
-  ModelSelection,
-  ServerProviderModel,
-  ServerProviderSlashCommand,
+import {
+  type ClaudeSettings,
+  type ModelCapabilities,
+  type ModelSelection,
+  ProviderDriverKind,
+  type ServerProviderModel,
+  type ServerProviderSlashCommand,
 } from "@t3tools/contracts";
 import { Effect, Option, Result } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
@@ -38,7 +39,7 @@ const DEFAULT_CLAUDE_MODEL_CAPABILITIES: ModelCapabilities = createModelCapabili
   optionDescriptors: [],
 });
 
-const PROVIDER = "claudeAgent" as const;
+const PROVIDER = ProviderDriverKind.make("claudeAgent");
 const CLAUDE_PRESENTATION = {
   displayName: "Claude",
   showInteractionModeToggle: true,

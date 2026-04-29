@@ -1,11 +1,13 @@
 import {
+  DEFAULT_MODEL,
   DEFAULT_MODEL_BY_PROVIDER,
+  defaultInstanceIdForDriver,
   type EnvironmentId,
   ModelSelection,
   ProjectId,
   ProviderInstanceId,
   ProviderInteractionMode,
-  BuiltInDriverKind,
+  ProviderDriverKind,
   ProviderOptionSelection,
   RuntimeMode,
   type ServerProvider,
@@ -95,7 +97,7 @@ const PersistedComposerThreadDraftState = Schema.Struct({
   terminalContexts: Schema.optionalKey(Schema.Array(PersistedTerminalContextDraft)),
   // Keyed by `ProviderInstanceId` (open branded slug) so custom provider
   // instances (e.g. `codex_personal`) round-trip alongside the built-in
-  // `codex` / `claudeAgent` / ... entries. Every prior `BuiltInDriverKind`
+  // `codex` / `claudeAgent` / ... entries. Every prior `ProviderDriverKind`
   // literal satisfies the `ProviderInstanceId` slug pattern, so existing
   // persisted drafts decode unchanged.
   //
@@ -117,7 +119,7 @@ type PersistedComposerThreadDraftState = typeof PersistedComposerThreadDraftStat
  * deriving per-provider option bundles for downstream consumers.
  */
 type ProviderOptionSelectionsByProvider = Partial<
-  Record<BuiltInDriverKind, ReadonlyArray<ProviderOptionSelection>>
+  Record<string, ReadonlyArray<ProviderOptionSelection>>
 >;
 
 type LegacyCodexFields = {
@@ -217,7 +219,7 @@ export interface ComposerThreadDraftState {
    * Per-instance model selection. Keyed by `ProviderInstanceId` (open
    * branded slug) so a default `codex` instance and a user-authored
    * `codex_personal` instance each persist their own selected model. Every
-   * historical `BuiltInDriverKind` literal (`codex` / `claudeAgent` / `cursor` /
+   * historical `ProviderDriverKind` literal (`codex` / `claudeAgent` / `cursor` /
    * `opencode`) also satisfies the `ProviderInstanceId` slug pattern, so
    * legacy kind-keyed drafts round-trip unchanged.
    */
@@ -358,14 +360,14 @@ interface ComposerDraftStoreState {
   setModelOptions: (
     threadRef: ComposerThreadTarget,
     modelOptions:
-      | Partial<Record<BuiltInDriverKind, ReadonlyArray<ProviderOptionSelection>>>
+      | Partial<Record<string, ReadonlyArray<ProviderOptionSelection>>>
       | null
       | undefined,
   ) => void;
   applyStickyState: (threadRef: ComposerThreadTarget) => void;
   setProviderModelOptions: (
     threadRef: ComposerThreadTarget,
-    provider: BuiltInDriverKind,
+    provider: ProviderDriverKind,
     nextProviderOptions: ReadonlyArray<ProviderOptionSelection> | null | undefined,
     options?: {
       model?: string | null | undefined;
@@ -421,17 +423,17 @@ function providerSelectionsFromModelSelection(
   if (!options || options.length === 0) {
     return null;
   }
-  return { [modelSelection.instanceId]: options } as ProviderOptionSelectionsByProvider;
+  return { [modelSelection.instanceId]: options };
 }
 
 function modelSelectionByProviderToOptions(
-  map: Partial<Record<BuiltInDriverKind, ModelSelection>> | null | undefined,
+  map: Partial<Record<string, ModelSelection>> | null | undefined,
 ): ProviderOptionSelectionsByProvider | null {
   if (!map) return null;
-  const result: Partial<Record<BuiltInDriverKind, ReadonlyArray<ProviderOptionSelection>>> = {};
+  const result: ProviderOptionSelectionsByProvider = {};
   for (const [provider, selection] of Object.entries(map)) {
     if (selection?.options && selection.options.length > 0) {
-      result[provider as BuiltInDriverKind] = selection.options;
+      result[provider] = selection.options;
     }
   }
   return Object.keys(result).length > 0 ? result : null;
@@ -469,7 +471,7 @@ const EMPTY_TERMINAL_CONTEXTS: TerminalContextDraft[] = [];
 Object.freeze(EMPTY_IMAGES);
 Object.freeze(EMPTY_IDS);
 Object.freeze(EMPTY_PERSISTED_ATTACHMENTS);
-const EMPTY_MODEL_SELECTION_BY_PROVIDER: Partial<Record<BuiltInDriverKind, ModelSelection>> =
+const EMPTY_MODEL_SELECTION_BY_PROVIDER: Partial<Record<ProviderDriverKind, ModelSelection>> =
   Object.freeze({});
 const EMPTY_COMPOSER_DRAFT_MODEL_STATE = Object.freeze<ComposerDraftModelState>({
   activeProvider: null,
@@ -572,10 +574,8 @@ function shouldRemoveDraft(draft: ComposerThreadDraftState): boolean {
   );
 }
 
-function normalizeBuiltInDriverKind(value: unknown): BuiltInDriverKind | null {
-  return value === "codex" || value === "claudeAgent" || value === "cursor" || value === "opencode"
-    ? value
-    : null;
+function normalizeProviderDriverKind(value: unknown): ProviderDriverKind | null {
+  return Schema.is(ProviderDriverKind)(value) ? value : null;
 }
 
 /**
@@ -589,9 +589,8 @@ const PROVIDER_INSTANCE_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/;
 
 /**
  * Coerce an arbitrary persisted value into a valid `ProviderInstanceId`. Used
- * wherever we need to accept both the closed `BuiltInDriverKind` literal set
- * (legacy drafts) and custom instance slugs (e.g. `codex_personal`) as
- * routing keys.
+ * wherever we need to accept both legacy driver-kind keys and custom instance
+ * slugs (e.g. `codex_personal`) as routing keys.
  */
 function normalizeProviderInstanceId(value: unknown): ProviderInstanceId | null {
   if (typeof value !== "string") return null;
@@ -649,11 +648,11 @@ function coerceProviderOptionSelections(
  */
 function normalizeProviderModelOptions(
   value: unknown,
-  provider?: BuiltInDriverKind | null,
+  provider?: ProviderDriverKind | null,
   legacy?: LegacyCodexFields,
 ): ProviderOptionSelectionsByProvider | null {
   const candidate = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
-  const result: Partial<Record<BuiltInDriverKind, ReadonlyArray<ProviderOptionSelection>>> = {};
+  const result: ProviderOptionSelectionsByProvider = {};
   for (const providerKey of ["codex", "claudeAgent", "cursor", "opencode"] as const) {
     const selections = coerceProviderOptionSelections(candidate?.[providerKey]);
     if (selections) {
@@ -688,10 +687,8 @@ function normalizeProviderModelOptions(
 }
 
 // Returns a model selection whose `instanceId` is a valid
-// `ProviderInstanceId` slug (open set: built-in drivers + user-authored
-// custom instances). Legacy `provider` fields (which carried a closed
-// `BuiltInDriverKind`) are promoted verbatim because every built-in kind is
-// also a valid instance id.
+// `ProviderInstanceId` slug. Legacy `provider` fields are promoted verbatim
+// because default instance ids used the same slug as the driver kind.
 //
 // Selections whose instance id doesn't match the slug pattern collapse to
 // `null` — caller is responsible for deciding whether that's a dropped
@@ -719,12 +716,12 @@ function normalizeModelSelection(
   if (typeof rawModel !== "string") {
     return null;
   }
-  // Slug normalization uses provider-kind-specific rules (e.g. Codex strips
-  // certain prefixes). For a custom instance whose driver kind we can't
-  // infer locally, fall back to a kind hint derived from the instance id
-  // when it happens to match a built-in kind; otherwise normalize against
-  // the default kind so at least whitespace/case/trim rules apply.
-  const driverKindHint = normalizeBuiltInDriverKind(instanceId) ?? "codex";
+  // Slug normalization can use provider-kind-specific rules when a legacy
+  // driver key is present. Instance-only selections are not reverse-inferred
+  // into a driver kind here; they get generic default normalization.
+  const driverKindHint =
+    normalizeProviderDriverKind(candidate?.provider ?? legacy?.provider) ??
+    ProviderDriverKind.make("codex");
   const model = normalizeModelSlug(rawModel, driverKindHint);
   if (!model) {
     return null;
@@ -736,7 +733,7 @@ function normalizeModelSelection(
   // Per-kind options were a pre-migration concern; only recover them for a
   // built-in-kind instance. Custom instances don't have a legacy options
   // store to thread through here.
-  const kindForLegacyOptions = normalizeBuiltInDriverKind(instanceId);
+  const kindForLegacyOptions = normalizeProviderDriverKind(instanceId);
   const modelOptions = kindForLegacyOptions
     ? normalizeProviderModelOptions(
         candidate?.options ? { [kindForLegacyOptions]: candidate.options } : legacy?.modelOptions,
@@ -755,10 +752,9 @@ type NormalizedModelSelection = Omit<ModelSelection, "instanceId"> & {
 // ── Legacy sync helpers (used only during migration from v2 storage) ──
 //
 // These operate against the legacy kind-keyed `modelOptions` map. The
-// normalized selection now carries an open `ProviderInstanceId`, so each
-// helper narrows that to a built-in `BuiltInDriverKind` before indexing —
-// legacy migration only needs to recover options for the built-in drivers
-// (custom instances didn't exist in v2).
+// normalized selection now carries an open `ProviderInstanceId`; legacy
+// migration only recovers options for keys that existed before custom
+// provider instances.
 
 function legacySyncModelSelectionOptions(
   modelSelection: NormalizedModelSelection | null,
@@ -767,7 +763,7 @@ function legacySyncModelSelectionOptions(
   if (modelSelection === null) {
     return null;
   }
-  const kind = normalizeBuiltInDriverKind(modelSelection.instanceId);
+  const kind = normalizeProviderDriverKind(modelSelection.instanceId);
   const options = kind ? modelOptions?.[kind] : undefined;
   return createModelSelection(
     modelSelection.instanceId,
@@ -783,7 +779,7 @@ function legacyMergeModelSelectionIntoProviderModelOptions(
   if (!modelSelection?.options || modelSelection.options.length === 0) {
     return normalizeProviderModelOptions(currentModelOptions);
   }
-  const kind = normalizeBuiltInDriverKind(modelSelection.instanceId);
+  const kind = normalizeProviderDriverKind(modelSelection.instanceId);
   if (!kind) {
     return normalizeProviderModelOptions(currentModelOptions);
   }
@@ -796,7 +792,7 @@ function legacyMergeModelSelectionIntoProviderModelOptions(
 
 function legacyReplaceProviderModelOptions(
   currentModelOptions: ProviderOptionSelectionsByProvider | null | undefined,
-  provider: BuiltInDriverKind,
+  provider: ProviderDriverKind,
   nextProviderOptions: ReadonlyArray<ProviderOptionSelection> | null | undefined,
 ): ProviderOptionSelectionsByProvider | null {
   const { [provider]: _discardedProviderModelOptions, ...otherProviderModelOptions } =
@@ -819,15 +815,13 @@ function legacyToModelSelectionByProvider(
     for (const provider of ["codex", "claudeAgent", "cursor", "opencode"] as const) {
       const options = modelOptions[provider];
       if (options && options.length > 0) {
-        // Built-in kind literals satisfy the `ProviderInstanceId` slug
-        // pattern; coerce to the branded type so the instance-keyed map
-        // accepts the key without unsafe-any fallout.
-        const instanceKey = ProviderInstanceId.make(provider);
+        const driverKind = ProviderDriverKind.make(provider);
+        const instanceKey = defaultInstanceIdForDriver(driverKind);
         result[instanceKey] = createModelSelection(
-          provider,
+          instanceKey,
           modelSelection?.instanceId === instanceKey
             ? modelSelection.model
-            : DEFAULT_MODEL_BY_PROVIDER[provider],
+            : (DEFAULT_MODEL_BY_PROVIDER[driverKind] ?? DEFAULT_MODEL),
           options,
         );
       }
@@ -845,7 +839,7 @@ export function deriveEffectiveComposerModelState(input: {
     | null
     | undefined;
   providers: ReadonlyArray<ServerProvider>;
-  selectedProvider: BuiltInDriverKind;
+  selectedProvider: ProviderDriverKind;
   /**
    * Optional routing key of the instance whose selection should override
    * the driver-level lookup. When present, the draft is queried by
@@ -865,7 +859,7 @@ export function deriveEffectiveComposerModelState(input: {
     ) ?? getDefaultServerModel(input.providers, input.selectedProvider);
   // Look up the instance's saved selection first; fall back to the
   // driver-kind bucket so legacy kind-keyed drafts still resolve. Every
-  // `BuiltInDriverKind` literal is a valid `ProviderInstanceId` slug, so the
+  // `ProviderDriverKind` literal is a valid `ProviderInstanceId` slug, so the
   // cast to the branded type is safe.
   const instanceSelection = input.selectedInstanceId
     ? input.draft?.modelSelectionByProvider?.[input.selectedInstanceId]
@@ -2408,15 +2402,13 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             for (const provider of ["codex", "claudeAgent", "cursor", "opencode"] as const) {
               if (!modelOptions || !(provider in modelOptions)) continue;
               const opts = modelOptions[provider];
-              // Every built-in `BuiltInDriverKind` literal satisfies the
-              // `ProviderInstanceId` slug pattern, so branding the kind
-              // gives us the correct key for the instance-keyed map.
-              const instanceKey = ProviderInstanceId.make(provider);
+              const driverKind = ProviderDriverKind.make(provider);
+              const instanceKey = defaultInstanceIdForDriver(driverKind);
               const current = nextMap[instanceKey];
               if (opts && opts.length > 0) {
                 nextMap[instanceKey] = createModelSelection(
-                  provider,
-                  current?.model ?? DEFAULT_MODEL_BY_PROVIDER[provider],
+                  instanceKey,
+                  current?.model ?? DEFAULT_MODEL_BY_PROVIDER[driverKind] ?? DEFAULT_MODEL,
                   opts,
                 );
               } else if (current?.options) {
@@ -2445,16 +2437,15 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
           if (threadKey.length === 0) {
             return;
           }
-          const normalizedProvider = normalizeBuiltInDriverKind(provider);
+          const normalizedProvider = normalizeProviderDriverKind(provider);
           if (normalizedProvider === null) {
             return;
           }
-          // Kind-level writes target the default instance of the driver; the
-          // instance id slug is identical to the kind literal by contract.
-          const instanceKey = ProviderInstanceId.make(normalizedProvider);
+          const instanceKey = defaultInstanceIdForDriver(normalizedProvider);
           const fallbackModel =
             normalizeModelSlug(options?.model, normalizedProvider) ??
-            DEFAULT_MODEL_BY_PROVIDER[normalizedProvider];
+            DEFAULT_MODEL_BY_PROVIDER[normalizedProvider] ??
+            DEFAULT_MODEL;
           const providerOpts =
             nextProviderOptions && nextProviderOptions.length > 0 ? nextProviderOptions : undefined;
 
@@ -2467,7 +2458,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             const currentForProvider = nextMap[instanceKey];
             if (providerOpts) {
               nextMap[instanceKey] = createModelSelection(
-                normalizedProvider,
+                instanceKey,
                 currentForProvider?.model ?? fallbackModel,
                 providerOpts,
               );
@@ -2484,10 +2475,10 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               const stickyBase =
                 nextStickyMap[instanceKey] ??
                 base.modelSelectionByProvider[instanceKey] ??
-                createModelSelection(normalizedProvider, fallbackModel);
+                createModelSelection(instanceKey, fallbackModel);
               if (providerOpts) {
                 nextStickyMap[instanceKey] = createModelSelection(
-                  normalizedProvider,
+                  instanceKey,
                   stickyBase.model,
                   providerOpts,
                 );
@@ -2946,7 +2937,7 @@ export function useEffectiveComposerModelState(input: {
   threadRef?: ComposerThreadTarget;
   draftId?: DraftId;
   providers: ReadonlyArray<ServerProvider>;
-  selectedProvider: BuiltInDriverKind;
+  selectedProvider: ProviderDriverKind;
   /**
    * When supplied, the draft's saved selection for this instance takes
    * precedence over the driver-kind bucket — so a custom `codex_personal`

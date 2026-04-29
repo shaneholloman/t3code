@@ -11,13 +11,14 @@
  * @module ServerSettings
  */
 import {
+  DEFAULT_GIT_TEXT_GENERATION_MODEL,
   DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
   DEFAULT_SERVER_SETTINGS,
-  isBuiltInDriverKind,
+  isProviderDriverKind,
   type ModelSelection,
   type ProviderInstanceConfig,
   type ProviderInstanceEnvironmentVariable,
-  type BuiltInDriverKind,
+  ProviderDriverKind,
   ProviderInstanceId,
   ServerSettings,
   ServerSettingsError,
@@ -151,7 +152,13 @@ export class ServerSettingsService extends Context.Service<
 
 const ServerSettingsJson = fromLenientJson(ServerSettings);
 
-const PROVIDER_ORDER: readonly BuiltInDriverKind[] = ["codex", "claudeAgent", "opencode", "cursor"];
+type LegacyProviderSettings = ServerSettings["providers"][keyof ServerSettings["providers"]];
+
+const getLegacyProviderSettings = (
+  settings: ServerSettings,
+  provider: ProviderDriverKind,
+): LegacyProviderSettings | undefined =>
+  (settings.providers as Record<string, LegacyProviderSettings | undefined>)[provider];
 
 /**
  * Ensure the `textGenerationModelSelection` points to an enabled provider.
@@ -167,8 +174,8 @@ function resolveTextGenerationProvider(settings: ServerSettings): ServerSettings
   }
 
   if (
-    isBuiltInDriverKind(selection.instanceId) &&
-    settings.providers[selection.instanceId as BuiltInDriverKind].enabled
+    isProviderDriverKind(selection.instanceId) &&
+    getLegacyProviderSettings(settings, selection.instanceId)?.enabled
   ) {
     return settings;
   }
@@ -177,7 +184,8 @@ function resolveTextGenerationProvider(settings: ServerSettings): ServerSettings
 }
 
 function fallbackTextGenerationProvider(settings: ServerSettings): ServerSettings {
-  const fallback = PROVIDER_ORDER.find((p) => settings.providers[p].enabled);
+  const fallbackEntry = Object.entries(settings.providers).find(([, provider]) => provider.enabled);
+  const fallback = fallbackEntry ? ProviderDriverKind.make(fallbackEntry[0]) : undefined;
   if (!fallback) {
     return settings;
   }
@@ -186,7 +194,9 @@ function fallbackTextGenerationProvider(settings: ServerSettings): ServerSetting
     ...settings,
     textGenerationModelSelection: {
       instanceId: ProviderInstanceId.make(fallback),
-      model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[fallback],
+      model:
+        DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[fallback] ??
+        DEFAULT_GIT_TEXT_GENERATION_MODEL,
     } satisfies ModelSelection,
   };
 }

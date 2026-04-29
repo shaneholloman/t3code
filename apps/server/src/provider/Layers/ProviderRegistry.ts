@@ -26,7 +26,6 @@ import {
   defaultInstanceIdForDriver,
   ProviderDriverKind,
   type ProviderInstanceId,
-  type BuiltInDriverKind,
   type ServerProvider,
 } from "@t3tools/contracts";
 import { Effect, Equal, FileSystem, Layer, Path, PubSub, Ref, Stream } from "effect";
@@ -337,12 +336,12 @@ export const ProviderRegistryLive = Layer.effect(
       }).pipe(Effect.andThen(Ref.get(providersRef)));
     });
 
-    const refresh = Effect.fn("refresh")(function* (provider?: BuiltInDriverKind) {
+    const refresh = Effect.fn("refresh")(function* (provider?: ProviderDriverKind) {
       if (provider === undefined) {
         return yield* refreshAll();
       }
-      // Kind-scoped refreshes target the default instance for that built-in driver.
-      const defaultInstanceId = defaultInstanceIdForDriver(ProviderDriverKind.make(provider));
+      // Kind-scoped refreshes target the default instance for that driver.
+      const defaultInstanceId = defaultInstanceIdForDriver(provider);
       const sources = yield* getLiveSources;
       const providerSource = sources.find(
         (candidate) => candidate.instanceId === defaultInstanceId,
@@ -524,7 +523,7 @@ export const ProviderRegistryLive = Layer.effect(
 
     return {
       getProviders: Ref.get(providersRef),
-      refresh: (provider?: BuiltInDriverKind) =>
+      refresh: (provider?: ProviderDriverKind) =>
         refresh(provider).pipe(
           Effect.tapError(Effect.logError),
           Effect.orElseSucceed(() => [] as ReadonlyArray<ServerProvider>),

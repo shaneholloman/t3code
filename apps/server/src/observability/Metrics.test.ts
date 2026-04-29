@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
+import { ProviderDriverKind } from "@t3tools/contracts";
 import { Effect, Metric } from "effect";
 
 import { withMetrics } from "./Metrics.ts";
@@ -93,7 +94,7 @@ describe("withMetrics", () => {
       const snapshots = yield* Metric.snapshot;
       assert.equal(
         hasMetricSnapshot(snapshots, "with_metrics_lazy_total", {
-          provider: "codex",
+          provider: ProviderDriverKind.make("codex"),
           operation: "lazy",
           outcome: "success",
         }),
@@ -101,7 +102,7 @@ describe("withMetrics", () => {
       );
       assert.equal(
         hasMetricSnapshot(snapshots, "with_metrics_lazy_duration", {
-          provider: "codex",
+          provider: ProviderDriverKind.make("codex"),
           operation: "lazy",
         }),
         true,

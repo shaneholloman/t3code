@@ -21,7 +21,7 @@ import {
   ProviderUserInputAnswers,
   RuntimeMode,
 } from "./orchestration.ts";
-import { ProviderInstanceId, BuiltInDriverKind } from "./providerInstance.ts";
+import { ProviderInstanceId, ProviderDriverKind } from "./providerInstance.ts";
 
 const ProviderSessionStatus = Schema.Literals([
   "connecting",
@@ -32,7 +32,7 @@ const ProviderSessionStatus = Schema.Literals([
 ]);
 
 export const ProviderSession = Schema.Struct({
-  provider: BuiltInDriverKind,
+  provider: ProviderDriverKind,
   // Optional during the driver/instance migration. Once every producer
   // populates it (post-slice-4), routing flips to instance-id-only and the
   // legacy `provider` field is removed.
@@ -52,7 +52,7 @@ export type ProviderSession = typeof ProviderSession.Type;
 
 export const ProviderSessionStartInput = Schema.Struct({
   threadId: ThreadId,
-  provider: Schema.optional(BuiltInDriverKind),
+  provider: Schema.optional(ProviderDriverKind),
   // See ProviderSession for the migration story.
   providerInstanceId: Schema.optional(ProviderInstanceId),
   cwd: Schema.optional(TrimmedNonEmptyString),
@@ -114,7 +114,7 @@ const ProviderEventKind = Schema.Literals(["session", "notification", "request",
 export const ProviderEvent = Schema.Struct({
   id: EventId,
   kind: ProviderEventKind,
-  provider: BuiltInDriverKind,
+  provider: ProviderDriverKind,
   // See ProviderSession for the migration story.
   providerInstanceId: Schema.optional(ProviderInstanceId),
   threadId: ThreadId,

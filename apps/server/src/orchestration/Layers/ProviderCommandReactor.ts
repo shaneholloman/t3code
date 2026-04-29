@@ -4,7 +4,7 @@ import {
   EventId,
   type ModelSelection,
   type OrchestrationEvent,
-  BuiltInDriverKind,
+  ProviderDriverKind,
   type OrchestrationSession,
   ThreadId,
   type ProviderSession,
@@ -344,14 +344,14 @@ const make = Effect.gen(function* () {
       ),
     );
     const desiredDriverKind = desiredInfo.driverKind;
-    if (!Schema.is(BuiltInDriverKind)(desiredDriverKind)) {
+    if (!Schema.is(ProviderDriverKind)(desiredDriverKind)) {
       return yield* new ProviderAdapterRequestError({
         provider: providerErrorLabel(String(desiredDriverKind)),
         method: "thread.turn.start",
         detail: `Requested provider instance '${desiredInstanceId}' uses unknown provider driver '${desiredDriverKind}'. The driver is not installed in this build.`,
       });
     }
-    const preferredProvider: BuiltInDriverKind = desiredDriverKind;
+    const preferredProvider: ProviderDriverKind = desiredDriverKind;
     if (
       thread.session !== null &&
       requestedModelSelection !== undefined &&
@@ -382,7 +382,7 @@ const make = Effect.gen(function* () {
 
     const startProviderSession = (input?: {
       readonly resumeCursor?: unknown;
-      readonly provider?: BuiltInDriverKind;
+      readonly provider?: ProviderDriverKind;
     }) =>
       providerService.startSession(threadId, {
         threadId,

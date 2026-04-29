@@ -1,7 +1,6 @@
 import * as nodePath from "node:path";
 import {
-  type BuiltInDriverKind,
-  isBuiltInDriverKind,
+  type ProviderDriverKind,
   type ProviderInstanceId,
   type ServerProvider,
   ServerProvider as ServerProviderSchema,
@@ -10,30 +9,9 @@ import { Cause, Effect, FileSystem, Schema } from "effect";
 
 import { writeFileStringAtomically } from "../atomicWrite.ts";
 
-/**
- * Legacy kind-keyed cache ids retained for back-compat: the on-disk file
- * name for the default instance of each built-in kind is `<kind>.json`.
- * Because `defaultInstanceIdForDriver(kind) === ProviderInstanceId.make(kind)`
- * the instance-keyed write for the default instance lands at the exact same
- * path as the legacy write, so no on-disk migration is required.
- */
-export const PROVIDER_CACHE_IDS = [
-  "codex",
-  "claudeAgent",
-  "opencode",
-  "cursor",
-] as const satisfies ReadonlyArray<BuiltInDriverKind>;
-
 const decodeProviderStatusCache = Schema.decodeUnknownEffect(
   Schema.fromJsonString(ServerProviderSchema),
 );
-
-const providerOrderRank = (driver: ServerProvider["driver"]): number => {
-  const rank = isBuiltInDriverKind(driver)
-    ? PROVIDER_CACHE_IDS.indexOf(driver)
-    : Number.MAX_SAFE_INTEGER;
-  return rank === -1 ? Number.MAX_SAFE_INTEGER : rank;
-};
 
 const mergeProviderModels = (
   fallbackModels: ReadonlyArray<ServerProvider["models"][number]>,
@@ -47,7 +25,10 @@ export const orderProviderSnapshots = (
   providers: ReadonlyArray<ServerProvider>,
 ): ReadonlyArray<ServerProvider> =>
   [...providers].toSorted(
-    (left, right) => providerOrderRank(left.driver) - providerOrderRank(right.driver),
+    (left, right) =>
+      (left.displayName ?? "").localeCompare(right.displayName ?? "") ||
+      left.driver.localeCompare(right.driver) ||
+      left.instanceId.localeCompare(right.instanceId),
   );
 
 export const isCachedProviderCorrelated = (input: {
@@ -111,14 +92,14 @@ export const resolveProviderStatusCachePath = (input: {
 
 /**
  * Legacy kind-keyed path resolver retained for callers that still think in
- * terms of `BuiltInDriverKind`. Prefer `resolveProviderStatusCachePath` with an
+ * terms of `ProviderDriverKind`. Prefer `resolveProviderStatusCachePath` with an
  * `instanceId`; new code should route through the instance registry.
  *
  * @deprecated use `resolveProviderStatusCachePath` with an instance id.
  */
 export const resolveLegacyProviderStatusCachePath = (input: {
   readonly cacheDir: string;
-  readonly provider: BuiltInDriverKind;
+  readonly provider: ProviderDriverKind;
 }) => nodePath.join(input.cacheDir, `${input.provider}.json`);
 
 export const readProviderStatusCache = (filePath: string) =>

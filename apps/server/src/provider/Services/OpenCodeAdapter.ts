@@ -14,8 +14,6 @@ import type { ProviderAdapterShape } from "./ProviderAdapter.ts";
 
 /**
  * OpenCodeAdapterShape — per-instance OpenCode adapter contract. Carries
- * `provider: "opencode"` as the nominal discriminant.
+ * a branded driver kind as the nominal discriminant.
  */
-export interface OpenCodeAdapterShape extends ProviderAdapterShape<ProviderAdapterError> {
-  readonly provider: "opencode";
-}
+export interface OpenCodeAdapterShape extends ProviderAdapterShape<ProviderAdapterError> {}

@@ -1,9 +1,4 @@
-import {
-  ProviderDriverKind,
-  ProviderInstanceId,
-  type BuiltInDriverKind,
-  type ServerProvider,
-} from "@t3tools/contracts";
+import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@t3tools/contracts";
 import { EnvironmentId } from "@t3tools/contracts";
 import { createModelCapabilities } from "@t3tools/shared/model";
 import { page, userEvent } from "vitest/browser";
@@ -251,7 +246,7 @@ function buildOpenCodeProvider(models: ServerProvider["models"]): ServerProvider
 async function mountPicker(props: {
   activeInstanceId?: ProviderInstanceId;
   model: string;
-  lockedProvider: BuiltInDriverKind | null;
+  lockedProvider: ProviderDriverKind | null;
   lockedContinuationGroupKey?: string | null;
   providers?: ReadonlyArray<ServerProvider>;
   triggerVariant?: "ghost" | "outline";
@@ -448,7 +443,7 @@ describe("ProviderModelPicker", () => {
     const mounted = await mountPicker({
       activeInstanceId: CLAUDE_INSTANCE_ID,
       model: "claude-opus-4-6",
-      lockedProvider: "claudeAgent",
+      lockedProvider: ProviderDriverKind.make("claudeAgent"),
     });
 
     try {
@@ -522,7 +517,7 @@ describe("ProviderModelPicker", () => {
     const mounted = await mountPicker({
       activeInstanceId: "codex" as ProviderInstanceId,
       model: "gpt-work",
-      lockedProvider: "codex",
+      lockedProvider: ProviderDriverKind.make("codex"),
       lockedContinuationGroupKey: "codex:home:/Users/julius/.codex",
       providers,
     });
@@ -621,7 +616,7 @@ describe("ProviderModelPicker", () => {
     const mounted = await mountPicker({
       activeInstanceId: OPENCODE_INSTANCE_ID,
       model: "github-copilot/claude-opus-4.5",
-      lockedProvider: "opencode",
+      lockedProvider: ProviderDriverKind.make("opencode"),
       providers,
     });
 
@@ -678,7 +673,7 @@ describe("ProviderModelPicker", () => {
     const mounted = await mountPicker({
       activeInstanceId: CLAUDE_INSTANCE_ID,
       model: "claude-opus-4-6",
-      lockedProvider: "claudeAgent",
+      lockedProvider: ProviderDriverKind.make("claudeAgent"),
     });
 
     try {
@@ -1026,7 +1021,7 @@ describe("ProviderModelPicker", () => {
     const mounted = await mountPicker({
       activeInstanceId: CLAUDE_INSTANCE_ID,
       model: "claude-opus-4-6",
-      lockedProvider: "claudeAgent",
+      lockedProvider: ProviderDriverKind.make("claudeAgent"),
     });
 
     try {

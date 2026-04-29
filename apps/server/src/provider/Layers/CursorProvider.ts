@@ -11,6 +11,7 @@ import type {
   ServerProviderModel,
   ServerProviderState,
 } from "@t3tools/contracts";
+import { ProviderDriverKind } from "@t3tools/contracts";
 import type * as EffectAcpSchema from "effect-acp/schema";
 import { Cause, Effect, Exit, Layer, Option, Result } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
@@ -32,7 +33,7 @@ import {
 } from "../providerSnapshot.ts";
 import { AcpSessionRuntime } from "../acp/AcpSessionRuntime.ts";
 
-const PROVIDER = "cursor" as const;
+const PROVIDER = ProviderDriverKind.make("cursor");
 const CURSOR_PRESENTATION = {
   displayName: "Cursor",
   badgeLabel: "Early Access",

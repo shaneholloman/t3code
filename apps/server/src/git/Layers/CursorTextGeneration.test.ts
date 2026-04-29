@@ -104,7 +104,7 @@ it.layer(CursorTextGenerationTestLayer)("CursorTextGenerationLive", (it) => {
             stagedPatch:
               "diff --git a/apps/server/src/git/Layers/CursorTextGeneration.ts b/apps/server/src/git/Layers/CursorTextGeneration.ts",
             modelSelection: {
-              ...createModelSelection("cursor", "gpt-5.4", [
+              ...createModelSelection(ProviderInstanceId.make("cursor"), "gpt-5.4", [
                 { id: "reasoning", value: "xhigh" },
                 { id: "fastMode", value: true },
                 { id: "contextWindow", value: "1m" },

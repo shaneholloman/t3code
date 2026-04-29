@@ -127,7 +127,7 @@ describe("ProviderCommandReactor", () => {
       ).toBe("claude_openrouter");
     });
 
-    it("uses the unknown driver kind when the resolved driver is not a built-in provider kind", () => {
+    it("uses the unknown driver kind when the resolved driver is not registered locally", () => {
       expect(providerErrorLabel("third_party_driver")).toBe("third_party_driver");
     });
   });
@@ -176,13 +176,8 @@ describe("ProviderCommandReactor", () => {
         "provider" in input &&
         typeof input.provider === "string"
           ? (input.provider as ProviderSession["provider"])
-          : ((inputModelSelection?.instanceId ??
-              modelSelection.instanceId) as ProviderSession["provider"]);
+          : ProviderDriverKind.make(inputModelSelection?.instanceId ?? modelSelection.instanceId);
       const session: ProviderSession = {
-        // Test fixture only ever sets built-in providers; cast back to
-        // the closed `BuiltInDriverKind` to satisfy the wire schema (which
-        // still uses the closed union for `ProviderSession.provider`
-        // pending slice 2c).
         provider,
         ...(providerInstanceId ? { providerInstanceId } : {}),
         status: "ready" as const,
@@ -651,7 +646,7 @@ describe("ProviderCommandReactor", () => {
           text: "hello fast mode",
           attachments: [],
         },
-        modelSelection: createModelSelection("codex", "gpt-5.3-codex", [
+        modelSelection: createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.3-codex", [
           { id: "reasoningEffort", value: "high" },
           { id: "fastMode", value: true },
         ]),
@@ -664,14 +659,14 @@ describe("ProviderCommandReactor", () => {
     await waitFor(() => harness.startSession.mock.calls.length === 1);
     await waitFor(() => harness.sendTurn.mock.calls.length === 1);
     expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
-      modelSelection: createModelSelection("codex", "gpt-5.3-codex", [
+      modelSelection: createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.3-codex", [
         { id: "reasoningEffort", value: "high" },
         { id: "fastMode", value: true },
       ]),
     });
     expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({
       threadId: ThreadId.make("thread-1"),
-      modelSelection: createModelSelection("codex", "gpt-5.3-codex", [
+      modelSelection: createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.3-codex", [
         { id: "reasoningEffort", value: "high" },
         { id: "fastMode", value: true },
       ]),
@@ -698,9 +693,11 @@ describe("ProviderCommandReactor", () => {
           text: "hello with effort",
           attachments: [],
         },
-        modelSelection: createModelSelection("claudeAgent", "claude-sonnet-4-6", [
-          { id: "effort", value: "max" },
-        ]),
+        modelSelection: createModelSelection(
+          ProviderInstanceId.make("claudeAgent"),
+          "claude-sonnet-4-6",
+          [{ id: "effort", value: "max" }],
+        ),
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
         runtimeMode: "approval-required",
         createdAt: now,
@@ -710,15 +707,19 @@ describe("ProviderCommandReactor", () => {
     await waitFor(() => harness.startSession.mock.calls.length === 1);
     await waitFor(() => harness.sendTurn.mock.calls.length === 1);
     expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
-      modelSelection: createModelSelection("claudeAgent", "claude-sonnet-4-6", [
-        { id: "effort", value: "max" },
-      ]),
+      modelSelection: createModelSelection(
+        ProviderInstanceId.make("claudeAgent"),
+        "claude-sonnet-4-6",
+        [{ id: "effort", value: "max" }],
+      ),
     });
     expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({
       threadId: ThreadId.make("thread-1"),
-      modelSelection: createModelSelection("claudeAgent", "claude-sonnet-4-6", [
-        { id: "effort", value: "max" },
-      ]),
+      modelSelection: createModelSelection(
+        ProviderInstanceId.make("claudeAgent"),
+        "claude-sonnet-4-6",
+        [{ id: "effort", value: "max" }],
+      ),
     });
   });
 
@@ -742,9 +743,11 @@ describe("ProviderCommandReactor", () => {
           text: "hello with fast mode",
           attachments: [],
         },
-        modelSelection: createModelSelection("claudeAgent", "claude-opus-4-6", [
-          { id: "fastMode", value: true },
-        ]),
+        modelSelection: createModelSelection(
+          ProviderInstanceId.make("claudeAgent"),
+          "claude-opus-4-6",
+          [{ id: "fastMode", value: true }],
+        ),
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
         runtimeMode: "approval-required",
         createdAt: now,
@@ -754,15 +757,19 @@ describe("ProviderCommandReactor", () => {
     await waitFor(() => harness.startSession.mock.calls.length === 1);
     await waitFor(() => harness.sendTurn.mock.calls.length === 1);
     expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
-      modelSelection: createModelSelection("claudeAgent", "claude-opus-4-6", [
-        { id: "fastMode", value: true },
-      ]),
+      modelSelection: createModelSelection(
+        ProviderInstanceId.make("claudeAgent"),
+        "claude-opus-4-6",
+        [{ id: "fastMode", value: true }],
+      ),
     });
     expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({
       threadId: ThreadId.make("thread-1"),
-      modelSelection: createModelSelection("claudeAgent", "claude-opus-4-6", [
-        { id: "fastMode", value: true },
-      ]),
+      modelSelection: createModelSelection(
+        ProviderInstanceId.make("claudeAgent"),
+        "claude-opus-4-6",
+        [{ id: "fastMode", value: true }],
+      ),
     });
   });
 
@@ -886,7 +893,7 @@ describe("ProviderCommandReactor", () => {
 
     expect(harness.startSession).toHaveBeenCalledTimes(1);
     expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
-      provider: "claudeAgent",
+      provider: ProviderDriverKind.make("claudeAgent"),
       providerInstanceId: ProviderInstanceId.make("claudeAgent"),
       modelSelection: {
         instanceId: ProviderInstanceId.make("claudeAgent"),
@@ -1001,7 +1008,7 @@ describe("ProviderCommandReactor", () => {
 
     expect(harness.startSession).toHaveBeenCalledTimes(2);
     expect(harness.startSession.mock.calls[1]?.[1]).toMatchObject({
-      provider: "codex",
+      provider: ProviderDriverKind.make("codex"),
       providerInstanceId: ProviderInstanceId.make("codex_work"),
       resumeCursor: { opaque: "resume-1" },
     });
@@ -1104,9 +1111,11 @@ describe("ProviderCommandReactor", () => {
           text: "first claude turn",
           attachments: [],
         },
-        modelSelection: createModelSelection("claudeAgent", "claude-sonnet-4-6", [
-          { id: "effort", value: "medium" },
-        ]),
+        modelSelection: createModelSelection(
+          ProviderInstanceId.make("claudeAgent"),
+          "claude-sonnet-4-6",
+          [{ id: "effort", value: "medium" }],
+        ),
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
         runtimeMode: "approval-required",
         createdAt: now,
@@ -1127,9 +1136,11 @@ describe("ProviderCommandReactor", () => {
           text: "second claude turn",
           attachments: [],
         },
-        modelSelection: createModelSelection("claudeAgent", "claude-sonnet-4-6", [
-          { id: "effort", value: "max" },
-        ]),
+        modelSelection: createModelSelection(
+          ProviderInstanceId.make("claudeAgent"),
+          "claude-sonnet-4-6",
+          [{ id: "effort", value: "max" }],
+        ),
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
         runtimeMode: "approval-required",
         createdAt: now,
@@ -1140,9 +1151,11 @@ describe("ProviderCommandReactor", () => {
     await waitFor(() => harness.sendTurn.mock.calls.length === 2);
     expect(harness.startSession.mock.calls[1]?.[1]).toMatchObject({
       resumeCursor: { opaque: "resume-1" },
-      modelSelection: createModelSelection("claudeAgent", "claude-sonnet-4-6", [
-        { id: "effort", value: "max" },
-      ]),
+      modelSelection: createModelSelection(
+        ProviderInstanceId.make("claudeAgent"),
+        "claude-sonnet-4-6",
+        [{ id: "effort", value: "max" }],
+      ),
     });
   });
 
@@ -1597,7 +1610,7 @@ describe("ProviderCommandReactor", () => {
       }),
     );
     harness.runtimeSessions.push({
-      provider: "codex",
+      provider: ProviderDriverKind.make("codex"),
       status: "ready",
       runtimeMode: "approval-required",
       threadId: ThreadId.make("thread-1"),

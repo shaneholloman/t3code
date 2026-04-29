@@ -5,7 +5,6 @@ import type {
   ProjectEntry,
   ProviderApprovalDecision,
   ProviderInteractionMode,
-  BuiltInDriverKind,
   ResolvedKeybindingsConfig,
   RuntimeMode,
   ScopedThreadRef,
@@ -14,6 +13,7 @@ import type {
   TurnId,
 } from "@t3tools/contracts";
 import {
+  ProviderDriverKind,
   ProviderInstanceId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
@@ -99,7 +99,7 @@ import { proposedPlanTitle } from "../../proposedPlan";
 import { getProviderInteractionModeToggle } from "../../providerModels";
 import {
   deriveProviderInstanceEntries,
-  resolveBuiltInDriverKindForInstanceSelection,
+  resolveProviderDriverKindForInstanceSelection,
   sortProviderInstanceEntries,
   type ProviderInstanceEntry,
 } from "../../providerInstances";
@@ -350,7 +350,7 @@ export interface ChatComposerHandle {
     selectedPromptEffort: string | null;
     selectedModelOptionsForDispatch: unknown;
     selectedModelSelection: ModelSelection;
-    selectedProvider: BuiltInDriverKind;
+    selectedProvider: ProviderDriverKind;
     selectedModel: string;
     selectedProviderModels: ReadonlyArray<ServerProvider["models"][number]>;
   };
@@ -410,7 +410,7 @@ export interface ChatComposerProps {
   interactionMode: ProviderInteractionMode;
 
   // Provider / model
-  lockedProvider: BuiltInDriverKind | null;
+  lockedProvider: ProviderDriverKind | null;
   providerStatuses: ServerProvider[];
   activeProjectDefaultModelSelection: ModelSelection | null | undefined;
   activeThreadModelSelection: ModelSelection | null | undefined;
@@ -586,12 +586,12 @@ export const ChatComposer = memo(
     const explicitSelectedInstanceId = selectedProviderByThreadId ?? threadProvider;
 
     const unlockedSelectedProvider =
-      resolveBuiltInDriverKindForInstanceSelection(
+      resolveProviderDriverKindForInstanceSelection(
         providerInstanceEntries,
         providerStatuses,
         explicitSelectedInstanceId,
-      ) ?? "codex";
-    const selectedProvider: BuiltInDriverKind = lockedProvider ?? unlockedSelectedProvider;
+      ) ?? ProviderDriverKind.make("codex");
+    const selectedProvider: ProviderDriverKind = lockedProvider ?? unlockedSelectedProvider;
     const lockedContinuationGroupKey = useMemo((): string | null => {
       if (!lockedProvider || !activeThread) return null;
       const lockedInstanceId =

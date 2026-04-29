@@ -14,8 +14,6 @@ import type { ProviderAdapterShape } from "./ProviderAdapter.ts";
 
 /**
  * ClaudeAdapterShape — per-instance Claude adapter contract. Carries
- * `provider: "claudeAgent"` as the nominal discriminant.
+ * a branded driver kind as the nominal discriminant.
  */
-export interface ClaudeAdapterShape extends ProviderAdapterShape<ProviderAdapterError> {
-  readonly provider: "claudeAgent";
-}
+export interface ClaudeAdapterShape extends ProviderAdapterShape<ProviderAdapterError> {}

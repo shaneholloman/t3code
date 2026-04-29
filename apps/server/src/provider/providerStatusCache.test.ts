@@ -3,7 +3,6 @@ import {
   defaultInstanceIdForDriver,
   ProviderDriverKind,
   ProviderInstanceId,
-  type BuiltInDriverKind,
   type ServerProvider,
 } from "@t3tools/contracts";
 import { createModelCapabilities } from "@t3tools/shared/model";
@@ -19,13 +18,16 @@ import {
 } from "./providerStatusCache.ts";
 
 const emptyCapabilities = createModelCapabilities({ optionDescriptors: [] });
+const CODEX_DRIVER = ProviderDriverKind.make("codex");
+const CLAUDE_AGENT_DRIVER = ProviderDriverKind.make("claudeAgent");
+const OPENCODE_DRIVER = ProviderDriverKind.make("opencode");
 
 const makeProvider = (
-  provider: BuiltInDriverKind,
+  provider: ProviderDriverKind,
   overrides?: Partial<ServerProvider>,
 ): ServerProvider => ({
-  instanceId: defaultInstanceIdForDriver(ProviderDriverKind.make(provider)),
-  driver: ProviderDriverKind.make(provider),
+  instanceId: defaultInstanceIdForDriver(provider),
+  driver: provider,
   enabled: true,
   installed: true,
   version: "1.0.0",
@@ -43,12 +45,12 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-provider-cache-" });
-      const codexProvider = makeProvider("codex");
-      const claudeProvider = makeProvider("claudeAgent", {
+      const codexProvider = makeProvider(CODEX_DRIVER);
+      const claudeProvider = makeProvider(CLAUDE_AGENT_DRIVER, {
         status: "warning",
         auth: { status: "unknown" },
       });
-      const openCodeProvider = makeProvider("opencode", {
+      const openCodeProvider = makeProvider(OPENCODE_DRIVER, {
         status: "warning",
         auth: { status: "unknown", type: "opencode" },
       });
@@ -85,7 +87,7 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
   );
 
   it("hydrates cached provider status while preserving current settings-derived models", () => {
-    const cachedCodex = makeProvider("codex", {
+    const cachedCodex = makeProvider(CODEX_DRIVER, {
       checkedAt: "2026-04-10T12:00:00.000Z",
       models: [
         {
@@ -105,7 +107,7 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
         },
       ],
     });
-    const fallbackCodex = makeProvider("codex", {
+    const fallbackCodex = makeProvider(CODEX_DRIVER, {
       models: [
         {
           slug: "gpt-5.4",
@@ -146,11 +148,11 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
   });
 
   it("ignores stale cached enabled state when the provider is now disabled", () => {
-    const cachedCodex = makeProvider("codex", {
+    const cachedCodex = makeProvider(CODEX_DRIVER, {
       checkedAt: "2026-04-10T12:00:00.000Z",
       message: "Cached ready status",
     });
-    const disabledFallback = makeProvider("codex", {
+    const disabledFallback = makeProvider(CODEX_DRIVER, {
       enabled: false,
       installed: false,
       version: null,
@@ -169,7 +171,7 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
   });
 
   it("rejects cached snapshots that are not correlated to the fallback instance", () => {
-    const fallbackCodex = makeProvider("codex", {
+    const fallbackCodex = makeProvider(CODEX_DRIVER, {
       models: [
         {
           slug: "gpt-5.4",
@@ -180,7 +182,7 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
       ],
     });
     const legacyCachedCodex = {
-      provider: "codex",
+      provider: ProviderDriverKind.make("codex"),
       enabled: true,
       installed: true,
       version: "1.0.0",
@@ -198,7 +200,7 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
       slashCommands: [],
       skills: [],
     } as unknown as ServerProvider;
-    const mismatchedCachedCodex = makeProvider("codex", {
+    const mismatchedCachedCodex = makeProvider(CODEX_DRIVER, {
       instanceId: ProviderInstanceId.make("codex_personal"),
     });
 

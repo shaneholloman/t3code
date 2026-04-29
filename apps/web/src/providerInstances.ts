@@ -14,17 +14,15 @@
  */
 import {
   defaultInstanceIdForDriver,
-  isBuiltInDriverKind,
   PROVIDER_DISPLAY_NAMES,
   type ProviderDriverKind,
   type ProviderInstanceId,
-  type BuiltInDriverKind,
   type ServerProvider,
   type ServerProviderModel,
   type ServerProviderState,
 } from "@t3tools/contracts";
 
-import { formatBuiltInDriverKindLabel } from "./providerModels";
+import { formatProviderDriverKindLabel } from "./providerModels";
 
 /**
  * UI-facing projection of one configured provider instance. Carries the
@@ -77,19 +75,8 @@ function humanizeInstanceId(instanceId: ProviderInstanceId): string {
     .join(" ");
 }
 
-/**
- * Canonical brand label for a built-in driver kind. Prefers the explicit
- * `PROVIDER_DISPLAY_NAMES` map from contracts (which carries the correct
- * brand casing — "OpenCode" not "Opencode", "Claude" not "Claude Agent" —
- * and is the single source of truth for built-in driver presentation) and
- * falls back to the generic title-case of the kind slug for any future /
- * unknown kind that hasn't landed in the map yet.
- */
 function driverKindLabel(driverKind: ProviderDriverKind): string {
-  return isBuiltInDriverKind(driverKind)
-    ? (PROVIDER_DISPLAY_NAMES[driverKind as BuiltInDriverKind] ??
-        formatBuiltInDriverKindLabel(driverKind as BuiltInDriverKind))
-    : humanizeInstanceId(driverKind as unknown as ProviderInstanceId);
+  return PROVIDER_DISPLAY_NAMES[driverKind] ?? formatProviderDriverKindLabel(driverKind);
 }
 
 export function normalizeProviderAccentColor(value: string | undefined): string | undefined {
@@ -247,19 +234,19 @@ export function resolveSelectableProviderInstance(
 }
 
 /**
- * Resolve an open model-selection routing key back to a built-in driver kind.
+ * Resolve an open model-selection routing key back to a driver kind.
  * Custom instance ids such as `claude_openrouter` are not themselves
- * `BuiltInDriverKind` literals, but the composer still needs the owning driver kind
+ * driver-kind slugs, but the composer still needs the owning driver kind
  * for capabilities, options, icons, and turn dispatch metadata.
  */
-export function resolveBuiltInDriverKindForInstanceSelection(
+export function resolveProviderDriverKindForInstanceSelection(
   entries: ReadonlyArray<ProviderInstanceEntry>,
   providers: ReadonlyArray<ServerProvider>,
-  selection: ProviderInstanceId | BuiltInDriverKind | string | null | undefined,
-): BuiltInDriverKind | undefined {
+  selection: ProviderInstanceId | ProviderDriverKind | null | undefined,
+): ProviderDriverKind | undefined {
   const matchedEntry = entries.find((entry) => entry.instanceId === selection);
   if (matchedEntry) {
-    return isBuiltInDriverKind(matchedEntry.driverKind) ? matchedEntry.driverKind : undefined;
+    return matchedEntry.driverKind;
   }
   return undefined;
 }

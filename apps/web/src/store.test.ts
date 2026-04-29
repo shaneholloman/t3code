@@ -1,7 +1,7 @@
 import { scopeThreadRef } from "@t3tools/client-runtime";
 import {
   CheckpointRef,
-  DEFAULT_MODEL_BY_PROVIDER,
+  DEFAULT_MODEL,
   EnvironmentId,
   EventId,
   MessageId,
@@ -465,7 +465,7 @@ describe("incremental orchestration updates", () => {
           cwd: "/tmp/project",
           defaultModelSelection: {
             instanceId: ProviderInstanceId.make("codex"),
-            model: DEFAULT_MODEL_BY_PROVIDER.codex,
+            model: DEFAULT_MODEL,
           },
           createdAt: "2026-02-27T00:00:00.000Z",
           updatedAt: "2026-02-27T00:00:00.000Z",
@@ -482,7 +482,7 @@ describe("incremental orchestration updates", () => {
         workspaceRoot: "/tmp/project",
         defaultModelSelection: {
           instanceId: ProviderInstanceId.make("codex"),
-          model: DEFAULT_MODEL_BY_PROVIDER.codex,
+          model: DEFAULT_MODEL,
         },
         scripts: [],
         createdAt: "2026-02-27T00:00:01.000Z",
@@ -520,7 +520,7 @@ describe("incremental orchestration updates", () => {
           cwd: "/tmp/project-1",
           defaultModelSelection: {
             instanceId: ProviderInstanceId.make("codex"),
-            model: DEFAULT_MODEL_BY_PROVIDER.codex,
+            model: DEFAULT_MODEL,
           },
           createdAt: "2026-02-27T00:00:00.000Z",
           updatedAt: "2026-02-27T00:00:00.000Z",
@@ -533,7 +533,7 @@ describe("incremental orchestration updates", () => {
           cwd: "/tmp/project-2",
           defaultModelSelection: {
             instanceId: ProviderInstanceId.make("codex"),
-            model: DEFAULT_MODEL_BY_PROVIDER.codex,
+            model: DEFAULT_MODEL,
           },
           createdAt: "2026-02-27T00:00:00.000Z",
           updatedAt: "2026-02-27T00:00:00.000Z",
@@ -550,7 +550,7 @@ describe("incremental orchestration updates", () => {
         title: "Recovered thread",
         modelSelection: {
           instanceId: ProviderInstanceId.make("codex"),
-          model: DEFAULT_MODEL_BY_PROVIDER.codex,
+          model: DEFAULT_MODEL,
         },
         runtimeMode: DEFAULT_RUNTIME_MODE,
         interactionMode: DEFAULT_INTERACTION_MODE,

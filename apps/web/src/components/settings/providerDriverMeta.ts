@@ -1,4 +1,4 @@
-import type { ProviderDriverKind, BuiltInDriverKind } from "@t3tools/contracts";
+import { ProviderDriverKind } from "@t3tools/contracts";
 import { ClaudeAI, CursorIcon, type Icon, OpenAI, OpenCodeIcon } from "../Icons";
 
 /**
@@ -17,12 +17,12 @@ export interface DriverFieldDef {
 }
 
 /**
- * Presentation + editable-field metadata for a built-in driver. Shared
+ * Presentation + editable-field metadata for a registered driver. Shared
  * between the Add-Instance dialog and the per-instance settings card so
  * both surfaces offer the same keys for the same driver.
  */
 export interface DriverOption {
-  readonly value: BuiltInDriverKind;
+  readonly value: ProviderDriverKind;
   readonly label: string;
   readonly icon: Icon;
   readonly fields: readonly DriverFieldDef[];
@@ -38,7 +38,7 @@ export interface DriverOption {
 
 export const DRIVER_OPTIONS: readonly DriverOption[] = [
   {
-    value: "codex",
+    value: ProviderDriverKind.make("codex"),
     label: "Codex",
     icon: OpenAI,
     fields: [
@@ -64,7 +64,7 @@ export const DRIVER_OPTIONS: readonly DriverOption[] = [
     ],
   },
   {
-    value: "claudeAgent",
+    value: ProviderDriverKind.make("claudeAgent"),
     label: "Claude",
     icon: ClaudeAI,
     fields: [
@@ -90,7 +90,7 @@ export const DRIVER_OPTIONS: readonly DriverOption[] = [
     ],
   },
   {
-    value: "cursor",
+    value: ProviderDriverKind.make("cursor"),
     label: "Cursor",
     icon: CursorIcon,
     badgeLabel: "Early Access",
@@ -110,7 +110,7 @@ export const DRIVER_OPTIONS: readonly DriverOption[] = [
     ],
   },
   {
-    value: "opencode",
+    value: ProviderDriverKind.make("opencode"),
     label: "OpenCode",
     icon: OpenCodeIcon,
     fields: [
@@ -137,26 +137,15 @@ export const DRIVER_OPTIONS: readonly DriverOption[] = [
   },
 ];
 
-/**
- * Lookup table for built-in drivers. Typed `Record<BuiltInDriverKind, DriverOption>`
- * so consumers that already narrowed to the closed `BuiltInDriverKind` union — such
- * as the Add-Instance dialog — can index it without an `undefined` guard.
- * Callers operating on the open `ProviderDriverKind` slug should go through
- * `getDriverOption` instead, which returns `DriverOption | undefined`.
- */
-export const DRIVER_OPTION_BY_VALUE: Record<BuiltInDriverKind, DriverOption> = Object.fromEntries(
-  DRIVER_OPTIONS.map((option) => [option.value, option]),
-) as Record<BuiltInDriverKind, DriverOption>;
+export const DRIVER_OPTION_BY_VALUE: Partial<Record<ProviderDriverKind, DriverOption>> =
+  Object.fromEntries(DRIVER_OPTIONS.map((option) => [option.value, option]));
 
 /**
  * Look up the driver metadata for an instance's `driver` field. Accepts
- * either the branded `ProviderDriverKind` slug or the `BuiltInDriverKind` literal.
  * Returns `undefined` for fork / unknown drivers so callers can decide how
  * to render them — typically by falling back to a generic card.
  */
-export function getDriverOption(
-  driver: ProviderDriverKind | BuiltInDriverKind | string | undefined,
-): DriverOption | undefined {
+export function getDriverOption(driver: ProviderDriverKind | undefined): DriverOption | undefined {
   if (driver === undefined) return undefined;
-  return DRIVER_OPTION_BY_VALUE[driver as BuiltInDriverKind];
+  return DRIVER_OPTION_BY_VALUE[driver];
 }

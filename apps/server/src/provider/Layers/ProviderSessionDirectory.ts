@@ -1,9 +1,4 @@
-import {
-  defaultInstanceIdForDriver,
-  ProviderDriverKind,
-  BuiltInDriverKind,
-  type ThreadId,
-} from "@t3tools/contracts";
+import { defaultInstanceIdForDriver, ProviderDriverKind, type ThreadId } from "@t3tools/contracts";
 import { Effect, Layer, Option, Schema } from "effect";
 
 import type { ProviderSessionRuntime } from "../../persistence/Services/ProviderSessionRuntime.ts";
@@ -25,11 +20,11 @@ function toPersistenceError(operation: string) {
     });
 }
 
-function decodeBuiltInDriverKind(
+function decodeProviderDriverKind(
   providerName: string,
   operation: string,
-): Effect.Effect<BuiltInDriverKind, ProviderSessionDirectoryPersistenceError> {
-  return Schema.decodeUnknownEffect(BuiltInDriverKind)(providerName).pipe(
+): Effect.Effect<ProviderDriverKind, ProviderSessionDirectoryPersistenceError> {
+  return Schema.decodeUnknownEffect(ProviderDriverKind)(providerName).pipe(
     Effect.mapError(
       (cause) =>
         new ProviderSessionDirectoryPersistenceError({
@@ -62,7 +57,7 @@ function toRuntimeBinding(
   runtime: ProviderSessionRuntime,
   operation: string,
 ): Effect.Effect<ProviderRuntimeBindingWithMetadata, ProviderSessionDirectoryPersistenceError> {
-  return decodeBuiltInDriverKind(runtime.providerName, operation).pipe(
+  return decodeProviderDriverKind(runtime.providerName, operation).pipe(
     Effect.map(
       (provider) =>
         ({
@@ -72,9 +67,7 @@ function toRuntimeBinding(
           // have a null provider_instance_id. Promote them as they leave
           // persistence so hot routing code never has to infer an instance
           // from a driver kind.
-          providerInstanceId:
-            runtime.providerInstanceId ??
-            defaultInstanceIdForDriver(ProviderDriverKind.make(provider)),
+          providerInstanceId: runtime.providerInstanceId ?? defaultInstanceIdForDriver(provider),
           adapterKey: runtime.adapterKey,
           runtimeMode: runtime.runtimeMode,
           status: runtime.status,

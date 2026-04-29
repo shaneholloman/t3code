@@ -61,10 +61,14 @@ describe("serverSettings helpers", () => {
   it("replaces text generation selection when provider/model are provided", () => {
     const current = {
       ...DEFAULT_SERVER_SETTINGS,
-      textGenerationModelSelection: createModelSelection("codex", "gpt-5.4-mini", [
-        { id: "reasoningEffort", value: "high" },
-        { id: "fastMode", value: true },
-      ]),
+      textGenerationModelSelection: createModelSelection(
+        ProviderInstanceId.make("codex"),
+        "gpt-5.4-mini",
+        [
+          { id: "reasoningEffort", value: "high" },
+          { id: "fastMode", value: true },
+        ],
+      ),
     };
 
     expect(
@@ -83,10 +87,14 @@ describe("serverSettings helpers", () => {
   it("still deep merges text generation selection when only options are provided", () => {
     const current = {
       ...DEFAULT_SERVER_SETTINGS,
-      textGenerationModelSelection: createModelSelection("codex", "gpt-5.4-mini", [
-        { id: "reasoningEffort", value: "high" },
-        { id: "fastMode", value: true },
-      ]),
+      textGenerationModelSelection: createModelSelection(
+        ProviderInstanceId.make("codex"),
+        "gpt-5.4-mini",
+        [
+          { id: "reasoningEffort", value: "high" },
+          { id: "fastMode", value: true },
+        ],
+      ),
     };
 
     expect(
@@ -108,10 +116,14 @@ describe("serverSettings helpers", () => {
   it("replaces text generation selection across providers without leaking stale options", () => {
     const current = {
       ...DEFAULT_SERVER_SETTINGS,
-      textGenerationModelSelection: createModelSelection("codex", "gpt-5.4-mini", [
-        { id: "reasoningEffort", value: "high" },
-        { id: "fastMode", value: true },
-      ]),
+      textGenerationModelSelection: createModelSelection(
+        ProviderInstanceId.make("codex"),
+        "gpt-5.4-mini",
+        [
+          { id: "reasoningEffort", value: "high" },
+          { id: "fastMode", value: true },
+        ],
+      ),
     };
 
     expect(

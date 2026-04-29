@@ -24,8 +24,8 @@
  * The rule: parsing any of those payloads must always succeed, and the
  * runtime is responsible for marking the unknown driver/instance as
  * "unavailable" rather than crashing. Built-in drivers shipped by the core
- * product are listed in `BuiltInDriverKind`; that closed schema is reference
- * data for defaults and presentation only — never a validation gate.
+ * product happens to register in a given build is not part of the contract
+ * layer. Driver availability is discovered through the runtime registry.
  *
  * Driver-specific configuration is similarly opaque at the contracts layer:
  * drivers live in (or will be extracted to) their own packages and own their
@@ -69,6 +69,10 @@ const slugSchema = TrimmedNonEmptyString.check(
 export const ProviderDriverKind = slugSchema.pipe(Schema.brand("ProviderDriverKind"));
 export type ProviderDriverKind = typeof ProviderDriverKind.Type;
 
+const isProviderDriverKindValue = Schema.is(ProviderDriverKind);
+export const isProviderDriverKind = (value: unknown): value is ProviderDriverKind =>
+  isProviderDriverKindValue(value);
+
 /**
  * `ProviderInstanceId` — user-defined routing key for a configured provider
  * instance. Same slug rules as `ProviderDriverKind`; branded separately so the
@@ -76,30 +80,6 @@ export type ProviderDriverKind = typeof ProviderDriverKind.Type;
  */
 export const ProviderInstanceId = slugSchema.pipe(Schema.brand("ProviderInstanceId"));
 export type ProviderInstanceId = typeof ProviderInstanceId.Type;
-
-/**
- * Built-in driver kinds shipped by the core product. Reference data for
- * defaults, presentation, and migration shims — **not** a validation gate.
- * Forks and downgrades will encounter driver kinds outside this list and the
- * system must still operate.
- */
-export const BuiltInDriverKind = Schema.Literals(["codex", "claudeAgent", "cursor", "opencode"]);
-export type BuiltInDriverKind = typeof BuiltInDriverKind.Type;
-
-/**
- * Default built-in driver kind used for first-boot fallbacks and round-trip
- * placeholders.
- */
-export const DEFAULT_BUILT_IN_DRIVER_KIND: BuiltInDriverKind = "codex";
-
-/**
- * Predicate identifying driver kinds the core product ships with. Used by the
- * server to decide whether to instantiate a built-in driver vs. surface
- * "driver not installed" in the UI.
- */
-const isBuiltInDriverKindValue = Schema.is(BuiltInDriverKind);
-export const isBuiltInDriverKind = (value: unknown): value is BuiltInDriverKind =>
-  isBuiltInDriverKindValue(value);
 
 /**
  * Lightweight reference identifying which driver implements an instance.

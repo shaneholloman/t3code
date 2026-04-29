@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 
 import {
   ApprovalRequestId,
-  DEFAULT_MODEL_BY_PROVIDER,
+  DEFAULT_MODEL,
   EventId,
+  ProviderDriverKind,
   ProviderItemId,
   type ProviderInstanceId,
   type ProviderApprovalDecision,
@@ -33,7 +34,7 @@ import {
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
 } from "../CodexDeveloperInstructions.ts";
 
-const PROVIDER = "codex" as const;
+const PROVIDER = ProviderDriverKind.make("codex");
 
 const ANSI_ESCAPE_CHAR = String.fromCharCode(27);
 const ANSI_ESCAPE_REGEX = new RegExp(`${ANSI_ESCAPE_CHAR}\\[[0-9;]*m`, "g");
@@ -306,7 +307,7 @@ function buildCodexCollaborationMode(input: {
   if (input.interactionMode === undefined) {
     return undefined;
   }
-  const model = normalizeCodexModelSlug(input.model) ?? DEFAULT_MODEL_BY_PROVIDER.codex;
+  const model = normalizeCodexModelSlug(input.model) ?? DEFAULT_MODEL;
   return {
     mode: input.interactionMode,
     settings: {

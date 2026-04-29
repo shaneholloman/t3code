@@ -1,5 +1,5 @@
 import type {
-  BuiltInDriverKind,
+  ProviderDriverKind,
   ModelCapabilities,
   ServerProvider,
   ServerProviderAuth,
@@ -113,7 +113,7 @@ export function parseGenericCliVersion(output: string): string | null {
 
 export function providerModelsFromSettings(
   builtInModels: ReadonlyArray<ServerProviderModel>,
-  provider: BuiltInDriverKind,
+  provider: ProviderDriverKind,
   customModels: ReadonlyArray<string>,
   customModelCapabilities: ModelCapabilities,
 ): ReadonlyArray<ServerProviderModel> {

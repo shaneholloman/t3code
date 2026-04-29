@@ -55,7 +55,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
 
         const decoded = decode({
           textGenerationModelSelection: {
-            provider: "codex",
+            provider: ProviderDriverKind.make("codex"),
             model: "gpt-5.4-mini",
             options: { reasoningEffort: "low" },
           },
@@ -88,7 +88,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           instanceId: ProviderInstanceId.make("codex"),
           model: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection.model,
           options: createModelSelection(
-            "codex",
+            ProviderInstanceId.make("codex"),
             DEFAULT_SERVER_SETTINGS.textGenerationModelSelection.model,
             [
               { id: "reasoningEffort", value: "high" },
@@ -125,10 +125,14 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       });
       assert.deepEqual(
         next.textGenerationModelSelection,
-        createModelSelection("codex", DEFAULT_SERVER_SETTINGS.textGenerationModelSelection.model, [
-          { id: "reasoningEffort", value: "high" },
-          { id: "fastMode", value: false },
-        ]),
+        createModelSelection(
+          ProviderInstanceId.make("codex"),
+          DEFAULT_SERVER_SETTINGS.textGenerationModelSelection.model,
+          [
+            { id: "reasoningEffort", value: "high" },
+            { id: "fastMode", value: false },
+          ],
+        ),
       );
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
@@ -142,9 +146,11 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         textGenerationModelSelection: {
           instanceId: ProviderInstanceId.make("claudeAgent"),
           model: "claude-sonnet-4-6",
-          options: createModelSelection("claudeAgent", "claude-sonnet-4-6", [
-            { id: "effort", value: "high" },
-          ]).options!,
+          options: createModelSelection(
+            ProviderInstanceId.make("claudeAgent"),
+            "claude-sonnet-4-6",
+            [{ id: "effort", value: "high" }],
+          ).options!,
         },
       });
 
@@ -154,7 +160,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         textGenerationModelSelection: {
           instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5.4",
-          options: createModelSelection("codex", "gpt-5.4", [
+          options: createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.4", [
             { id: "reasoningEffort", value: "high" },
           ]).options!,
         },
@@ -162,7 +168,9 @@ it.layer(NodeServices.layer)("server settings", (it) => {
 
       assert.deepEqual(
         next.textGenerationModelSelection,
-        createModelSelection("codex", "gpt-5.4", [{ id: "reasoningEffort", value: "high" }]),
+        createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.4", [
+          { id: "reasoningEffort", value: "high" },
+        ]),
       );
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
@@ -260,7 +268,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           instanceId: ProviderInstanceId.make("codex"),
           model: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection.model,
           options: createModelSelection(
-            "codex",
+            ProviderInstanceId.make("codex"),
             DEFAULT_SERVER_SETTINGS.textGenerationModelSelection.model,
             [
               { id: "reasoningEffort", value: "high" },

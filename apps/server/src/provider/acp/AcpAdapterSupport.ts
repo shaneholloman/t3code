@@ -1,6 +1,6 @@
 import {
   type ProviderApprovalDecision,
-  type BuiltInDriverKind,
+  type ProviderDriverKind,
   type ThreadId,
 } from "@t3tools/contracts";
 import { Schema } from "effect";
@@ -13,7 +13,7 @@ import {
 } from "../Errors.ts";
 
 export function mapAcpToAdapterError(
-  provider: BuiltInDriverKind,
+  provider: ProviderDriverKind,
   threadId: ThreadId,
   method: string,
   error: EffectAcpErrors.AcpError,

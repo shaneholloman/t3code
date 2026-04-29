@@ -2,10 +2,7 @@ import { Effect } from "effect";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 import { TrimmedNonEmptyString, TrimmedString } from "./baseSchemas.ts";
-import {
-  DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
-  ProviderOptionSelections,
-} from "./model.ts";
+import { DEFAULT_GIT_TEXT_GENERATION_MODEL, ProviderOptionSelections } from "./model.ts";
 import { ModelSelection } from "./orchestration.ts";
 import { ProviderInstanceConfig, ProviderInstanceId } from "./providerInstance.ts";
 
@@ -36,17 +33,16 @@ export const ClientSettingsSchema = Schema.Struct({
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   diffWordWrap: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
-  // Model favorites. Historically keyed by closed `BuiltInDriverKind`, now
+  // Model favorites. Historically keyed by provider kind, now
   // widened to `ProviderInstanceId` so users can favorite a specific model
   // on a custom provider instance (e.g. "Codex Personal · gpt-5") without
   // the UI collapsing it into the same bucket as the default Codex. The
-  // widening is backward-compatible by construction: every `BuiltInDriverKind`
-  // literal ("codex", "claudeAgent", …) satisfies the `ProviderInstanceId`
-  // slug schema, so previously-persisted favorites decode unchanged and
-  // continue to point at the default instance for their kind (because
-  // `defaultInstanceIdForDriver(kind).toString() === kind`). The field name
-  // is kept as `provider` for storage stability; new call sites should
-  // treat the value as an instance id.
+  // widening is backward-compatible by construction: prior provider-kind
+  // strings satisfy the `ProviderInstanceId` slug schema, so previously
+  // persisted favorites decode unchanged and continue to point at the
+  // default instance for their kind (because `defaultInstanceIdForDriver(kind)`
+  // uses the same slug). The field name is kept as `provider` for storage
+  // stability; new call sites should treat the value as an instance id.
   favorites: Schema.Array(
     Schema.Struct({
       provider: ProviderInstanceId,
@@ -141,7 +137,7 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(
       Effect.succeed({
         instanceId: ProviderInstanceId.make("codex"),
-        model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.codex,
+        model: DEFAULT_GIT_TEXT_GENERATION_MODEL,
       }),
     ),
   ),

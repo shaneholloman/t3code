@@ -1,9 +1,9 @@
 import {
   type EnvironmentId,
-  isBuiltInDriverKind,
+  isProviderDriverKind,
   ProjectId,
   type ModelSelection,
-  type BuiltInDriverKind,
+  type ProviderDriverKind,
   type ScopedThreadRef,
   type ThreadId,
   type TurnId,
@@ -227,25 +227,23 @@ export function threadHasStarted(thread: Thread | null | undefined): boolean {
   );
 }
 
-// `threadProvider` is typed as the open driver string carried by
-// `ModelSelection.instanceId`; we narrow back to the closed `BuiltInDriverKind`
-// here since downstream lock-state consumers only deal with built-in
-// drivers. Unknown driver kinds degrade to `null` (i.e. "unlocked"), which
-// is the safe rollback / fork behavior — the routing layer is the right
-// place to surface "driver not installed" errors, not the lock state.
+// `threadProvider` is the open branded driver kind carried by the session.
+// Unknown driver kinds degrade to `null` (i.e. "unlocked"), which is the safe
+// rollback / fork behavior — the routing layer is the right place to surface
+// "driver not installed" errors, not the lock state.
 //
 // `selectedProvider` takes the same open-string shape because the composer
 // now tracks the picker selection as a `ProviderInstanceId` (e.g.
 // `codex_personal`). Custom instance ids that don't directly match a
-// built-in driver literal resolve to `null` here, which matches the
-// existing "unknown driver → unlocked" semantics. Callers that want the
-// lock to track the custom instance's underlying driver kind should
-// resolve the instance id → driver kind upstream and pass the kind.
+// registered driver resolve to `null` here, which matches the existing
+// "unknown driver -> unlocked" semantics. Callers that want the lock to track
+// a custom instance's underlying driver kind should resolve the instance id
+// upstream and pass the correlated kind.
 export function deriveLockedProvider(input: {
   thread: Thread | null | undefined;
   selectedProvider: string | null;
   threadProvider: string | null;
-}): BuiltInDriverKind | null {
+}): ProviderDriverKind | null {
   if (!threadHasStarted(input.thread)) {
     return null;
   }
@@ -254,9 +252,11 @@ export function deriveLockedProvider(input: {
     return sessionProvider;
   }
   const narrowedThreadProvider =
-    input.threadProvider && isBuiltInDriverKind(input.threadProvider) ? input.threadProvider : null;
+    input.threadProvider && isProviderDriverKind(input.threadProvider)
+      ? input.threadProvider
+      : null;
   const narrowedSelectedProvider =
-    input.selectedProvider && isBuiltInDriverKind(input.selectedProvider)
+    input.selectedProvider && isProviderDriverKind(input.selectedProvider)
       ? input.selectedProvider
       : null;
   return narrowedThreadProvider ?? narrowedSelectedProvider ?? null;

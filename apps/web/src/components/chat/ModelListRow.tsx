@@ -1,9 +1,4 @@
-import {
-  isBuiltInDriverKind,
-  type BuiltInDriverKind,
-  type ProviderDriverKind,
-  type ProviderInstanceId,
-} from "@t3tools/contracts";
+import { type ProviderDriverKind, type ProviderInstanceId } from "@t3tools/contracts";
 import { memo } from "react";
 import { StarIcon } from "lucide-react";
 import {
@@ -39,9 +34,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
   jumpLabel?: string | null;
   onToggleFavorite: () => void;
 }) {
-  const ProviderIcon = isBuiltInDriverKind(props.driverKind)
-    ? PROVIDER_ICON_BY_PROVIDER[props.driverKind as BuiltInDriverKind]
-    : null;
+  const ProviderIcon = PROVIDER_ICON_BY_PROVIDER[props.driverKind] ?? null;
   const providerLabel = props.model.subProvider
     ? `${props.providerDisplayName} · ${props.model.subProvider}`
     : props.providerDisplayName;

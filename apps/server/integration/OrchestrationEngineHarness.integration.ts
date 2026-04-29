@@ -4,7 +4,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   ApprovalRequestId,
   CodexSettings,
-  BuiltInDriverKind,
+  ProviderDriverKind,
   type OrchestrationEvent,
   type OrchestrationThread,
 } from "@t3tools/contracts";
@@ -218,7 +218,7 @@ export interface OrchestrationIntegrationHarness {
 }
 
 interface MakeOrchestrationIntegrationHarnessOptions {
-  readonly provider?: BuiltInDriverKind;
+  readonly provider?: ProviderDriverKind;
   readonly realCodex?: boolean;
 }
 
@@ -229,7 +229,7 @@ export const makeOrchestrationIntegrationHarness = (
     const path = yield* Path.Path;
     const fileSystem = yield* FileSystem.FileSystem;
 
-    const provider = options?.provider ?? "codex";
+    const provider = options?.provider ?? ProviderDriverKind.make("codex");
     const useRealCodex = options?.realCodex === true;
     const adapterHarness = useRealCodex
       ? null
@@ -267,7 +267,9 @@ export const makeOrchestrationIntegrationHarness = (
       Effect.gen(function* () {
         const codexSettings = Schema.decodeSync(CodexSettings)({});
         const codexAdapter = yield* makeCodexAdapter(codexSettings);
-        return makeAdapterRegistryMock({ codex: codexAdapter });
+        return makeAdapterRegistryMock({
+          [ProviderDriverKind.make("codex")]: codexAdapter,
+        });
       }),
     ).pipe(
       Layer.provideMerge(ServerConfig.layerTest(workspaceDir, rootDir)),
